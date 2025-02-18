@@ -59,7 +59,10 @@ flutter_icons:
   fonts:
     - family: IrishGrover
       fonts:
-        - asset: fonts/IrishGrover-Regular.ttf
+        - asset: google_fonts/IrishGrover-Regular.ttf
+    - family: Oi
+      fonts:
+        -assets: google_fonts/Oi-Regular.ttf
 # The following section is specific to Flutter packages.
 flutter:
 

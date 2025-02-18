@@ -12,14 +12,25 @@ class startPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        backgroundColor: Color.fromARGB(255, 246, 222, 255),
+      home:
+      Scaffold(
+        backgroundColor: Color.fromARGB(200, 246, 222, 255),
+        appBar: AppBar(
+          title: Text("Magic Moment"),
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          titleTextStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 52,
+              fontFamily: 'Oi',
+              color: Color.fromARGB(255, 96, 15, 91)
+          ),
+        ),
         body:  Center(
             child: Row(
               children: [
                 Container(
-                  alignment: Alignment.bottomCenter,
-            decoration: BoxDecoration(
+                  decoration: BoxDecoration(
                       color: Color.fromARGB(255,235,183,183),
                       borderRadius: BorderRadius.all(
                           Radius.circular(20)
