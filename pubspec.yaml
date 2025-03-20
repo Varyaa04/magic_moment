@@ -30,16 +30,24 @@ flutter_icons:
 
 flutter:
   uses-material-design: true
-
   assets:
     - lib/assets/icons/iconMM.webp
+    - lib/assets/icons/photos.png
     - lib/assets/google_fonts/Oi-Regular.ttf
-    - lib/assets/google_fonts/RuslanDisplay-Regular.ttf
+    - lib/assets/google_fonts/LilitaOne-Regular.ttf
+    - lib/assets/google_fonts/PTSansNarrow-Regular.ttf
+    - lib/assets/google_fonts/Comfortaa-VariableFont_wght.ttf
 
   fonts:
     - family: Oi-Regular
       fonts:
         - asset: lib/assets/google_fonts/Oi-Regular.ttf
-    - family: RuslanDisplay-Regular
+    - family: LilitaOne-Regular
       fonts:
-        - asset: lib/assets/google_fonts/RuslanDisplay-Regular.ttf
+        - asset: lib/assets/google_fonts/LilitaOne-Regular.ttf
+    - family: PTSansNarrow-Regular
+      fonts:
+        - asset: lib/assets/google_fonts/PTSansNarrow-Regular.ttf
+    - family: Comfortaa
+      fonts:
+        - asset: lib/assets/google_fonts/Comfortaa-VariableFont_wght.ttf

@@ -1,62 +1,76 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
-class IconButtonStart extends StatelessWidget {
-  final IconData icon;
+
+class CustomButton extends StatelessWidget {
   final VoidCallback onPressed;
   final String text;
+  final String? secondaryText;
+  final IconData icon;
 
-  const IconButtonStart({
+  const CustomButton({
     super.key,
-    required this.icon,
     required this.onPressed,
     required this.text,
+    this.secondaryText,
+    required this.icon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 246, 222, 255),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                spreadRadius: 2,
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-              BoxShadow(
-                color: Colors.white.withOpacity(0.1),
-                spreadRadius: 1,
-                blurRadius: 5,
-                offset: const Offset(-2, -2),
-              ),
-            ],
+    return Container(
+      height: 60,
+      width: 150,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.black, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 5,
+            offset: const Offset(0, 3),
           ),
-          height: 100,
-          width: 100,
-          child: IconButton(
-            iconSize: 50,
-            icon: Icon(icon),
-            color: const Color.fromARGB(255, 96, 15, 91),
-            onPressed: onPressed,
+        ],
+      ),
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
           ),
         ),
-        const SizedBox(height: 10),
-        Text(
-          text,
-          style: const TextStyle(
-            fontSize: 16,
-            fontFamily: 'RuslanDisplay-Regular',
-            color: Color.fromARGB(255, 96, 15, 91),
-            fontWeight: FontWeight.w500,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.black),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.black,
+                    fontFamily: 'PTSansNarrow-Regular',
+                  ),
+                ),
+                if (secondaryText != null)
+                  Text(
+                    secondaryText!,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.black,
+                      fontFamily: 'PTSansNarrow-Regular',
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

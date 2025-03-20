@@ -1,6 +1,6 @@
+import 'package:MagicMoment/pagesSettings/settingsPage.dart';
 import 'package:flutter/material.dart';
 import 'startPage.dart';
-
 void main() {
   runApp(const MyApp());
 }
@@ -11,7 +11,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
-      home: StartPage(),
+        home: StartPage(),
     );
   }
 }
