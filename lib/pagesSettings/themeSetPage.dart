@@ -51,16 +51,16 @@ class ThemeSetPage extends StatelessWidget {
                         onPressed: (){
 
                         },
-                        text: 'язык',
-                        icon: FluentIcons.earth_16_filled
+                        text: 'Светлая тема',
+                        icon: FluentIcons.color_20_filled,
                     ),
                     const SizedBox(height: 20),
                     SettingsButton(
                         onPressed: (){
 
                         },
-                        text: 'тема',
-                        icon: FluentIcons.color_20_filled
+                        text: 'Темная тема',
+                        icon: FluentIcons.color_20_filled,
                     ),
                   ],
                 ),

@@ -51,7 +51,7 @@ class LangSetPage extends StatelessWidget {
                         onPressed: (){
 
                         },
-                        text: 'язык',
+                        text: 'Русский',
                         icon: FluentIcons.earth_16_filled
                     ),
                     const SizedBox(height: 20),
@@ -59,8 +59,8 @@ class LangSetPage extends StatelessWidget {
                         onPressed: (){
 
                         },
-                        text: 'тема',
-                        icon: FluentIcons.color_20_filled
+                        text: 'English',
+                        icon: FluentIcons.earth_16_filled
                     ),
 
                   ],

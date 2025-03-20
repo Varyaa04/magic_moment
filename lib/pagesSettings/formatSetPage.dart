@@ -51,16 +51,16 @@ class FormatSetPage extends StatelessWidget {
                         onPressed: (){
 
                         },
-                        text: 'язык',
-                        icon: FluentIcons.earth_16_filled
+                        text: 'PNG',
+                        icon: FluentIcons.document_16_filled
                     ),
                     const SizedBox(height: 20),
                     SettingsButton(
                         onPressed: (){
 
                         },
-                        text: 'тема',
-                        icon: FluentIcons.color_20_filled
+                        text: 'JPEG',
+                        icon: FluentIcons.document_16_filled
                     ),
                   ],
                 ),

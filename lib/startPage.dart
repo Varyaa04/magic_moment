@@ -1,3 +1,4 @@
+import 'package:MagicMoment/pagesEditing/collagePage.dart';
 import 'package:MagicMoment/pagesEditing/editPage.dart';
 import 'package:MagicMoment/pagesSettings/settingsPage.dart';
 import 'package:flutter/material.dart';
@@ -113,11 +114,11 @@ class StartPage extends StatelessWidget {
                           onPressed: () {
                             Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (context) => EditPage())
+                                MaterialPageRoute(builder: (context) => CollagePage(images: [File('path1.jpg'), File('path2.jpg')]))
                             );
                           },
                           text: 'создать',
-                          secondaryText: 'коллаж', // Текст на новой строке
+                          secondaryText: 'коллаж',
                           icon: FluentIcons.layout_column_two_split_left_24_regular,
                         ),
                       ],
