@@ -1,12 +1,17 @@
 import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 
 class ThemeSetPage extends StatelessWidget {
   const ThemeSetPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appLocalizations = AppLocalizations.of(context)!;
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
@@ -18,7 +23,7 @@ class ThemeSetPage extends StatelessWidget {
                   Container(
                     margin: const EdgeInsets.only(top: 10, right: 10),
                     child: Tooltip(
-                      message: 'Назад',
+                      message: appLocalizations.back,
                       child: IconButton(
                       onPressed: (){
                         Navigator.pop(context);
@@ -32,10 +37,10 @@ class ThemeSetPage extends StatelessWidget {
                 ],
               ),
               Container(
-                child: const Text(
-                  'Тема приложения',
+                child:  Text(
+                  appLocalizations.appTheme,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                       fontFamily: 'Oi-Regular',
                       fontSize: 26,
                       color: Colors.black,
@@ -51,7 +56,7 @@ class ThemeSetPage extends StatelessWidget {
                         onPressed: (){
 
                         },
-                        text: 'Светлая тема',
+                        text: appLocalizations.lightTheme,
                         icon: FluentIcons.color_20_filled,
                     ),
                     const SizedBox(height: 20),
@@ -59,7 +64,7 @@ class ThemeSetPage extends StatelessWidget {
                         onPressed: (){
 
                         },
-                        text: 'Темная тема',
+                        text: appLocalizations.darkTheme,
                         icon: FluentIcons.color_20_filled,
                     ),
                   ],

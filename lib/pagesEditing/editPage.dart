@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:provider/provider.dart';
 
 class EditPage extends StatelessWidget {
   final File? imageFile;
@@ -9,6 +12,9 @@ class EditPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appLocalizations = AppLocalizations.of(context)!;
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       body: Container(
         color: Colors.black,
@@ -25,7 +31,7 @@ class EditPage extends StatelessWidget {
                   icon: const Icon(FluentIcons.arrow_left_16_filled),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Назад',
+                  tooltip: appLocalizations.back,
                 ),
                 IconButton(
                   onPressed: () {
@@ -34,13 +40,12 @@ class EditPage extends StatelessWidget {
                   icon: const Icon(Icons.save_alt_rounded),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Сохранить',
+                  tooltip: appLocalizations.save,
                 ),
               ],
             ),
 
             const SizedBox(height: 10),
-
             // Контейнер для загруженной фотографии
             if (imageFile != null)
               Image.file(
@@ -63,7 +68,6 @@ class EditPage extends StatelessWidget {
               ),
 
             const SizedBox(height: 10),
-
             // Нижняя панель с кнопками "Назад" и "Вперед"
             Row(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -75,7 +79,7 @@ class EditPage extends StatelessWidget {
                   icon: const Icon(FluentIcons.arrow_hook_up_left_16_regular),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Назад',
+                  tooltip: appLocalizations.back,
                 ),
                 IconButton(
                   onPressed: () {
@@ -84,7 +88,7 @@ class EditPage extends StatelessWidget {
                   icon: const Icon(FluentIcons.arrow_hook_up_right_16_filled),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Вперед',
+                  tooltip: appLocalizations.next,
                 ),
               ],
             ),
@@ -135,23 +139,26 @@ class EditPage extends StatelessWidget {
   }
 
   String _getLabelForIndex(int index) {
+
+    final appLocalizations = AppLocalizations.of(index as BuildContext)!;
+    final languageProvider = Provider.of<LanguageProvider>(index as BuildContext);
     switch (index) {
       case 0:
-        return 'обрезка';
+        return appLocalizations.crop;
       case 1:
-        return 'яркость';
+        return appLocalizations.brightness;
       case 2:
-        return 'контраст';
+        return appLocalizations.contrast;
       case 3:
-        return 'регулировка';
+        return appLocalizations.adjust;
       case 4:
-        return 'фильтры';
+        return appLocalizations.filters;
       case 5:
-        return 'рисовать';
+        return appLocalizations.draw;
       case 6:
-        return 'текст';
+        return appLocalizations.text;
       case 7:
-        return 'эффекты';
+        return appLocalizations.effects;
       default:
         return 'Кнопка';
     }

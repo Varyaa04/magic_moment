@@ -4,12 +4,17 @@ import 'package:MagicMoment/pagesSettings/themeSetPage.dart';
 import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:provider/provider.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appLocalizations = AppLocalizations.of(context)!;
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
@@ -21,7 +26,7 @@ class SettingsPage extends StatelessWidget {
                 Container(
                   margin: const EdgeInsets.only(top: 10),
                   child: Tooltip(
-                    message: 'Назад',
+                    message: appLocalizations.back,
                     child: IconButton(
                     onPressed: (){
                       Navigator.pop(context);
@@ -35,10 +40,10 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
             Container(
-              child: const Text(
-                'НАСТРОЙКИ',
+              child:  Text(
+                appLocalizations.settings,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontFamily: 'Oi-Regular',
                   fontSize: 26,
                   color: Colors.black,
@@ -59,7 +64,7 @@ class SettingsPage extends StatelessWidget {
                             )
                         );
                       },
-                      text: 'язык',
+                      text: appLocalizations.lang,
                       icon: FluentIcons.earth_16_filled
                   ),
                   const SizedBox(height: 20),
@@ -72,7 +77,7 @@ class SettingsPage extends StatelessWidget {
                             )
                         );
                       },
-                      text: 'тема',
+                      text: appLocalizations.theme,
                       icon: FluentIcons.color_20_filled
                   ),
                   const SizedBox(height: 20),
@@ -85,7 +90,7 @@ class SettingsPage extends StatelessWidget {
                             )
                         );
                       },
-                      text: 'формат фото',
+                      text: appLocalizations.format,
                       icon: FluentIcons.document_image_20_filled
                   ),
                 ],

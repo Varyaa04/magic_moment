@@ -1,12 +1,18 @@
 import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'classesSettings/language_provider.dart';
+import 'classesSettings/app_localizations.dart';
 
 class LangSetPage extends StatelessWidget {
   const LangSetPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appLocalizations = AppLocalizations.of(context)!;
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
@@ -18,7 +24,7 @@ class LangSetPage extends StatelessWidget {
                   Container(
                     margin: const EdgeInsets.only(top: 10, right: 10),
                     child: Tooltip(
-                      message: 'Назад',
+                      message: appLocalizations.back,
                       child: IconButton(
                       onPressed: (){
                         Navigator.pop(context);
@@ -32,10 +38,10 @@ class LangSetPage extends StatelessWidget {
                 ],
               ),
               Container(
-                child: const Text(
-                  'Язык приложения',
+                child:  Text(
+                  appLocalizations.appTitle,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                       fontFamily: 'Oi-Regular',
                       fontSize: 26,
                       color: Colors.black,
@@ -49,17 +55,17 @@ class LangSetPage extends StatelessWidget {
                   children: [
                     SettingsButton(
                         onPressed: (){
-
+                          languageProvider.setLocale(const Locale('ru')); // Русский
                         },
-                        text: 'Русский',
+                        text: appLocalizations.russian,
                         icon: FluentIcons.earth_16_filled
                     ),
                     const SizedBox(height: 20),
                     SettingsButton(
                         onPressed: (){
-
+                          languageProvider.setLocale(const Locale('en')); // Английский
                         },
-                        text: 'English',
+                        text: appLocalizations.english,
                         icon: FluentIcons.earth_16_filled
                     ),
 

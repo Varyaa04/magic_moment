@@ -52,18 +52,20 @@ class CustomButton extends StatelessWidget {
                 Text(
                   text,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     color: Colors.black,
-                    fontFamily: 'PTSansNarrow-Regular',
+                    fontFamily: 'Comfortaa',
+                    fontWeight: FontWeight.bold
                   ),
                 ),
                 if (secondaryText != null)
                   Text(
                     secondaryText!,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       color: Colors.black,
-                      fontFamily: 'PTSansNarrow-Regular',
+                      fontFamily: 'Comfortaa',
+                      fontWeight: FontWeight.bold
                     ),
                   ),
               ],

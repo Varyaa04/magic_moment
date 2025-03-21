@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:provider/provider.dart';
 
 class CollagePage extends StatelessWidget {
   final List<File> images; // Список фотографий
@@ -9,6 +12,9 @@ class CollagePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appLocalizations = AppLocalizations.of(context)!;
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       body: Container(
         color: Colors.black,
@@ -25,7 +31,7 @@ class CollagePage extends StatelessWidget {
                   icon: const Icon(FluentIcons.arrow_left_16_filled),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Назад',
+                  tooltip: appLocalizations.back,
                 ),
                 IconButton(
                   onPressed: () {
@@ -34,7 +40,7 @@ class CollagePage extends StatelessWidget {
                   icon: const Icon(Icons.save_alt_outlined),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Сохранить',
+                  tooltip: appLocalizations.save,
                 ),
               ],
             ),
@@ -87,7 +93,7 @@ class CollagePage extends StatelessWidget {
                   icon: const Icon(FluentIcons.arrow_hook_up_left_16_regular),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Назад',
+                  tooltip: appLocalizations.back,
                 ),
                 IconButton(
                   onPressed: () {
@@ -96,7 +102,7 @@ class CollagePage extends StatelessWidget {
                   icon: const Icon(FluentIcons.arrow_hook_up_right_16_filled),
                   color: Colors.white,
                   iconSize: 30,
-                  tooltip: 'Вперед',
+                  tooltip: appLocalizations.next,
                 ),
               ],
             ),

@@ -1,12 +1,18 @@
 import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'classesSettings/language_provider.dart';
+import 'classesSettings/app_localizations.dart';
+import 'package:provider/provider.dart';
 
 class FormatSetPage extends StatelessWidget {
   const FormatSetPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appLocalizations = AppLocalizations.of(context)!;
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
@@ -18,7 +24,7 @@ class FormatSetPage extends StatelessWidget {
                   Container(
                     margin: const EdgeInsets.only(top: 10, right: 10),
                     child: Tooltip(
-                      message: 'Назад',
+                      message: appLocalizations.back,
                       child: IconButton(
                       onPressed: (){
                         Navigator.pop(context);
@@ -32,10 +38,10 @@ class FormatSetPage extends StatelessWidget {
                 ],
               ),
               Container(
-                child: const Text(
-                  'Формат изображения',
+                child:  Text(
+                  appLocalizations.format,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                       fontFamily: 'Oi-Regular',
                       fontSize: 26,
                       color: Colors.black,
@@ -49,7 +55,6 @@ class FormatSetPage extends StatelessWidget {
                   children: [
                     SettingsButton(
                         onPressed: (){
-
                         },
                         text: 'PNG',
                         icon: FluentIcons.document_16_filled
@@ -57,7 +62,6 @@ class FormatSetPage extends StatelessWidget {
                     const SizedBox(height: 20),
                     SettingsButton(
                         onPressed: (){
-
                         },
                         text: 'JPEG',
                         icon: FluentIcons.document_16_filled

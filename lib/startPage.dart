@@ -7,12 +7,64 @@ import 'dart:io';
 import 'themeWidjets/buildButtonIcon.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:provider/provider.dart';
+
+// Функция для выбора фото из галереи
+Future<void> _pickImage(ImageSource source, BuildContext context) async{
+  final picker = ImagePicker();
+  final pickedFile = await picker.pickImage(source: source);
+
+  if( pickedFile != null){
+    File imageFile = File(pickedFile.path);
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (context) => EditPage(imageFile: imageFile,), //передача изображения
+        ),
+    );
+  }
+}
+
+// Функция для отображения диалога выбора
+void _showImagePickerDialog(BuildContext context) {
+  final appLocalizations = AppLocalizations.of(context)!;
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title:  Text(appLocalizations.choose),
+        content: Text(appLocalizations.from),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickImage(ImageSource.camera, context);
+            },
+            child:  Text(appLocalizations.camera),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickImage(ImageSource.gallery, context);
+            },
+            child: Text(appLocalizations.gallery),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 
 class StartPage extends StatelessWidget {
   const StartPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appLocalizations = AppLocalizations.of(context)!;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
@@ -38,10 +90,10 @@ class StartPage extends StatelessWidget {
                   Container(
                     margin: const EdgeInsets.only(top: 10, right: 25),
                     child: Tooltip(
-                      message: 'Настройки',
+                      message: appLocalizations.settings,
                       child: IconButton(
                       iconSize: 30,
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.push(
                             context,
                             MaterialPageRoute(builder: (context) => const SettingsPage()),
@@ -76,12 +128,10 @@ class StartPage extends StatelessWidget {
                             color: Colors.transparent,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Text(
-                            'Сможете ли вы за минуту применить фильтр, '
-                                'обрезать фото по золотому сечению или добавить '
-                                'текст с эффектом "неоновое свечение"?',
+                          child:  Text(
+                            appLocalizations.challengeText,
                             textAlign: TextAlign.justify,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 13,
                               color: Colors.black,
                               fontFamily: 'PTSansNarrow-Regular',
@@ -100,13 +150,10 @@ class StartPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         CustomButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => EditPage())
-                          );
+                          onPressed: () async{
+                            _showImagePickerDialog(context);
                           },
-                          text: 'изменить',
+                          text: appLocalizations.change,
                           icon: FluentIcons.image_24_regular,
                         ),
                         const SizedBox(height: 10),
@@ -117,8 +164,8 @@ class StartPage extends StatelessWidget {
                                 MaterialPageRoute(builder: (context) => CollagePage(images: [File('path1.jpg'), File('path2.jpg')]))
                             );
                           },
-                          text: 'создать',
-                          secondaryText: 'коллаж',
+                          text: appLocalizations.create,
+                          secondaryText: appLocalizations.collage,
                           icon: FluentIcons.layout_column_two_split_left_24_regular,
                         ),
                       ],
