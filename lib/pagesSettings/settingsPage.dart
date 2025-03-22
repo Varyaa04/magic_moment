@@ -4,9 +4,9 @@ import 'package:MagicMoment/pagesSettings/themeSetPage.dart';
 import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'package:provider/provider.dart';
+import 'classesSettings/theme_provider.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -14,11 +14,14 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appLocalizations = AppLocalizations.of(context)!;
-    final languageProvider = Provider.of<LanguageProvider>(context);
+
+    final  theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        color: Colors.white,
+        color: colorScheme.surface,
         child: Column(
           children: [
             Row(
@@ -32,25 +35,22 @@ class SettingsPage extends StatelessWidget {
                       Navigator.pop(context);
                     },
                     icon: const Icon(FluentIcons.arrow_left_16_filled),
-                    color: Colors.black,
+                    color: colorScheme.onSurface,
                     iconSize: 30,
                   ),
                 ),
                 ),
               ],
-            ),
-            Container(
-              child:  Text(
+            ),  Text(
                 appLocalizations.settings,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontFamily: 'Oi-Regular',
                   fontSize: 26,
-                  color: Colors.black,
+                  color: colorScheme.onSecondary,
                   fontWeight: FontWeight.w100
                 ),
               ),
-            ),
             const SizedBox(height: 40),
             Container(
               child: Column(
@@ -60,7 +60,7 @@ class SettingsPage extends StatelessWidget {
                         Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => LangSetPage()
+                                builder: (context) => const LangSetPage()
                             )
                         );
                       },
@@ -73,7 +73,7 @@ class SettingsPage extends StatelessWidget {
                         Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => ThemeSetPage()
+                                builder: (context) => const ThemeSetPage()
                             )
                         );
                       },
@@ -86,7 +86,7 @@ class SettingsPage extends StatelessWidget {
                         Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => FormatSetPage()
+                                builder: (context) => const FormatSetPage()
                             )
                         );
                       },

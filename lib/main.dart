@@ -4,12 +4,16 @@ import 'package:provider/provider.dart';
 import 'startPage.dart';
 import 'pagesSettings/classesSettings/app_localizations.dart';
 import 'pagesSettings/classesSettings/language_provider.dart';
+import 'pagesSettings/classesSettings/theme_provider.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => LanguageProvider(),
-      child: const MyApp(),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => LanguageProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ],
+        child: const MyApp(),
     ),
   );
 }
@@ -19,9 +23,29 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<LanguageProvider>(
-      builder: (context, languageProvider, child) {
+    return Consumer2<LanguageProvider, ThemeProvider>(
+      builder: (context, languageProvider, themeProvider, child) {
         return MaterialApp(
+          theme: ThemeData(
+            colorScheme: const ColorScheme.light(
+              primary: Colors.red,
+              secondary: Colors.green,
+              surface: Colors.white,
+              onSurface: Colors.black,
+              onSecondary: Colors.black,
+            ),
+          ),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.dark(
+              primary: Colors.pink,
+              secondary: Colors.teal,
+              surface: Colors.black54,
+              onSurface: Colors.white,
+                onSecondary: Colors.grey[900]!,
+            ),
+          ),
+          themeMode: themeProvider.themeMode,
+          home: const StartPage(),
           locale: languageProvider.locale,
           supportedLocales: const [
             Locale('en', 'US'),
@@ -33,7 +57,6 @@ class MyApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: const StartPage(),
         );
       },
     );

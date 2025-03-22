@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-
+import 'package:provider/provider.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/theme_provider.dart';
 class SettingsButton extends StatelessWidget {
   final VoidCallback onPressed;
   final String text;
@@ -14,13 +15,16 @@ class SettingsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    final  theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
       height: 70,
       width: 400,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.black, width: 1),
+        border: Border.all(color: colorScheme.onSurface, width: 1),
       ),
       child: TextButton(
         onPressed: onPressed,
@@ -34,14 +38,14 @@ class SettingsButton extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const SizedBox(width: 40),
-            Icon(icon, color: Colors.black, size: 50),
+            Icon(icon, color: colorScheme.onSurface, size: 50),
             Expanded(
               child: Text(
                 textAlign: TextAlign.center,
                 text,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 26,
-                  color: Colors.black,
+                  color: colorScheme.onSurface,
                   fontFamily: 'Comfortaa',
                   fontWeight: FontWeight.bold
                 ),

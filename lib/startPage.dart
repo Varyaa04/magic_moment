@@ -64,11 +64,13 @@ class StartPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appLocalizations = AppLocalizations.of(context)!;
+    final  theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        color: Colors.white,
+        color: colorScheme.surface,
         child: Row(
           children: [
             // Левая часть с изображением
@@ -100,7 +102,7 @@ class StartPage extends StatelessWidget {
                         );
                       },
                       icon: const Icon(Icons.settings),
-                      color: Colors.black,
+                      color: colorScheme.onSecondary,
                     ),
                   ),
                   ),
@@ -112,12 +114,12 @@ class StartPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        const Text(
+                         Text(
                           'Magic Moment',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 26,
-                            color: Colors.black,
+                            color: colorScheme.onSecondary,
                             fontFamily: 'LilitaOne-Regular',
                           ),
                         ),
@@ -131,9 +133,9 @@ class StartPage extends StatelessWidget {
                           child:  Text(
                             appLocalizations.challengeText,
                             textAlign: TextAlign.justify,
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 13,
-                              color: Colors.black,
+                              color: colorScheme.onSecondary,
                               fontFamily: 'PTSansNarrow-Regular',
                             ),
                             softWrap: true,

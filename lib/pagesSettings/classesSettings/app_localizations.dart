@@ -46,7 +46,7 @@ class AppLocalizations {
       'choose' : 'select source',
       'from' : 'where do you want to select an image from?',
       'camera' : 'camera',
-      'gallery' : 'callery',
+      'gallery' : 'gallery',
     },
     'ru': {
       'app_title': 'язык приложения',

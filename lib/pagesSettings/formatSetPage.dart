@@ -11,12 +11,13 @@ class FormatSetPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appLocalizations = AppLocalizations.of(context)!;
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    final  theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-          color: Colors.white,
+          color: colorScheme.surface,
           child: Column(
             children: [
               Row(
@@ -30,7 +31,7 @@ class FormatSetPage extends StatelessWidget {
                         Navigator.pop(context);
                       },
                       icon: const Icon(FluentIcons.arrow_left_16_filled),
-                      color: Colors.black,
+                      color: colorScheme.onSurface,
                       iconSize: 30,
                     ),
                   ),
@@ -41,10 +42,10 @@ class FormatSetPage extends StatelessWidget {
                 child:  Text(
                   appLocalizations.format,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style:  TextStyle(
                       fontFamily: 'Oi-Regular',
                       fontSize: 26,
-                      color: Colors.black,
+                      color: colorScheme.onSecondary,
                       fontWeight: FontWeight.w100
                   ),
                 ),
