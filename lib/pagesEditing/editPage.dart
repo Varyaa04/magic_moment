@@ -1,19 +1,21 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'package:provider/provider.dart';
+
 
 class EditPage extends StatelessWidget {
-  final File? imageFile;
+  final dynamic imageBytes;
 
-  const EditPage({super.key, this.imageFile});
-
+  const EditPage({super.key, this.imageBytes});
+  
   @override
   Widget build(BuildContext context) {
     final appLocalizations = AppLocalizations.of(context)!;
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       body: Container(
@@ -47,20 +49,28 @@ class EditPage extends StatelessWidget {
 
             const SizedBox(height: 10),
             // Контейнер для загруженной фотографии
-            if (imageFile != null)
-              Image.file(
-                imageFile!,
-                width: 400,
-                height: 470,
-                fit: BoxFit.cover,
-              )
+            if (imageBytes != null)
+              if (kIsWeb == true)
+                Image.memory(
+                  imageBytes as Uint8List, // Для веба
+                  width: 400,
+                  height: 470,
+                  fit: BoxFit.contain,
+                  )
+                else
+                    Image.file(
+                      imageBytes as File, // Для мобильных/десктоп
+                      width: 400,
+                      height: 470,
+                      fit: BoxFit.contain,
+                    )
             else
               Container(
                 color: Colors.grey,
                 width: 400,
                 height: 470,
-                child: const Center(
-                  child: Icon(
+                child:const Center(
+                  child:  Icon(
                     Icons.image,
                     color: Colors.white,
                   ),
@@ -96,35 +106,56 @@ class EditPage extends StatelessWidget {
               height: 2,
               color: Colors.white,
             ),
-            const SizedBox(height: 2,),
+            const SizedBox(height: 2),
             SizedBox(
-              height: 100, // Увеличиваем высоту ленты, чтобы вместить текст
+              height: 100,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: List.generate(8, (index) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center, // Центрируем содержимое
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         IconButton(
                           onPressed: () {
-                            print('Кнопка ${index + 1} нажата');
                           },
                           icon: Icon(
                             _getIconForIndex(index), // Иконка для кнопки
                             color: Colors.white,
                             size: 30,
                           ),
-                          tooltip: 'Кнопка ${index + 1}', // Подсказка
                         ),
-                        const SizedBox(height: 4), // Отступ между иконкой и текстом
-                        Text(
-                          _getLabelForIndex(index), // Текст под кнопкой
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
+                        const SizedBox(height: 4),
+                        FutureBuilder<String>(
+                          future: _getLabelForIndex(index, context),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Text(
+                                'Загрузка...',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                ),
+                              );
+                            } else if (snapshot.hasError) {
+                              return const Text(
+                                'Ошибка',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                ),
+                              );
+                            } else {
+                              return Text(
+                                snapshot.data ?? 'Кнопка',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                ),
+                              );
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -138,10 +169,11 @@ class EditPage extends StatelessWidget {
     );
   }
 
-  String _getLabelForIndex(int index) {
-
-    final appLocalizations = AppLocalizations.of(index as BuildContext)!;
-    final languageProvider = Provider.of<LanguageProvider>(index as BuildContext);
+  Future<String> _getLabelForIndex(int index, BuildContext context) async {
+    final appLocalizations = AppLocalizations.of(context);
+    if (appLocalizations == null) {
+      return 'Кнопка'; // Fallback, если AppLocalizations недоступен
+    }
     switch (index) {
       case 0:
         return appLocalizations.crop;
@@ -160,7 +192,7 @@ class EditPage extends StatelessWidget {
       case 7:
         return appLocalizations.effects;
       default:
-        return 'Кнопка';
+        return 'Кнопка'; // Fallback для неизвестных индексов
     }
   }
 
@@ -173,7 +205,7 @@ class EditPage extends StatelessWidget {
       case 2:
         return Icons.contrast;
       case 3:
-        return FluentIcons.edit_20_filled;
+        return FluentIcons.edit_settings_20_regular;
       case 4:
         return Icons.filter;
       case 5:
@@ -182,7 +214,7 @@ class EditPage extends StatelessWidget {
         return FluentIcons.text_field_16_filled;
       case 7:
         return FluentIcons.emoji_sparkle_16_filled;
-        default:
+      default:
         return FluentIcons.emoji_sparkle_16_filled;
     }
   }

@@ -44,10 +44,10 @@ class SettingsButton extends StatelessWidget {
                 textAlign: TextAlign.center,
                 text,
                 style:  TextStyle(
-                  fontSize: 26,
-                  color: colorScheme.onSurface,
-                  fontFamily: 'Comfortaa',
-                  fontWeight: FontWeight.bold
+                    fontSize: 26,
+                    color: colorScheme.onSurface,
+                    fontFamily: 'Comfortaa',
+                    fontWeight: FontWeight.bold
                 ),
               ),
             ),

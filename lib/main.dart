@@ -27,8 +27,10 @@ class MyApp extends StatelessWidget {
       builder: (context, languageProvider, themeProvider, child) {
         return MaterialApp(
           theme: ThemeData(
-            colorScheme: const ColorScheme.light(
+            colorScheme: ColorScheme.light(
               primary: Colors.red,
+              onPrimary: Colors.red[100]!,
+              primaryContainer: Colors.deepOrange[100]!,
               secondary: Colors.green,
               surface: Colors.white,
               onSurface: Colors.black,
@@ -38,6 +40,8 @@ class MyApp extends StatelessWidget {
           darkTheme: ThemeData(
             colorScheme: ColorScheme.dark(
               primary: Colors.pink,
+              onPrimary: Colors.pink[100]!,
+              primaryContainer: Colors.yellow[100]!,
               secondary: Colors.teal,
               surface: Colors.black54,
               onSurface: Colors.white,

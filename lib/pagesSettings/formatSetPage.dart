@@ -1,9 +1,7 @@
-import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
+import 'package:MagicMoment/themeWidjets/formatButtonIcon.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'classesSettings/language_provider.dart';
 import 'classesSettings/app_localizations.dart';
-import 'package:provider/provider.dart';
 
 class FormatSetPage extends StatelessWidget {
   const FormatSetPage({super.key});
@@ -54,17 +52,21 @@ class FormatSetPage extends StatelessWidget {
               Container(
                 child: Column(
                   children: [
-                    SettingsButton(
+                    formatButtonIcon(
                         onPressed: (){
+                          //логика изменения
                         },
                         text: 'PNG',
+                        secondaryText: appLocalizations.pngText,
                         icon: FluentIcons.document_16_filled
                     ),
                     const SizedBox(height: 20),
-                    SettingsButton(
+                    formatButtonIcon(
                         onPressed: (){
+
                         },
                         text: 'JPEG',
+                        secondaryText: appLocalizations.jpegText,
                         icon: FluentIcons.document_16_filled
                     ),
                   ],

@@ -5,8 +5,6 @@ import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'package:provider/provider.dart';
-import 'classesSettings/theme_provider.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});

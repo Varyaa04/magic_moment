@@ -47,6 +47,10 @@ class AppLocalizations {
       'from' : 'where do you want to select an image from?',
       'camera' : 'camera',
       'gallery' : 'gallery',
+      'pngText' : '— for graphics with transparency',
+      'jpegText' : '— for photos',
+      'insRigh' : 'Insufficient rights',
+      'righText' : 'Grant access to your camera and gallery in settings!',
     },
     'ru': {
       'app_title': 'язык приложения',
@@ -80,7 +84,11 @@ class AppLocalizations {
       'choose' : 'выберите источник',
       'from' : 'откуда вы хотите выбрать изображение?',
       'camera' : 'камера',
-      'gallery' : 'галерея'
+      'gallery' : 'галерея',
+      'pngText' : ' — для графики с прозрачностью',
+      'jpegText' : ' — для фотографий',
+      'insRigh' : 'Недостаточно прав',
+      'righText' : 'Предоставьте в настройках доступ к вашей камере и галерее!',
     },
   };
 
@@ -117,6 +125,10 @@ class AppLocalizations {
   String get from => _localizedValues[locale.languageCode]!['from']!;
   String get camera => _localizedValues[locale.languageCode]!['camera']!;
   String get gallery => _localizedValues[locale.languageCode]!['gallery']!;
+  String get jpegText => _localizedValues[locale.languageCode]!['jpegText']!;
+  String get pngText => _localizedValues[locale.languageCode]!['pngText']!;
+  String get insRigh => _localizedValues[locale.languageCode]!['insRigh']!;
+  String get righText => _localizedValues[locale.languageCode]!['righText']!;
 }
 
 class _AppLocalizationsDelegate

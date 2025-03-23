@@ -4,67 +4,85 @@ import 'package:MagicMoment/pagesSettings/settingsPage.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'themeWidjets/buildButtonIcon.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/language_provider.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'package:provider/provider.dart';
 
-// Функция для выбора фото из галереи
-Future<void> _pickImage(ImageSource source, BuildContext context) async{
-  final picker = ImagePicker();
-  final pickedFile = await picker.pickImage(source: source);
+class StartPage extends StatefulWidget {
+  const StartPage({super.key});
 
-  if( pickedFile != null){
-    File imageFile = File(pickedFile.path);
-    Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (context) => EditPage(imageFile: imageFile,), //передача изображения
-        ),
+  @override
+  _StartPageState createState() => _StartPageState();
+}
+
+class _StartPageState extends State<StartPage> {
+  final ImagePicker picker = ImagePicker();
+
+  // Функция для выбора фото из галереи
+  Future<void> _pickImage(ImageSource source) async {
+    final image = await picker.pickImage(source: source);
+    if (image != null) {
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes(); // Для веба
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EditPage(imageBytes: bytes),
+          ),
+        );
+      } else {
+        final file = File(image.path); // Для мобильных/десктоп
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EditPage(imageBytes: file),
+          ),
+        );
+      }
+    }
+  }
+
+  void _dialogChoose() {
+    final appLocalizations = AppLocalizations.of(context)!;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(appLocalizations.choose),
+          content: Text(appLocalizations.from),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _pickImage(ImageSource.camera);
+                });
+              },
+              child: Text(appLocalizations.camera),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _pickImage(ImageSource.gallery);
+                });
+              },
+              child: Text(appLocalizations.gallery),
+            ),
+          ],
+        );
+      },
     );
   }
-}
-
-// Функция для отображения диалога выбора
-void _showImagePickerDialog(BuildContext context) {
-  final appLocalizations = AppLocalizations.of(context)!;
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title:  Text(appLocalizations.choose),
-        content: Text(appLocalizations.from),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _pickImage(ImageSource.camera, context);
-            },
-            child:  Text(appLocalizations.camera),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _pickImage(ImageSource.gallery, context);
-            },
-            child: Text(appLocalizations.gallery),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-
-class StartPage extends StatelessWidget {
-  const StartPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final appLocalizations = AppLocalizations.of(context)!;
-    final  theme = Theme.of(context);
+    final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
@@ -73,48 +91,45 @@ class StartPage extends StatelessWidget {
         color: colorScheme.surface,
         child: Row(
           children: [
-            // Левая часть с изображением
             Expanded(
               child: Image.asset(
                 'lib/assets/icons/photos.png',
                 fit: BoxFit.contain,
               ),
             ),
-
-            // Правая часть с текстом и кнопками
             Expanded(
               flex: 1,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // Верхняя часть с иконкой настроек
                   Container(
                     margin: const EdgeInsets.only(top: 10, right: 25),
                     child: Tooltip(
                       message: appLocalizations.settings,
                       child: IconButton(
-                      iconSize: 30,
-                      onPressed: () async {
-                        Navigator.push(
+                        iconSize: 30,
+                        onPressed: () async {
+                          Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const SettingsPage()),
-                        );
-                      },
-                      icon: const Icon(Icons.settings),
-                      color: colorScheme.onSecondary,
+                            MaterialPageRoute(
+                              builder: (context) => const SettingsPage(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.settings),
+                        color: colorScheme.onSecondary,
+                      ),
                     ),
-                  ),
                   ),
                   const SizedBox(height: 10),
 
-                  // Блок с текстом "Magic Moment" и описанием
                   Container(
                     margin: const EdgeInsets.only(top: 40, right: 25),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                         Text(
+                        Text(
                           'Magic Moment',
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -130,10 +145,10 @@ class StartPage extends StatelessWidget {
                             color: Colors.transparent,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child:  Text(
+                          child: Text(
                             appLocalizations.challengeText,
                             textAlign: TextAlign.justify,
-                            style:  TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               color: colorScheme.onSecondary,
                               fontFamily: 'PTSansNarrow-Regular',
@@ -152,8 +167,8 @@ class StartPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         CustomButton(
-                          onPressed: () async{
-                            _showImagePickerDialog(context);
+                          onPressed: () {
+                            _dialogChoose();
                           },
                           text: appLocalizations.change,
                           icon: FluentIcons.image_24_regular,
@@ -162,8 +177,12 @@ class StartPage extends StatelessWidget {
                         CustomButton(
                           onPressed: () {
                             Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => CollagePage(images: [File('path1.jpg'), File('path2.jpg')]))
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CollagePage(
+                                  images: [File('path1.jpg'), File('path2.jpg')],
+                                ),
+                              ),
                             );
                           },
                           text: appLocalizations.create,
