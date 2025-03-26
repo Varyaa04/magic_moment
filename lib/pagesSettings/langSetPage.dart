@@ -18,7 +18,7 @@ class LangSetPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-          color: colorScheme.surface,
+          color: colorScheme.onInverseSurface,
           child: Column(
             children: [
               Row(

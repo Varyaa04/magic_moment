@@ -19,6 +19,36 @@ class StartPage extends StatefulWidget {
 
 class _StartPageState extends State<StartPage> {
   final ImagePicker picker = ImagePicker();
+  List<File> selectedImages = [];
+
+  // Функция выбора изображений для коллажа
+  Future getImages() async {
+    final appLocalizations = AppLocalizations.of(context)!;
+    final pickedFile = await picker.pickMultiImage(
+        imageQuality: 100,
+        maxHeight: 1000,
+        maxWidth: 1000);
+    List<XFile> xfilePick = pickedFile;
+
+    if (xfilePick.isNotEmpty) {
+      for (var i = 0; i < xfilePick.length && i <= 5; i++) {
+        selectedImages.add(File(xfilePick[i].path));
+      }
+      setState(() {});
+
+      // После выбора изображений переходим на страницу коллажа
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CollagePage(images: selectedImages),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appLocalizations.selectedNon)));
+    }
+  }
 
   // Функция для выбора фото из галереи
   Future<void> _pickImage(ImageSource source) async {
@@ -46,6 +76,7 @@ class _StartPageState extends State<StartPage> {
     }
   }
 
+  // Функция для выбора нескольких изображений из галереи для коллажа
   void _dialogChoose() {
     final appLocalizations = AppLocalizations.of(context)!;
     showDialog(
@@ -88,13 +119,13 @@ class _StartPageState extends State<StartPage> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        color: colorScheme.surface,
+        color: colorScheme.onInverseSurface,
         child: Row(
           children: [
             Expanded(
               child: Image.asset(
                 'lib/assets/icons/photos.png',
-                fit: BoxFit.contain,
+                fit: BoxFit.cover,
               ),
             ),
             Expanded(
@@ -176,14 +207,7 @@ class _StartPageState extends State<StartPage> {
                         const SizedBox(height: 10),
                         CustomButton(
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => CollagePage(
-                                  images: [File('path1.jpg'), File('path2.jpg')],
-                                ),
-                              ),
-                            );
+                            getImages();
                           },
                           text: appLocalizations.create,
                           secondaryText: appLocalizations.collage,

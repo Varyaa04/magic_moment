@@ -35,6 +35,7 @@ class MyApp extends StatelessWidget {
               surface: Colors.white,
               onSurface: Colors.black,
               onSecondary: Colors.black,
+              onInverseSurface: Colors.white,
             ),
           ),
           darkTheme: ThemeData(
@@ -46,6 +47,7 @@ class MyApp extends StatelessWidget {
               surface: Colors.black54,
               onSurface: Colors.white,
                 onSecondary: Colors.grey[900]!,
+              onInverseSurface: Colors.black26,
             ),
           ),
           themeMode: themeProvider.themeMode,

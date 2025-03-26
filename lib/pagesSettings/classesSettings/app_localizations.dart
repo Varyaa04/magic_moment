@@ -40,6 +40,7 @@ class AppLocalizations {
       'text': 'text',
       'effects': 'effects',
       'next': 'next',
+      'nextEdit': 'next to editing',
       'template': 'template',
       'format_im': 'format images',
       'settings': 'settings',
@@ -47,6 +48,7 @@ class AppLocalizations {
       'from' : 'where do you want to select an image from?',
       'camera' : 'camera',
       'gallery' : 'gallery',
+      'selectedNon' : 'Nothing is selected',
       'pngText' : '— for graphics with transparency',
       'jpegText' : '— for photos',
       'insRigh' : 'Insufficient rights',
@@ -78,6 +80,7 @@ class AppLocalizations {
       'text': 'текст',
       'effects': 'эффекты',
       'next': 'вперед',
+      'nextEdit': 'далее к редактированию',
       'template': 'шаблон',
       'format_im': 'формат изображения',
       'settings': 'настройки',
@@ -85,6 +88,7 @@ class AppLocalizations {
       'from' : 'откуда вы хотите выбрать изображение?',
       'camera' : 'камера',
       'gallery' : 'галерея',
+      'selectedNon' : 'Ничего не выбрано',
       'pngText' : ' — для графики с прозрачностью',
       'jpegText' : ' — для фотографий',
       'insRigh' : 'Недостаточно прав',
@@ -116,6 +120,7 @@ class AppLocalizations {
   String get text => _localizedValues[locale.languageCode]!['text']!;
   String get effects => _localizedValues[locale.languageCode]!['effects']!;
   String get next => _localizedValues[locale.languageCode]!['next']!;
+  String get nextEdit => _localizedValues[locale.languageCode]!['nextEdit']!;
   String get template => _localizedValues[locale.languageCode]!['template']!;
   String get format => _localizedValues[locale.languageCode]!['format_im']!;
   String get settings => _localizedValues[locale.languageCode]!['settings']!;
@@ -129,6 +134,7 @@ class AppLocalizations {
   String get pngText => _localizedValues[locale.languageCode]!['pngText']!;
   String get insRigh => _localizedValues[locale.languageCode]!['insRigh']!;
   String get righText => _localizedValues[locale.languageCode]!['righText']!;
+  String get selectedNon => _localizedValues[locale.languageCode]!['selectedNon']!;
 }
 
 class _AppLocalizationsDelegate

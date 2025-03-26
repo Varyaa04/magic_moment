@@ -59,7 +59,7 @@ class EditPage extends StatelessWidget {
                   )
                 else
                     Image.file(
-                      imageBytes as File, // Для мобильных/десктоп
+                      imageBytes as File, // Для мобильных
                       width: 400,
                       height: 470,
                       fit: BoxFit.contain,
