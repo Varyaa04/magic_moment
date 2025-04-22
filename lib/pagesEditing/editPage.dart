@@ -1,221 +1,344 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'dart:typed_data';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'cropPanel.dart';
+import 'brightnessPanel.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:universal_html/html.dart' as html;
 
-
-class EditPage extends StatelessWidget {
+class EditPage extends StatefulWidget {
   final dynamic imageBytes;
 
-  const EditPage({super.key, this.imageBytes});
-  
+  const EditPage({super.key, required this.imageBytes});
+
+  @override
+  _EditPageState createState() => _EditPageState();
+}
+
+class _EditPageState extends State<EditPage> {
+  bool _showCropPanel = false;
+  bool _showBrightPanel = false;
+  CropAspectRatioPreset _selectedCropPreset = CropAspectRatioPreset.original;
+  late Uint8List _currentImage;
+  late Uint8List _originalImage;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeImage();
+  }
+
+  Future<void> _initializeImage() async {
+    try {
+      if (widget.imageBytes is File) {
+        final file = widget.imageBytes as File;
+        _currentImage = await file.readAsBytes();
+      } else if (widget.imageBytes is Uint8List) {
+        _currentImage = widget.imageBytes as Uint8List;
+      } else {
+        throw Exception('Unsupported image type');
+      }
+      _originalImage = Uint8List.fromList(_currentImage);
+      setState(() {
+        _isInitialized = true;
+      });
+    } catch (e) {
+      debugPrint('Error initializing image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading image: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  void _toggleCropPanel() {
+    setState(() {
+      _showCropPanel = !_showCropPanel;
+      if (_showBrightPanel) _showBrightPanel = false;
+    });
+  }
+
+  void _toggleBrightPanel() {
+    setState(() {
+      _showBrightPanel = !_showBrightPanel;
+      if (_showCropPanel) _showCropPanel = false;
+    });
+  }
+
+  void _handleButtonPress(int index) {
+    switch (index) {
+      case 0: // Crop
+        _toggleCropPanel();
+        break;
+      case 1: // Brightness
+        _toggleBrightPanel();
+        break;
+      default:
+        debugPrint('Button $index pressed');
+    }
+  }
+
+  void _updateImage(Uint8List newImage) {
+    if (!mounted) return;
+    setState(() {
+      _currentImage = newImage;
+    });
+  }
+
+  Future<void> _saveImage() async {
+    if (!_isInitialized || !mounted) return;
+
+    try {
+      if (kIsWeb) {
+        await _downloadImageWeb(_currentImage);
+      } else {
+        await _saveImageToGallery(_currentImage);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)?.save ?? 'Image saved'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _downloadImageWeb(Uint8List bytes) async {
+    try {
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', 'edited_image_${DateTime.now().millisecondsSinceEpoch}.png')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } catch (e) {
+      debugPrint('Web download error: $e');
+      throw Exception('Failed to download image: $e');
+    }
+  }
+
+  Future<void> _saveImageToGallery(Uint8List bytes) async {
+    try {
+      final directory = await getTemporaryDirectory();
+      final imagePath = '${directory.path}/image_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(imagePath);
+      await file.writeAsBytes(bytes);
+
+      const channel = MethodChannel('gallery_saver');
+      await channel.invokeMethod('saveImage', imagePath);
+    } on PlatformException catch (e) {
+      debugPrint('Failed to save image: ${e.message}');
+      rethrow;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final appLocalizations = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final appLocalizations = AppLocalizations.of(context);
 
     return Scaffold(
-      body: Container(
-        color: Colors.black,
-        child: Column(
-          children: [
-            // Верхняя панель с кнопками "Назад" и "Сохранить"
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Stack(
+        children: [
+          Container(
+            color: Colors.black,
+            child: Column(
               children: [
-                IconButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  icon: const Icon(FluentIcons.arrow_left_16_filled),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.back,
-                ),
-                IconButton(
-                  onPressed: () {
-                    // Логика сохранения
-                  },
-                  icon: const Icon(Icons.save_alt_rounded),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.save,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-            // Контейнер для загруженной фотографии
-            if (imageBytes != null)
-              if (kIsWeb == true)
-                Image.memory(
-                  imageBytes as Uint8List, // Для веба
-                  width: 400,
-                  height: 470,
-                  fit: BoxFit.contain,
-                  )
-                else
-                    Image.file(
-                      imageBytes as File, // Для мобильных
-                      width: 400,
-                      height: 470,
-                      fit: BoxFit.contain,
-                    )
-            else
-              Container(
-                color: Colors.grey,
-                width: 400,
-                height: 470,
-                child:const Center(
-                  child:  Icon(
-                    Icons.image,
-                    color: Colors.white,
+                // Top toolbar
+                SafeArea(
+                  bottom: false,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(FluentIcons.arrow_left_16_filled),
+                        color: Colors.white,
+                      ),
+                      IconButton(
+                        onPressed: _isInitialized ? _saveImage : null,
+                        icon: const Icon(Icons.save_alt_rounded),
+                        color: Colors.white,
+                      ),
+                    ],
                   ),
                 ),
-              ),
 
-            const SizedBox(height: 10),
-            // Нижняя панель с кнопками "Назад" и "Вперед"
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                IconButton(
-                  onPressed: () {
-                    // Логика для кнопки "Назад"
-                  },
-                  icon: const Icon(FluentIcons.arrow_hook_up_left_16_regular),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.back,
+                // Image area
+                Expanded(
+                  child: _isInitialized
+                      ? InteractiveViewer(
+                    child: Center(
+                      child: Image.memory(
+                        _currentImage,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  )
+                      : const Center(
+                    child: CircularProgressIndicator(),
+                  ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    // Логика для кнопки "Вперед"
-                  },
-                  icon: const Icon(FluentIcons.arrow_hook_up_right_16_filled),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.next,
-                ),
-              ],
-            ),
-            Container(
-              height: 2,
-              color: Colors.white,
-            ),
-            const SizedBox(height: 2),
-            SizedBox(
-              height: 100,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: List.generate(8, (index) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+
+                // Bottom tools panel
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         IconButton(
-                          onPressed: () {
-                          },
-                          icon: Icon(
-                            _getIconForIndex(index), // Иконка для кнопки
-                            color: Colors.white,
-                            size: 30,
-                          ),
+                          onPressed: _showCropPanel
+                              ? _toggleCropPanel
+                              : _showBrightPanel
+                              ? _toggleBrightPanel
+                              : null,
+                          icon: const Icon(FluentIcons.arrow_hook_up_left_16_regular),
+                          color: Colors.white,
                         ),
-                        const SizedBox(height: 4),
-                        FutureBuilder<String>(
-                          future: _getLabelForIndex(index, context),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const Text(
-                                'Загрузка...',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                ),
-                              );
-                            } else if (snapshot.hasError) {
-                              return const Text(
-                                'Ошибка',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                ),
-                              );
-                            } else {
-                              return Text(
-                                snapshot.data ?? 'Кнопка',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                ),
-                              );
-                            }
-                          },
+                        IconButton(
+                          onPressed: _showCropPanel
+                              ? _applyCrop
+                              : _showBrightPanel
+                              ? () {
+                            _toggleBrightPanel();
+                            _originalImage = Uint8List.fromList(_currentImage);
+                          }
+                              : null,
+                          icon: const Icon(FluentIcons.arrow_hook_up_right_16_filled),
+                          color: Colors.white,
                         ),
                       ],
                     ),
-                  );
-                }),
+                    Container(height: 1, color: Colors.white.withOpacity(0.3)),
+                    _buildToolsPanel(context),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Crop panel
+          // if (_showCropPanel)
+          //   Positioned(
+          //     bottom: 0,
+          //     left: 0,
+          //     right: 0,
+          //     child: CropPanel(
+          //       onCancel: _toggleCropPanel,
+          //       onApply: _applyCrop,
+          //       currentPreset: _selectedCropPreset,
+          //       onCropTypeSelected: (preset) {
+          //         if (mounted) {
+          //           setState(() {
+          //             _selectedCropPreset = preset;
+          //           });
+          //         }
+          //       },
+          //     ),
+          //   ),
+
+          // Brightness panel
+          if (_showBrightPanel)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: BrightnessPanel(
+                onCancel: _toggleBrightPanel,
+                onApply: _toggleBrightPanel,
+                originalImage: _originalImage,
+                onImageChanged: _updateImage,
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
 
-  Future<String> _getLabelForIndex(int index, BuildContext context) async {
+  Widget _buildToolsPanel(BuildContext context) {
+    return SizedBox(
+      height: 100,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        children: List.generate(8, (index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  onPressed: () => _handleButtonPress(index),
+                  icon: Icon(
+                    _getIconForIndex(index),
+                    size: 28,
+                  ),
+                  color: Colors.white,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _getLabelForIndex(index, context),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  String _getLabelForIndex(int index, BuildContext context) {
     final appLocalizations = AppLocalizations.of(context);
-    if (appLocalizations == null) {
-      return 'Кнопка'; // Fallback, если AppLocalizations недоступен
-    }
     switch (index) {
-      case 0:
-        return appLocalizations.crop;
-      case 1:
-        return appLocalizations.brightness;
-      case 2:
-        return appLocalizations.contrast;
-      case 3:
-        return appLocalizations.adjust;
-      case 4:
-        return appLocalizations.filters;
-      case 5:
-        return appLocalizations.draw;
-      case 6:
-        return appLocalizations.text;
-      case 7:
-        return appLocalizations.effects;
-      default:
-        return 'Кнопка'; // Fallback для неизвестных индексов
+      case 0: return appLocalizations?.crop ?? 'Crop';
+      case 1: return appLocalizations?.brightness ?? 'Brightness';
+      case 2: return appLocalizations?.contrast ?? 'Contrast';
+      case 3: return appLocalizations?.adjust ?? 'Adjust';
+      case 4: return appLocalizations?.filters ?? 'Filters';
+      case 5: return appLocalizations?.draw ?? 'Draw';
+      case 6: return appLocalizations?.text ?? 'Text';
+      case 7: return appLocalizations?.effects ?? 'Effects';
+      default: return '';
     }
   }
 
   IconData _getIconForIndex(int index) {
     switch (index) {
-      case 0:
-        return FluentIcons.image_split_20_filled;
-      case 1:
-        return FluentIcons.brightness_high_16_filled;
-      case 2:
-        return Icons.contrast;
-      case 3:
-        return FluentIcons.edit_settings_20_regular;
-      case 4:
-        return Icons.filter;
-      case 5:
-        return FluentIcons.draw_image_20_filled;
-      case 6:
-        return FluentIcons.text_field_16_filled;
-      case 7:
-        return FluentIcons.emoji_sparkle_16_filled;
-      default:
-        return FluentIcons.emoji_sparkle_16_filled;
+      case 0: return FluentIcons.crop_24_filled;
+      case 1: return FluentIcons.brightness_high_24_filled;
+      case 2: return Icons.contrast;
+      case 3: return FluentIcons.settings_24_regular;
+      case 4: return Icons.filter_b_and_w;
+      case 5: return FluentIcons.ink_stroke_24_regular;
+      case 6: return FluentIcons.text_field_24_regular;
+      case 7: return FluentIcons.emoji_sparkle_24_regular;
+      default: return Icons.error;
     }
+  }
+
+  Future<void> _applyCrop() async {
+
   }
 }

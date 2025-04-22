@@ -47,12 +47,19 @@ class AppLocalizations {
       'choose' : 'select source',
       'from' : 'where do you want to select an image from?',
       'camera' : 'camera',
+      'returnd': 'return',
+      'cancel': 'cancel',
       'gallery' : 'gallery',
       'selectedNon' : 'Nothing is selected',
       'pngText' : '— for graphics with transparency',
       'jpegText' : '— for photos',
       'insRigh' : 'Insufficient rights',
       'righText' : 'Grant access to your camera and gallery in settings!',
+      'freeCrop' : 'Free',
+      'portraitCrop' : 'Portrait',
+      'rotateCrop' : 'Rotate',
+      'reset' : 'Reset',
+      'apply' : 'Apply'
     },
     'ru': {
       'app_title': 'язык приложения',
@@ -77,6 +84,8 @@ class AppLocalizations {
       'adjust': 'регулировка',
       'filters': 'фильтры',
       'draw': 'рисовать',
+      'returnd': 'вернуть',
+      'cancel': 'отменить',
       'text': 'текст',
       'effects': 'эффекты',
       'next': 'вперед',
@@ -93,6 +102,11 @@ class AppLocalizations {
       'jpegText' : ' — для фотографий',
       'insRigh' : 'Недостаточно прав',
       'righText' : 'Предоставьте в настройках доступ к вашей камере и галерее!',
+      'freeCrop' : 'Свободная',
+      'portraitCrop' : 'Портрет',
+      'rotateCrop' : 'Поворот',
+      'reset' : 'Сброс',
+      'apply' : 'Применить'
     },
   };
 
@@ -135,6 +149,13 @@ class AppLocalizations {
   String get insRigh => _localizedValues[locale.languageCode]!['insRigh']!;
   String get righText => _localizedValues[locale.languageCode]!['righText']!;
   String get selectedNon => _localizedValues[locale.languageCode]!['selectedNon']!;
+  String get returnd => _localizedValues[locale.languageCode]!['returnd']!;
+  String get cancel => _localizedValues[locale.languageCode]!['cancel']!;
+  String get freeCrop => _localizedValues[locale.languageCode]!['freeCrop']!;
+  String get portraitCrop => _localizedValues[locale.languageCode]!['portraitCrop']!;
+  String get rotateCrop => _localizedValues[locale.languageCode]!['rotateCrop']!;
+  String get reset => _localizedValues[locale.languageCode]!['reset']!;
+  String get apply => _localizedValues[locale.languageCode]!['apply']!;
 }
 
 class _AppLocalizationsDelegate

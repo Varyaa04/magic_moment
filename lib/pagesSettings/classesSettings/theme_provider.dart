@@ -27,7 +27,7 @@ class ThemeProvider with ChangeNotifier {
       case 'ThemeMode.light':
         _themeMode = ThemeMode.light;
         break;
-      default:
+      case 'ThemeMode.system':
         _themeMode = ThemeMode.system;
     }
     notifyListeners();
