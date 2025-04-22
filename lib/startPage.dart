@@ -125,7 +125,7 @@ class _StartPageState extends State<StartPage> {
             Expanded(
               child: Image.asset(
                 'lib/assets/icons/photos.png',
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
               ),
             ),
             Expanded(

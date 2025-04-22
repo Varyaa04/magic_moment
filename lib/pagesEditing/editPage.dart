@@ -234,27 +234,27 @@ class _EditPageState extends State<EditPage> {
             ),
           ),
 
-          // Crop panel
-          // if (_showCropPanel)
-          //   Positioned(
-          //     bottom: 0,
-          //     left: 0,
-          //     right: 0,
-          //     child: CropPanel(
-          //       onCancel: _toggleCropPanel,
-          //       onApply: _applyCrop,
-          //       currentPreset: _selectedCropPreset,
-          //       onCropTypeSelected: (preset) {
-          //         if (mounted) {
-          //           setState(() {
-          //             _selectedCropPreset = preset;
-          //           });
-          //         }
-          //       },
-          //     ),
-          //   ),
+          //  панель обрезки
+          if (_showCropPanel)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: CropPanel(
+                onCancel: _toggleCropPanel,
+                onApply: _applyCrop,
+                currentPreset: _selectedCropPreset,
+                onCropTypeSelected: (preset) {
+                  if (mounted) {
+                    setState(() {
+                      _selectedCropPreset = preset;
+                    });
+                  }
+                },
+              ),
+            ),
 
-          // Brightness panel
+          //  панель параметров
           if (_showBrightPanel)
             Positioned(
               bottom: 0,
@@ -313,14 +313,14 @@ class _EditPageState extends State<EditPage> {
     final appLocalizations = AppLocalizations.of(context);
     switch (index) {
       case 0: return appLocalizations?.crop ?? 'Crop';
-      case 1: return appLocalizations?.brightness ?? 'Brightness';
-      case 2: return appLocalizations?.contrast ?? 'Contrast';
-      case 3: return appLocalizations?.adjust ?? 'Adjust';
-      case 4: return appLocalizations?.filters ?? 'Filters';
-      case 5: return appLocalizations?.draw ?? 'Draw';
-      case 6: return appLocalizations?.text ?? 'Text';
-      case 7: return appLocalizations?.effects ?? 'Effects';
-      default: return '';
+      case 1: return appLocalizations?.parametrs ?? 'Parametrs';
+      case 2: return appLocalizations?.adjust ?? 'Adjust';
+      case 3: return appLocalizations?.filters ?? 'Filters';
+      case 4: return appLocalizations?.draw ?? 'Draw';
+      case 5: return appLocalizations?.text ?? 'Text';
+      case 6: return appLocalizations?.effects ?? 'Effects';
+      case 7: return appLocalizations?.noise ?? 'Noise';
+      default: return 'button';
     }
   }
 
@@ -328,12 +328,12 @@ class _EditPageState extends State<EditPage> {
     switch (index) {
       case 0: return FluentIcons.crop_24_filled;
       case 1: return FluentIcons.brightness_high_24_filled;
-      case 2: return Icons.contrast;
-      case 3: return FluentIcons.settings_24_regular;
-      case 4: return Icons.filter_b_and_w;
-      case 5: return FluentIcons.ink_stroke_24_regular;
-      case 6: return FluentIcons.text_field_24_regular;
-      case 7: return FluentIcons.emoji_sparkle_24_regular;
+      case 2: return FluentIcons.settings_24_regular;
+      case 3: return Icons.filter_b_and_w;
+      case 4: return FluentIcons.ink_stroke_24_regular;
+      case 5: return FluentIcons.text_field_24_regular;
+      case 6: return FluentIcons.emoji_sparkle_24_regular;
+      case 7: return Icons.noise_aware;
       default: return Icons.error;
     }
   }

@@ -59,7 +59,10 @@ class AppLocalizations {
       'portraitCrop' : 'Portrait',
       'rotateCrop' : 'Rotate',
       'reset' : 'Reset',
-      'apply' : 'Apply'
+      'apply' : 'Apply',
+      'parametrs' : 'Parametrs',
+      'noise' : 'Noise',
+
     },
     'ru': {
       'app_title': 'язык приложения',
@@ -106,7 +109,9 @@ class AppLocalizations {
       'portraitCrop' : 'Портрет',
       'rotateCrop' : 'Поворот',
       'reset' : 'Сброс',
-      'apply' : 'Применить'
+      'apply' : 'Применить',
+      'parametrs' : 'Параметры',
+      'noise' : 'Шум',
     },
   };
 
@@ -156,6 +161,8 @@ class AppLocalizations {
   String get rotateCrop => _localizedValues[locale.languageCode]!['rotateCrop']!;
   String get reset => _localizedValues[locale.languageCode]!['reset']!;
   String get apply => _localizedValues[locale.languageCode]!['apply']!;
+  String get parametrs => _localizedValues[locale.languageCode]!['parametrs']!;
+  String get noise => _localizedValues[locale.languageCode]!['noise']!;
 }
 
 class _AppLocalizationsDelegate

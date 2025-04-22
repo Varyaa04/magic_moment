@@ -1,0 +1,2 @@
+D:/magic_moment/android/app/.cxx/Debug/22d184z3/x86/CMakeFiles/edit_cache.dir
+D:/magic_moment/android/app/.cxx/Debug/22d184z3/x86/CMakeFiles/rebuild_cache.dir

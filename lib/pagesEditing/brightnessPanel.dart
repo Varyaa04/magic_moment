@@ -25,7 +25,7 @@ class BrightnessPanel extends StatefulWidget {
 
 class _BrightnessPanelState extends State<BrightnessPanel> {
   late img.Image _originalImage;
-  double _brightnessValue = 0.0;
+  double _brightnessValue = 100;
   double _contrastValue = 1.0;
   double _exposureValue = 0.0;
   Timer? _debounceTimer;
@@ -108,7 +108,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
   void _resetAdjustments() {
     _debounceTimer?.cancel();
     setState(() {
-      _brightnessValue = 0.0;
+      _brightnessValue = 100;
       _contrastValue = 1.0;
       _exposureValue = 0.0;
       _isProcessing = false;
@@ -123,7 +123,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
     return Stack(
       children: [
         Container(
-          height: 200,
+          height: 230,
           decoration: BoxDecoration(
             color: Colors.grey[900],
             borderRadius: BorderRadius.circular(10),
@@ -173,7 +173,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
                 },
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               // Кнопки управления
               Row(
@@ -195,7 +195,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
                           style: const TextStyle(color: Colors.white),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 10),
                       TextButton(
                         onPressed: _isProcessing
                             ? null
@@ -206,7 +206,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
                         child: _isProcessing
                             ? const SizedBox(
                           width: 20,
-                          height: 20,
+                          height: 15,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: Colors.white,
@@ -246,10 +246,11 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
     required String label,
     required ValueChanged<double> onChanged,
   }) {
-    return IgnorePointer(
-      ignoring: _isProcessing,
-      child: Opacity(
-        opacity: _isProcessing ? 0.5 : 1.0,
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: _isProcessing ? 0.6 : 1.0,
+      child: IgnorePointer(
+        ignoring: _isProcessing,
         child: Row(
           children: [
             Icon(icon, color: Colors.white, size: 20),
