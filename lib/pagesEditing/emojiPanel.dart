@@ -4,14 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 
 class EmojiPanel extends StatefulWidget {
-  final Uint8List originalImage;
-  final Function(Uint8List) onImageChanged;
+  final Function(String, double, Offset) onEmojiSelected;
   final VoidCallback onCancel;
   final VoidCallback onApply;
 
   const EmojiPanel({
-    required this.originalImage,
-    required this.onImageChanged,
+    required this.onEmojiSelected,
     required this.onCancel,
     required this.onApply,
     Key? key,
@@ -23,52 +21,33 @@ class EmojiPanel extends StatefulWidget {
 
 class _EmojiPanelState extends State<EmojiPanel> {
   double _emojiSize = 48.0;
-  Offset _emojiPosition = Offset(0.5, 0.5);
   String? _selectedEmoji;
-  List<Offset> _emojiPositions = [];
+  Offset _emojiPosition = Offset(0.5, 0.5); // Нормализованные координаты (0-1)
 
   final List<String> _emojis = [
-    '😀',
-    '😂',
-    '😍',
-    '🤔',
-    '😎',
-    '😢',
-    '😡',
-    '👋',
-    '❤️',
-    '👍',
-    '👎',
-    '✨',
-    '🎉',
-    '🔥',
-    '💯',
-    '🌟'
+    '😀', '😂', '😍', '🤔', '😎', '😢', '😡', '👋',
+    '❤️', '👍', '👎', '✨', '🎉', '🔥', '💯', '🌟'
   ];
 
-  Future<void> _applyEmoji() async {
-    if (_selectedEmoji == null) return;
-
-    final ui.Picture picture = _createPictureWithEmoji();
-
-    widget.onApply();
+  void _applyEmoji() {
+    if (_selectedEmoji != null) {
+      widget.onEmojiSelected(_selectedEmoji!, _emojiSize, _emojiPosition);
+      widget.onApply();
+    } else {
+      widget.onCancel();
+    }
   }
 
-  ui.Picture _createPictureWithEmoji() {
-    final ui.PictureRecorder recorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(recorder);
+  void _updateEmojiPosition(DragUpdateDetails details, Size panelSize) {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final localPosition = renderBox.globalToLocal(details.globalPosition);
 
-    // Draw selected emoji
-    final TextPainter textPainter = TextPainter(
-      text: TextSpan(
-          text: _selectedEmoji, style: TextStyle(fontSize: _emojiSize)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final Offset emojiOffset =
-        _emojiPosition - Offset(textPainter.width / 2, textPainter.height / 2);
-    textPainter.paint(canvas, emojiOffset);
-
-    return recorder.endRecording();
+    setState(() {
+      _emojiPosition = Offset(
+        (localPosition.dx / panelSize.width).clamp(0.0, 1.0),
+        (localPosition.dy / panelSize.height).clamp(0.0, 1.0),
+      );
+    });
   }
 
   @override
@@ -84,67 +63,112 @@ class _EmojiPanelState extends State<EmojiPanel> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // ... (other widgets remain the same)
-
-          // Image with selected emoji
-          Expanded(
-            child: GestureDetector(
-              onPanUpdate: (details) {
-                setState(() {
-                  _emojiPosition = Offset(
-                    details.localPosition.dx,
-                    details.localPosition.dy,
-                  );
-                });
-              },
-              child: CustomPaint(
-                painter:
-                    _EmojiPainter(_selectedEmoji, _emojiPosition, _emojiSize),
-                child: Image.memory(
-                  widget.originalImage,
-                  fit: BoxFit.cover,
+          // Emoji size slider
+          Row(
+            children: [
+              Text(appLocalizations?.size ?? 'Size:',
+                  style: TextStyle(color: Colors.white)),
+              Expanded(
+                child: Slider(
+                  value: _emojiSize,
+                  min: 24,
+                  max: 96,
+                  divisions: 6,
+                  label: _emojiSize.round().toString(),
+                  onChanged: (value) => setState(() => _emojiPosition = value as ui.Offset),
                 ),
               ),
+            ],
+          ),
+
+          // Emoji selection grid
+          SizedBox(
+            height: 60,
+            child: GridView.builder(
+              scrollDirection: Axis.horizontal,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 1,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1,
+              ),
+              itemCount: _emojis.length,
+              itemBuilder: (context, index) {
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedEmoji = _emojis[index];
+                    });
+                  },
+                  child: Container(
+                    margin: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: _selectedEmoji == _emojis[index]
+                          ? Colors.blue.withOpacity(0.3)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _emojis[index],
+                        style: TextStyle(fontSize: 30),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
 
-          // ... (other widgets remain the same)
+          // Emoji position indicator
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return GestureDetector(
+                  onPanUpdate: (details) => _updateEmojiPosition(details, constraints.biggest),
+                  onTapDown: (details) => _updateEmojiPosition(
+                      DragUpdateDetails(globalPosition: details.globalPosition),
+                      constraints.biggest
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: _selectedEmoji != null
+                          ? Text(
+                        _selectedEmoji!,
+                        style: TextStyle(fontSize: _emojiSize),
+                      )
+                          : Text(
+                        appLocalizations?.selectEmoji ?? 'Select an emoji',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
 
-          // Save button
-          TextButton(
-            onPressed: widget.onApply,
-            child: Text(appLocalizations?.save ?? 'Save'),
+          // Buttons row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: widget.onCancel,
+                child: Text(appLocalizations?.cancel ?? 'Cancel',
+                    style: TextStyle(color: Colors.white)),
+              ),
+              SizedBox(width: 16),
+              ElevatedButton(
+                onPressed: _selectedEmoji != null ? _applyEmoji : null,
+                child: Text(appLocalizations?.apply ?? 'Apply'),
+              ),
+            ],
           ),
         ],
       ),
     );
-  }
-}
-
-class _EmojiPainter extends CustomPainter {
-  final String? _emoji;
-  final Offset _position;
-  final double _size;
-
-  _EmojiPainter(this._emoji, this._position, this._size);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (_emoji != null) {
-      final TextPainter textPainter = TextPainter(
-        text: TextSpan(text: _emoji, style: TextStyle(fontSize: _size)),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final Offset emojiOffset =
-          _position - Offset(textPainter.width / 2, textPainter.height / 2);
-      textPainter.paint(canvas, emojiOffset);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _EmojiPainter oldDelegate) {
-    return oldDelegate._emoji != _emoji ||
-        oldDelegate._position != _position ||
-        oldDelegate._size != _size;
   }
 }

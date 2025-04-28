@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:MagicMoment/pagesEditing/filtersPanel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -487,8 +488,8 @@ class _EditPageState extends State<EditPage> {
               child: TextEditor(
                 image: _currentImage,
                 onUpdate: (editedImage) {
-                  _updateImage(editedImage);
-                  _saveChanges(); // Сохраняем изменения в историю
+                  // _updateImage(editedImage);
+                  // _saveChanges(); // Сохраняем изменения в историю
                 },
                 onClose: () => setState(() => _showTextPanel = false),
                 theme: Theme.of(context), // Передаем текущую тему
@@ -502,29 +503,36 @@ class _EditPageState extends State<EditPage> {
               left: 0,
               right: 0,
               child: EmojiPanel(
-                originalImage: _currentImage,
-                onImageChanged: _updateImage,
-                onCancel: () => setState(() => _showEmojiPanel = false),
-                onApply: () {
-                  setState(() => _showEmojiPanel = false);
-                  _saveChanges(); // Сохраняем изменения в историю
+                onEmojiSelected: (emoji, size, position) {
+                  _addEmojiToImage(emoji, size, position);
                 },
+                onCancel: () => setState(() => _showEmojiPanel = false),
+                onApply: () => setState(() => _showEmojiPanel = false),
               ),
             ),
 
           // панель для добавления рисунка
           if (_showDrawPanel)
             Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
               child: DrawPanel(
                 currentImage: _currentImage,
                 onImageChanged: (image) {
                   setState(() {
-                    _currentImage = image;
+                    _currentImage = image; // Обновляем текущее изображение
                   });
+                  _saveChanges(); // Сохраняем изменения в историю
                 },
-                onCancel: _toggleDrawingPanel,
-                onApply: _toggleDrawingPanel,
-                isDrawingPanelVisible: _isDrawingPanelVisible,
+                onCancel: () {
+                  setState(() => _showDrawPanel = false); // Закрываем панель рисования
+                },
+                onApply: () {
+                  setState(() => _showDrawPanel = false); // Закрываем панель рисования
+                  _saveChanges(); // Сохраняем изменения в историю
+                },
+                isDrawingPanelVisible: _showDrawPanel,
               ),
             ),
         ],
@@ -666,5 +674,46 @@ class _EditPageState extends State<EditPage> {
 
   Future<void> _applyCrop() async {
     _toggleCropPanel();
+  }
+
+  Future<void> _addEmojiToImage(String emoji, double size, Offset normalizedPosition) async {
+    try {
+      final codec = await ui.instantiateImageCodec(_currentImage);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder,
+          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble())
+      );
+
+      // Draw original image
+      canvas.drawImage(image, Offset.zero, Paint());
+
+      // Draw emoji
+      final textPainter = TextPainter(
+        text: TextSpan(text: emoji, style: TextStyle(fontSize: size)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      // Convert normalized position to image coordinates
+      final imageX = normalizedPosition.dx * image.width;
+      final imageY = normalizedPosition.dy * image.height;
+      final emojiOffset = Offset(imageX, imageY) - Offset(textPainter.width / 2, textPainter.height / 2);
+
+      textPainter.paint(canvas, emojiOffset);
+
+      final picture = recorder.endRecording();
+      final newImage = await picture.toImage(image.width, image.height);
+      final byteData = await newImage.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData!.buffer.asUint8List();
+
+      setState(() {
+        _currentImage = bytes;
+      });
+      _saveChanges();
+    } catch (e) {
+      debugPrint('Error adding emoji: $e');
+    }
   }
 }

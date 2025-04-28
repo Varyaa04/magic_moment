@@ -136,7 +136,7 @@ class _DrawPanelState extends State<DrawPanel> {
     }
 
     return Container(
-      height: 300,
+      height: 200,
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(10),
@@ -204,57 +204,6 @@ class _DrawPanelState extends State<DrawPanel> {
                 ),
               ),
             ],
-          ),
-
-          // Drawing area
-          Expanded(
-            child: GestureDetector(
-              onPanStart: (details) {
-                _updateImagePosition();
-                setState(() {
-                  _points.add(DrawingPoint(
-                    position: details.localPosition,
-                    paint: Paint()
-                      ..color = _isErasing ? Colors.transparent : _drawColor
-                      ..strokeWidth = _strokeWidth
-                      ..strokeCap = StrokeCap.round
-                      ..blendMode = _isErasing ? BlendMode.clear : BlendMode.srcOver,
-                  ));
-                });
-              },
-              onPanUpdate: (details) {
-                setState(() {
-                  _points.add(DrawingPoint(
-                    position: details.localPosition,
-                    paint: Paint()
-                      ..color = _isErasing ? Colors.transparent : _drawColor
-                      ..strokeWidth = _strokeWidth
-                      ..strokeCap = StrokeCap.round
-                      ..blendMode = _isErasing ? BlendMode.clear : BlendMode.srcOver,
-                  ));
-                });
-              },
-              onPanEnd: (details) {
-                setState(() {
-                  _points.add(DrawingPoint(end: true, paint: Paint()));
-                });
-              },
-              child: Stack(
-                children: [
-                  Center(
-                    child: Image.memory(
-                      key: _imageKey,
-                      widget.currentImage,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  CustomPaint(
-                    painter: _DrawingPainter(points: _points),
-                    child: Container(),
-                  ),
-                ],
-              ),
-            ),
           ),
 
           const SizedBox(height: 16),
