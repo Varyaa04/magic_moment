@@ -3,15 +3,16 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'package:flutter/foundation.dart'; // Добавьте этот импорт
+import 'package:flutter/foundation.dart';
+import '../../themeWidjets/sliderAdjusts.dart';
 
-class BrightnessPanel extends StatefulWidget {
+class ExposurePanel extends StatefulWidget {
   final VoidCallback onCancel;
   final VoidCallback onApply;
   final Uint8List originalImage;
   final Function(Uint8List) onImageChanged;
 
-  const BrightnessPanel({
+  const ExposurePanel({
     required this.onCancel,
     required this.onApply,
     required this.originalImage,
@@ -20,13 +21,11 @@ class BrightnessPanel extends StatefulWidget {
   });
 
   @override
-  _BrightnessPanelState createState() => _BrightnessPanelState();
+  _ExposurePanelState createState() => _ExposurePanelState();
 }
 
-class _BrightnessPanelState extends State<BrightnessPanel> {
+class _ExposurePanelState extends State<ExposurePanel> {
   late img.Image _originalImage;
-  double _brightnessValue = 100;
-  double _contrastValue = 1.0;
   double _exposureValue = 0.0;
   Timer? _debounceTimer;
   bool _isProcessing = false;
@@ -58,25 +57,19 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
     _debounceTimer = Timer(const Duration(milliseconds: 200), _applyAdjustments);
   }
 
-  Future<void> _applyAdjustments() async {
+  void _applyAdjustments() async {
     if (_isProcessing) return;
 
     setState(() => _isProcessing = true);
 
     try {
-      // Создаем копию оригинального изображения
-      var adjustedImage = img.Image.from(_originalImage);
-
-      // Применяем корректировки в изолированном контексте
       final result = await compute(_applyAllAdjustments, {
-        'image': adjustedImage,
-        'brightness': _brightnessValue,
-        'contrast': _contrastValue,
+        'image': img.Image.from(_originalImage),
         'exposure': _exposureValue,
       });
 
       final adjustedBytes = img.encodePng(result);
-      widget.onImageChanged(adjustedBytes);
+      widget.onImageChanged(adjustedBytes); // Это вызовет _updateImage в EditPage
     } catch (e) {
       debugPrint('Error applying adjustments: $e');
     } finally {
@@ -88,28 +81,14 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
 
   static img.Image _applyAllAdjustments(Map<String, dynamic> params) {
     img.Image image = params['image'];
-    double brightness = params['brightness'];
-    double contrast = params['contrast'];
     double exposure = params['exposure'];
 
-    if (brightness != 0) {
-      image = img.adjustColor(image, brightness: brightness / 100.0);
-    }
-    if (contrast != 1.0) {
-      image = img.adjustColor(image, contrast: contrast);
-    }
-    if (exposure != 0.0) {
-      image = img.adjustColor(image, exposure: exposure);
-    }
-
-    return image;
+    return img.adjustColor(image, exposure: exposure);
   }
 
   void _resetAdjustments() {
     _debounceTimer?.cancel();
     setState(() {
-      _brightnessValue = 100;
-      _contrastValue = 1.0;
       _exposureValue = 0.0;
       _isProcessing = false;
     });
@@ -123,7 +102,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
     return Stack(
       children: [
         Container(
-          height: 230,
+          height: 140,
           decoration: BoxDecoration(
             color: Colors.grey[900],
             borderRadius: BorderRadius.circular(10),
@@ -131,36 +110,8 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
           padding: const EdgeInsets.all(12),
           child: Column(
             children: <Widget>[
-              // Яркость
-              _buildSliderRow(
-                icon: Icons.brightness_5,
-                value: _brightnessValue,
-                min: -100,
-                max: 100,
-                divisions: 200,
-                label: _brightnessValue.round().toString(),
-                onChanged: (value) {
-                  setState(() => _brightnessValue = value);
-                  _applyAdjustmentsDebounced();
-                },
-              ),
-
-              // Контраст
-              _buildSliderRow(
-                icon: Icons.contrast,
-                value: _contrastValue,
-                min: 0.5,
-                max: 1.5,
-                divisions: 100,
-                label: _contrastValue.toStringAsFixed(1),
-                onChanged: (value) {
-                  setState(() => _contrastValue = value);
-                  _applyAdjustmentsDebounced();
-                },
-              ),
-
               // Экспозиция
-              _buildSliderRow(
+              SliderRow(
                 icon: Icons.exposure,
                 value: _exposureValue,
                 min: -1.0,
@@ -171,8 +122,8 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
                   setState(() => _exposureValue = value);
                   _applyAdjustmentsDebounced();
                 },
+                isProcessing: _isProcessing,
               ),
-
               const SizedBox(height: 10),
 
               // Кнопки управления
@@ -182,7 +133,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
                   TextButton(
                     onPressed: _resetAdjustments,
                     child: Text(
-                      appLocalizations?.cancel ?? 'Сброс',
+                      appLocalizations?.reset ?? 'Сброс',
                       style: const TextStyle(color: Colors.white),
                     ),
                   ),
@@ -215,6 +166,7 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
                             : Text(
                           appLocalizations?.save ?? 'Применить',
                           style: const TextStyle(color: Colors.white),
+                          selectionColor: Colors.grey,
                         ),
                       ),
                     ],
@@ -234,48 +186,6 @@ class _BrightnessPanelState extends State<BrightnessPanel> {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _buildSliderRow({
-    required IconData icon,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String label,
-    required ValueChanged<double> onChanged,
-  }) {
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 200),
-      opacity: _isProcessing ? 0.6 : 1.0,
-      child: IgnorePointer(
-        ignoring: _isProcessing,
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Slider(
-                value: value,
-                min: min,
-                max: max,
-                divisions: divisions,
-                label: label,
-                onChanged: onChanged,
-              ),
-            ),
-            SizedBox(
-              width: 40,
-              child: Text(
-                label,
-                style: const TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

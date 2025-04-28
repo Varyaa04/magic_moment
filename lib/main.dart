@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:image/image.dart';
 import 'package:provider/provider.dart';
 import 'startPage.dart';
-import 'pagesEditing/collagePage.dart';
 import 'pagesSettings/classesSettings/app_localizations.dart';
 import 'pagesSettings/classesSettings/language_provider.dart';
 import 'pagesSettings/classesSettings/theme_provider.dart';
@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           theme: ThemeData(
             colorScheme: ColorScheme.light(
-              primary: Colors.red,
+              primary: Colors.pinkAccent,
               onPrimary: Colors.red[100]!,
               primaryContainer: Colors.deepOrange[100]!,
               secondary: Colors.green,

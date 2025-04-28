@@ -12,7 +12,6 @@ dependencies:
     sdk: flutter
   fluentui_system_icons: ^1.1.273
   cupertino_icons: ^1.0.8
-  image_picker: ^1.1.2
   provider: ^6.1.2
   sqflite: ^2.4.1
   permission_handler: ^11.4.0
@@ -21,10 +20,14 @@ dependencies:
   flutter_staggered_grid_view: ^0.7.0
   flutter_localizations:
     sdk: flutter
-  image_cropper: ^9.1.0
   image: ^4.5.4
   path_provider: ^2.0.11
+  image_picker: ^1.1.2
   universal_html: ^2.2.4
+  image_filter_pro: ^0.1.11
+  image_cropper:  ^9.1.0
+  pro_image_editor: ^6.2.1
+  flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3

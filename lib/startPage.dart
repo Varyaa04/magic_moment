@@ -1,10 +1,10 @@
-import 'package:MagicMoment/pagesEditing/collagePage.dart';
+import 'package:MagicMoment/pagesCollage/collagePage.dart';
 import 'package:MagicMoment/pagesEditing/editPage.dart';
 import 'package:MagicMoment/pagesSettings/settingsPage.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 import 'themeWidjets/buildButtonIcon.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -110,6 +110,7 @@ class _StartPageState extends State<StartPage> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     final appLocalizations = AppLocalizations.of(context)!;
@@ -122,15 +123,17 @@ class _StartPageState extends State<StartPage> {
         color: colorScheme.onInverseSurface,
         child: Row(
           children: [
-            Expanded(
-              child: Image.asset(
-                'lib/assets/icons/photos.png',
-                fit: BoxFit.contain,
-              ),
-            ),
-            Expanded(
-              flex: 1,
-              child: Column(
+          Container(
+          margin: EdgeInsets.zero,
+          padding: EdgeInsets.zero,
+          child: Image.asset(
+            'lib/assets/icons/photos.png',
+            fit: BoxFit.contain,
+          ),
+        ),
+        Expanded(
+          flex: 1,
+          child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
