@@ -25,13 +25,13 @@ class SliderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 100),
       opacity: isProcessing ? 0.6 : 1.0,
       child: IgnorePointer(
         ignoring: isProcessing,
         child: Row(
           children: [
-            Icon(icon, color: Colors.white, size: 20),
+            Icon(icon, color: Colors.black, size: 20),
             const SizedBox(width: 8),
             Expanded(
               child: Slider(

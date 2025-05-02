@@ -77,6 +77,10 @@ class AppLocalizations {
       'exit': 'Exit',
       'areYouSure':
           'Are you sure you want to exit? All unsaved changes will be deleted.',
+      'remove' : 'Remove',
+      'tapToPlaceEmoji' : 'Tap to place emoji',
+      'eraser' : 'Eraser',
+      'brush' : 'Brush',
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -141,6 +145,10 @@ class AppLocalizations {
       'exit': 'Выход',
       'areYouSure':
           'Вы точно хотите выйти? Все несохраненные изменения будут удалены.',
+      'remove' : 'Удалить',
+      'tapToPlaceEmoji' : 'Нажмите, чтобы разместить эмодзи',
+      'eraser' : 'Ластик',
+      'brush' : 'Кисть',
     },
   };
 
@@ -213,6 +221,10 @@ class AppLocalizations {
   String get brushSize => _localizedValues[locale.languageCode]!['brushSize']!;
   String get warning => _localizedValues[locale.languageCode]!['warning']!;
   String get exit => _localizedValues[locale.languageCode]!['exit']!;
+  String get remove => _localizedValues[locale.languageCode]!['remove']!;
+  String get tapToPlaceEmoji => _localizedValues[locale.languageCode]!['tapToPlaceEmoji']!;
+  String get eraser => _localizedValues[locale.languageCode]!['eraser']!;
+  String get brush => _localizedValues[locale.languageCode]!['brush']!;
   String get areYouSure =>
       _localizedValues[locale.languageCode]!['areYouSure']!;
 }

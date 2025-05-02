@@ -1,463 +1,463 @@
-const sepium = [
+const List<double> sepium = [
   1.3, -0.3, 1.1, 0, 0,
   0, 1.3, 0.2, 0, 0,
   0, 0, 0.8, 0.2, 0,
   0, 0 ,0, 1 ,0
 ];
-const purple = [
+const List<double> purple = [
   1, -0.2, 0, 0, 0,
   0, 1, 0, -0.1, 0,
   0, 1.2, 1, 0.1, 0,
   0, 0, 1.7, 1, 0
 ];
-const yellow = [
+const List<double> yellow = [
   1, 0, 0, 0, 0,
   -0.2, 1.0, 0.3, 0.1, 0,
   -0.1, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
-const cyan = [
+const List<double> cyan = [
   1, 0, 0, 1.9, -2.2,
   0, 1, 0, 0.0, 0.3,
   0, 0, 1, 0, 0.5,
   0, 0, 0, 1, 0.2
 ];
-const bw = [
+const List<double> bw = [
   0, 1, 0, 0, 0,
   0, 1, 0, 0, 0,
   0, 1, 0, 0, 0,
   0, 1 ,0, 1 ,0
 ];
-const oldTimes = [
+const List<double> oldTimes = [
   1, 0, 0, 0, 0,
   -0.4, 1.3, -0.4, 0.2, -0.1,
   0, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
-const coldLife = [
+const List<double> coldLife = [
   1, 0, 0, 0, 0,
   0, 1, 0, 0, 0,
   -0.2, 0.2, 0.1, 0.4, 0,
   0, 0, 0, 1, 0
 ];
-const milk = [
+const List<double> milk = [
   0, 1.0, 0, 0, 0,
   0, 1.0, 0, 0, 0,
   0, 0.6, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
-const shining = [
+const List<double> shining = [
   1, 0, 0, 0.5, -0.5,
   0, 1.2, 0.1, 0.3, -0.1,
   0, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
-const warmth = [
+const List<double> warmth = [
   1, 0, 0, 0, 0,
   0.2, 1, 0.1, 0, 0,
   0, 0, 1, 0.2, -0.1,
   0, 0, 0, 1, 0
 ];
-const contrast = [
+const List<double> contrast = [
   1.5, -0.3, -0.2, 0, 0,
   -0.3, 1.5, -0.3, 0, 0,
   -0.2, -0.3, 1.5, 0, 0,
   0, 0, 0, 1, 0
 ];
-const vintage = [
+const List<double> vintage = [
   0.8, 0, 0, 0, 0,
   0, 0.7, 0, 0, 0,
   0, 0, 0.6, 0, 0,
   0, 0, 0, 1, 0
 ];
-const ice = [
+const List<double> ice = [
   1, 0, 0, -0.5, 0.5,
   0, 1, -0.3, 0, 0,
   0, 0, 1.2, 0, 0,
   0, 0, 0, 1, 0
 ];
-const retro = [
+const List<double> retro = [
   0.9, 0, 0, 0, 0,
   0, 0.8, 0, 0.2, -0.1,
   0.1, 0, 0.9, -0.1, 0,
   0, 0, 0, 1, 0
 ];
-const shades = [
+const List<double> shades = [
   1.2, -0.2, -0.2, 0, 0,
   -0.2, 1.2, -0.2, 0, 0,
   -0.2, -0.2, 1.2, 0, 0,
   0, 0, 0, 1, 0
 ];
-const emotions = [
+const List<double> emotions = [
   1, 0, 0, 0, 0,
   0, 0.9, 0, 0.1, 0,
   0, 0, 0.8, 0, 0,
   0, 0, 0, 1, 0
 ];
-const misty = [
+const List<double> misty = [
   0.8, 0, 0, 0, 0,
   0, 0.8, 0, 0, 0,
   0, 0, 0.8, 0, 0,
   0, 0, 0, 0.9, 0
 ];
-const heatwave = [
+const List<double> heatwave = [
   1, 0.1, 0, 0, 0,
   0, 1, 0.1, 0, 0,
   0, 0, 1, 0, 0.1,
   0, 0, 0, 1, 0
 ];
-const sadness = [
+const List<double> sadness = [
   1, 0, 0, -0.3, 0,
   -0.3, 1, 0, 0, 0,
   0, 0, 0.8, 0.4, -0.1,
   0, 0, 0, 1, 0
 ];
-const brightDay = [
+const List<double> brightDay = [
   1.2, 0, 0, 0, 0,
   0, 1.2, 0, 0, 0,
   0, 0, 1.2, 0, 0,
   0, 0, 0, 1, 0
 ];
-const shadow = [
+const List<double> shadow = [
   0.8, 0.2, 0, 0, 0,
   0.2, 0.8, 0.2, 0, 0,
   0, 0.2, 0.8, 0, 0,
   0, 0, 0, 1, 0
 ];
-const mushroom = [
+const List<double> mushroom = [
   0.9, 0, 0, 0, 0,
   0, 0.9, 0.2, 0, 0,
   0, 0.1, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
-const coldLight = [
+const List<double> coldLight = [
   0.9, 0, 0, -0.2, 0.2,
   0, 0.9, 0, 0, 0,
   0, 0, 1, 0, 0.2,
   0, 0, 0, 1, 0
 ];
-const serenity = [
+const List<double> serenity = [
   0.7, 0, 0, 0, 0,
   0, 0.7, 0, 0.2, 0,
   0, 0, 0.7, 0, 0,
   0, 0, 0, 1, 0
 ];
-const fragments = [
+const List<double> fragments = [
   1.2, -0.3, 0, 0, 0,
   -0.3, 1.2, -0.3, 0, 0,
   0, -0.3, 1.2, 0, 0,
   0, 0, 0, 1, 0
 ];
-const winterMorning = [
+const List<double> winterMorning = [
   1, 0, 0, 0.2, -0.2,
   0, 1, 0, 0, 0,
   0, 0, 1, 0, 0.3,
   0, 0, 0, 1, 0
 ];
-const graphite = [
+const List<double> graphite = [
   0.8, 0, 0, 0, 0,
   0, 0.8, 0, 0, 0,
   0, 0, 0.6, 0, 0,
   0, 0, 0, 1, 0
 ];
-const anxiety = [
+const List<double> anxiety = [
   1.3, -0.4, 0, 0, 0,
   -0.3, 1.3, 0.1, 0, 0,
   0, 0, 1, 0.1, 0,
   0, 0, 0, 1, 0
 ];
-const quietNight = [
+const List<double> quietNight = [
   1, 0, 0, 0, 0,
   0, 0.5, 0, 0.5, 0,
   0, 0, 0.5, 0, 0,
   0, 0, 0, 1, 0
 ];
-const bunnies = [
+const List<double> bunnies = [
   1, 0.2, 0, 0, -0.1,
   0, 1, -0.1, 0.3, 0,
   0, 0.1, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
-const summerFreshness = [
+const List<double> summerFreshness = [
   1.1, 0, 0, 0, 0,
   0, 1.1, 0, 0, 0,
   0, 0, 1.1, 0, 0,
   0, 0, 0, 1, 0
 ];
-const calmWaves = [
+const List<double> calmWaves = [
   0.9, 0, 0, 0, 0,
   0, 0.9, 0, 0, 0,
   0, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const vibrantLife = [
+const List<double> vibrantLife = [
   1.2, 0, 0, 0, -0.1,
   0, 1.2, 0, 0, -0.1,
   0, 0, 1.2, 0, -0.1,
   0, 0, 0, 1, 0
 ];
 
-const mistyMorning = [
+const List<double> mistyMorning = [
   0.8, 0, 0, 0, 0,
   0, 0.8, 0, 0, 0,
   0, 0, 0.9, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const sunlitGrove = [
+const List<double> sunlitGrove = [
   1.1, 0, 0, 0, 0,
   0, 1.1, 0, 0, 0,
   0, 0, 1.1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const twilightShadows = [
+const List<double> twilightShadows = [
   0.7, 0, 0, 0, 0,
   0, 0.7, 0, 0, 0,
   0, 0, 0.75, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const crystalClear = [
+const List<double> crystalClear = [
   1.1, 0, 0, 0, -0.1,
   0, 1.1, 0, 0, -0.1,
   0, 0, 1.1, 0, -0.1,
   0, 0, 0, 1, 0
 ];
 
-const dreamySoftness = [
+const List<double> dreamySoftness = [
   1, 0, 0, 0, 0,
   0, 0.9, 0, 0, 0,
   0, 0, 0.9, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const warmVintage = [
+const List<double> warmVintage = [
   0.9, 0, 0, 0, 0,
   0, 0.9, 0, 0, 0,
   0, 0, 0.6, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const coldWinter = [
+const List<double> coldWinter = [
   0.8, 0, 0, 0, 0,
   0, 0.8, 0, 0, 0,
   0, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const playfulColors = [
+const List<double> playfulColors = [
   1.2, 0.1, 0, 0, -0.1,
   0, 1.2, 0.1, 0, -0.1,
   0, 0, 1.2, 0.1, -0.1,
   0, 0, 0, 1, 0
 ];
 
-const monochromeElegance = [
+const List<double> monochromeElegance = [
   0.5, 0.5, 0.5, 0, 0,
   0.5, 0.5, 0.5, 0, 0,
   0.5, 0.5, 0.5, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const etherealGlow = [
+const List<double> etherealGlow = [
   1.1, 0.1, 0.1, 0, 0,
   0.1, 1.1, 0.1, 0, 0,
   0.1, 0.1, 1.1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const polarizedEffect = [
+const List<double> polarizedEffect = [
   1.2, 0, 0, 0, -0.2,
   0, 1.2, 0, 0, -0.2,
   0, 0, 1.2, 0, -0.2,
   0, 0, 0, 1, 0
 ];
 
-const boldContrast = [
+const List<double> boldContrast = [
   1.5, 0, 0, 0, -0.5,
   0, 1.5, 0, 0, -0.5,
   0, 0, 1.5, 0, -0.5,
   0, 0, 0, 1, 0
 ];
 
-const nostalgicFade = [
+const List<double> nostalgicFade = [
   0.8, 0, 0, 0, 0,
   0, 0.8, 0, 0, 0,
   0, 0, 0.7, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const vibrantMood = [
+const List<double> vibrantMood = [
   1.3, 0, 0, 0, -0.2,
   0, 1.3, 0, 0, -0.2,
   0, 0, 1.3, 0, -0.2,
   0, 0, 0, 1, 0
 ];
 
-const serenePastels = [
+const List<double> serenePastels = [
   0.9, 0.1, 0.1, 0, 0,
   0.1, 0.9, 0.1, 0, 0,
   0.1, 0.1, 0.9, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const cyberStyle = [
+const List<double> cyberStyle = [
   1, 0, 0, 0, 0,
   0, 1, 0, 0, 0,
   0, 0, 1, 0, -0.1,
   0, 0, 0, 1, 0
 ];
 
-const retroLook = [
+const List<double> retroLook = [
   0.8, 0.2, 0, 0, 0,
   0.2, 0.8, 0, 0, 0,
   0, 0, 0.7, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const feelGood = [
+const List<double> feelGood = [
   1.2, 0, 0, 0, 0,
   0, 1.2, 0, 0, 0,
   0, 0, 0.9, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const fadedDream = [
+const List<double> fadedDream = [
   0.7, 0, 0, 0, 0,
   0, 0.7, 0, 0, 0,
   0, 0, 0.7, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const highKey = [
+const List<double> highKey = [
   1, 0, 0, 0, 0,
   0, 1, 0, 0, 0,
   0, 0, 1, 0, 0,
   0, 0, 0, 0.8, 0
 ];
 
-const lowKey = [
+const List<double> lowKey = [
   0.5, 0, 0, 0, 0,
   0, 0.5, 0, 0, 0,
   0, 0, 0.5, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const elegantDark = [
+const List<double> elegantDark = [
   0.4, 0, 0, 0, 0,
   0, 0.4, 0, 0, 0,
   0, 0, 0.4, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const lightAndShadow = [
+const List<double> lightAndShadow = [
   1.2, -0.1, -0.1, 0, 0,
   -0.1, 1.2, -0.1, 0, 0,
   -0.1, -0.1, 1.2, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const classicStyle = [
+const List<double> classicStyle = [
   0.8, 0.2, 0, 0, 0,
   0.2, 0.8, 0, 0, 0,
   0, 0, 0.8, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const glowingEdges = [
+const List<double> glowingEdges = [
   1, 0, 0, 0.1, 0,
   0, 1, 0, 0.1, 0,
   0, 0, 1, 0.1, 0,
   0, 0, 0, 1, 0
 ];
 
-const softGlow = [
+const List<double> softGlow = [
   1, 0, 0, 0, 0,
   0, 0.9, 0, 0, 0,
   0, 0, 0.9, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const sepiaTone = [
+const List<double> sepiaTone = [
   0.393, 0.769, 0.189, 0, 0,
   0.349, 0.686, 0.168, 0, 0,
   0.272, 0.534, 0.131, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const nightVision = [
+const List<double> nightVision = [
   0.5, 0, 0, 0, 0,
   0, 1, 0, 0, 0,
   0, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const mutedHarmony = [
+const List<double> mutedHarmony = [
   0.8, 0.1, 0.1, 0, 0,
   0.1, 0.8, 0.1, 0, 0,
   0.1, 0.1, 0.8, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const silveryMoonlight = [
+const List<double> silveryMoonlight = [
   0.9, 0.9, 1, 0, 0,
   0.9, 0.9, 1, 0, 0,
   0.9, 0.9, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const brilliantHighlight = [
+const List<double> brilliantHighlight = [
   1, 0.2, 0.2, 0, 0,
   0.2, 1, 0.2, 0, 0,
   0.2, 0.2, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const coolBlue = [
+const List<double> coolBlue = [
   0.8, 0, 0, 0, 0,
   0, 0.8, 0, 0, 0,
   0, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const warmSunset = [
+const List<double> warmSunset = [
   1.1, 0.1, 0, 0, -0.1,
   0.1, 1.1, 0, 0, -0.1,
   0, 0, 0.9, 0, -0.1,
   0, 0, 0, 1, 0
 ];
 
-const foggyVision = [
+const List<double> foggyVision = [
   0.9, 0, 0, 0, 0,
   0, 0.9, 0, 0, 0,
   0, 0, 0.9, 0, 0,
   0.1, 0.1, 0.1, 1, 0
 ];
 
-const freshMint = [
+const List<double> freshMint = [
   1.2, 0.1, 0.1, 0, 0,
   0.1, 1.2, 0.1, 0, 0,
   0.1, 0.1, 1.2, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const artisticBlend = [
+const List<double> artisticBlend = [
   0.7, 0.2, 0.1, 0, 0,
   0.1, 0.7, 0.2, 0, 0,
   0.1, 0.2, 0.7, 0, 0,
   0, 0, 0, 1, 0
 ];
 
-const fadedLight = [
+const List<double> fadedLight = [
   0.9, 0, 0, 0, 0,
   0, 0.9, 0, 0, 0,
   0, 0, 0.9, 0, 0,
   0, 0, 0, 0.9, 0
 ];
 
-const clearNight = [
+const List<double> clearNight = [
   1, 0, 0, 0, 0,
   0, 1, 0, 0, 0,
   0, 0, 1, 0, 0,

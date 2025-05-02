@@ -1,174 +1,313 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart';
+import '../../themeWidjets/sliderAdjusts.dart';
 
+class AdjustPanel extends StatefulWidget {
+  final Uint8List originalImage;
+  final Function(Uint8List) onImageChanged;
+  final VoidCallback onClose;
 
-class AdjustButtonsPanel extends StatelessWidget {
-  final VoidCallback onBack;
-  final ValueChanged<int> onToolSelected;
-  final VoidCallback onUndo;
-  final VoidCallback onRedo;
-  final bool isUndoAvailable;
-  final bool isRedoAvailable;
+  const AdjustPanel({
+    required this.originalImage,
+    required this.onImageChanged,
+    required this.onClose,
+    super.key,
+  });
 
-  const AdjustButtonsPanel({
-    required this.onBack,
-    required this.onToolSelected,
-    required this.onUndo,
-    required this.onRedo,
-    required this.isUndoAvailable,
-    required this.isRedoAvailable,
-    Key? key,
-  }) : super(key: key);
+  @override
+  _AdjustPanelState createState() => _AdjustPanelState();
+}
+
+class _AdjustPanelState extends State<AdjustPanel> {
+  late img.Image _originalImage;
+  double _brightnessValue = 0.0;
+  double _contrastValue = 0.0;
+  double _exposureValue = 0.0;
+  double _saturationValue = 0.0;
+  double _warmthValue = 0.0;
+  double _noiseValue = 0.0;
+  double _smoothValue = 0.0;
+
+  Timer? _debounceTimer;
+  bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeImage();
+  }
+
+  Future<void> _initializeImage() async {
+    try {
+      final image = img.decodeImage(widget.originalImage);
+      if (image == null) throw Exception('Failed to decode image');
+      _originalImage = img.copyResize(image, width: image.width);
+    } catch (e) {
+      debugPrint('Error initializing image: $e');
+    }
+  }
+
+  static img.Image _applyAllAdjustments(Map<String, dynamic> params) {
+    img.Image image = params['image'];
+    double brightness = params['brightness'] / 100.0;
+    double contrast = params['contrast'] / 100.0;
+    double exposure = params['exposure'] / 100.0;
+    double saturation = params['saturation'] / 100.0;
+    double noise = params['noise'] / 100.0;
+    double smooth = params['smooth'] / 100.0;
+    double warmth = params['warmth'] / 100.0;
+
+    // Применяем все корректировки
+    image = img.adjustColor(image,
+      brightness: brightness,
+      contrast: contrast,
+      exposure: exposure,
+      saturation: saturation,
+    );
+
+    // Применяем теплоту (имитация изменения температуры)
+    if (warmth > 0) {
+      image = img.colorOffset(image, red: 1.0 + warmth*0.5, blue: 1.0 - warmth*0.3);
+    } else if (warmth < 0) {
+      image = img.colorOffset(image, red: 1.0 + warmth*0.3, blue: 1.0 - warmth*0.5);
+    }
+
+    // Применяем шум
+    if (noise > 0) {
+      img.noise(image, noise * 100, type: img.NoiseType.gaussian);
+    }
+
+    // Применяем сглаживание (упрощенная реализация)
+    if (smooth > 0) {
+      image = img.smooth(image, weight: smooth);
+    }
+
+    return image;
+  }
+
+  void _applyAdjustmentsDebounced() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 100), _applyAdjustments);
+  }
+
+  void _applyAdjustments() async {
+    if (_isProcessing) return;
+
+    setState(() => _isProcessing = true);
+
+    try {
+      final result = await compute(_applyAllAdjustments, {
+        'image': img.Image.from(_originalImage),
+        'brightness': _brightnessValue,
+        'contrast': _contrastValue,
+        'exposure': _exposureValue,
+        'saturation': _saturationValue,
+        'warmth': _warmthValue,
+        'noise': _noiseValue,
+        'smooth': _smoothValue,
+      });
+
+      final adjustedBytes = img.encodePng(result);
+      widget.onImageChanged(adjustedBytes);
+    } catch (e) {
+      debugPrint('Error applying adjustments: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  void _resetAllAdjustments() {
+    _debounceTimer?.cancel();
+    setState(() {
+      _brightnessValue = 0.0;
+      _contrastValue = 0.0;
+      _exposureValue = 0.0;
+      _saturationValue = 0.0;
+      _warmthValue = 0.0;
+      _noiseValue = 0.0;
+      _smoothValue = 0.0;
+      _isProcessing = false;
+    });
+    widget.onImageChanged(widget.originalImage);
+  }
 
   @override
   Widget build(BuildContext context) {
     final appLocalizations = AppLocalizations.of(context);
+    final theme = Theme.of(context);
 
-    return Container(
-      height: 180,
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(10),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          // Заголовок с кнопкой назад и undo/redo
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  color: Colors.white,
-                  onPressed: onBack,
-                ),
-                Text(
-                  appLocalizations?.adjust ?? 'Регулировки',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+    return Positioned(
+        bottom: -30,
+        left: 0,
+        right: 0,
+        child: Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(139, 0, 0, 0),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 10,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                // Заголовок и кнопки управления
+                Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    appLocalizations?.adjust ?? 'Регулировки',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: _resetAllAdjustments,
+                        tooltip: appLocalizations?.reset ?? 'Сброс',
+                        color: Colors.white,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: widget.onClose,
+                        color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // Слайдеры регулировок
+              Container(
+                height: 100,
+                child: PageView(
+                  children: [
+                    // Яркость
+                    SliderRow(
+                      icon: Icons.brightness_4,
+                      value: _brightnessValue,
+                      min: -100,
+                      max: 100,
+                      label: '${_brightnessValue.round()}',
+                      onChanged: (value) {
+                        setState(() => _brightnessValue = value);
+                        _applyAdjustmentsDebounced();
+                      },
+                      divisions: 1,
+                      isProcessing: true,
+                    ),
+
+                    // Контраст
+                    SliderRow(
+                      icon: Icons.contrast,
+                      value: _contrastValue,
+                      min: -100,
+                      max: 100,
+                      label: '${_contrastValue.round()}',
+                      onChanged: (value) {
+                        setState(() => _contrastValue = value);
+                        _applyAdjustmentsDebounced();
+                      },
+                      divisions: 1,
+                      isProcessing: true,
+                    ),
+
+                    // Экспозиция
+                    SliderRow(
+                      icon: Icons.exposure,
+                      value: _exposureValue,
+                      min: -100,
+                      max: 100,
+                      label: '${_exposureValue.round()}',
+                      onChanged: (value) {
+                        setState(() => _exposureValue = value);
+                        _applyAdjustmentsDebounced();
+                      },
+                      divisions: 1,
+                      isProcessing: true,
+                    ),
+
+                    // Насыщенность
+                    SliderRow(
+                      icon: Icons.gradient,
+                      value: _saturationValue,
+                      min: -100,
+                      max: 100,
+                      label: '${_saturationValue.round()}',
+                      onChanged: (value) {
+                        setState(() => _saturationValue = value);
+                        _applyAdjustmentsDebounced();
+                      },
+                      divisions: 1,
+                      isProcessing: true,
+                    ),
+
+                    // Теплота
+                    SliderRow(
+                      icon: Icons.thermostat,
+                      value: _warmthValue,
+                      min: -100,
+                      max: 100,
+                      label: '${_warmthValue.round()}',
+                      onChanged: (value) {
+                        setState(() => _warmthValue = value);
+                        _applyAdjustmentsDebounced();
+                      },
+                      divisions: 1,
+                      isProcessing: true,
+                    ),
+
+                      // Зернистость
+                      SliderRow(
+                        icon: Icons.grain,
+                        value: _noiseValue,
+                        min: 0,
+                        max: 100,
+                        label: '${_noiseValue.round()}',
+                        onChanged: (value) {
+                          setState(() => _noiseValue = value);
+                          _applyAdjustmentsDebounced();
+                        },divisions: 1, isProcessing: true,
+                      ),
+
+                      // Сглаживание
+                      SliderRow(
+                        icon: Icons.blur_on,
+                        value: _smoothValue,
+                        min: 0,
+                        max: 100,
+                        label: '${_smoothValue.round()}',
+                        onChanged: (value) {
+                          setState(() => _smoothValue = value);
+                          _applyAdjustmentsDebounced();
+                        },divisions: 1, isProcessing: true,
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.undo),
-                  color: isUndoAvailable ? Colors.white : Colors.grey,
-                  onPressed: isUndoAvailable ? onUndo : null,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.redo),
-                  color: isRedoAvailable ? Colors.white : Colors.grey,
-                  onPressed: isRedoAvailable ? onRedo : null,
-                ),
-              ],
-            ),
-          ),
-
-          // Инструменты регулировки
-          Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              children: [
-                _buildToolButton(
-                  icon: FluentIcons.brightness_high_24_filled,
-                  label: appLocalizations?.brightness ?? 'Яркость',
-                  index: 0,
-                ),
-                const SizedBox(width: 15,),
-                _buildToolButton(
-                  icon: Icons.contrast,
-                  label: appLocalizations?.contrast ?? 'Контраст',
-                  index: 1,
-                ),
-                const SizedBox(width: 15,),
-                _buildToolButton(
-                  icon: Icons.exposure,
-                  label: appLocalizations?.exposure ?? 'Экспозиция',
-                  index: 2,
-                ),
-                const SizedBox(width: 15,),
-                _buildToolButton(
-                  icon: Icons.gradient,
-                  label: appLocalizations?.saturation ?? 'Насыщенность',
-                  index: 3,
-                ),
-                const SizedBox(width: 15,),
-                _buildToolButton(
-                  icon: Icons.grain,
-                  label: appLocalizations?.noise ?? 'Зернистость',
-                  index: 4,
-                ),
-                const SizedBox(width: 15,),
-                _buildToolButton(
-                  icon: Icons.waves,
-                  label: appLocalizations?.smooth ?? 'Гладкость',
-                  index: 5,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToolButton({
-    required IconData icon,
-    required String label,
-    required int index,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => onToolSelected(index),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-          Container(
-          width: 50, // Further decreased width
-          height: 40, // Further decreased height
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-              child: _buildIcon(icon),
-                ),
-              ),
-              const SizedBox(height: 15,width: 10,),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                ),
-                textAlign: TextAlign.center,
-              ),
+              if (_isProcessing)
+                const LinearProgressIndicator(),
             ],
           ),
-        )
+        ),
+      ),
     );
-  }
-
-  Widget _buildIcon(IconData icon) {
-    try {
-      return Icon(
-        icon,
-        color: Colors.white,
-        size: 24,
-      );
-    } catch (e) {
-      debugPrint('Error loading icon: $e');
-      return const Icon(
-        Icons.error_outline,
-        color: Colors.red,
-        size: 24,
-      );
-    }
   }
 }
