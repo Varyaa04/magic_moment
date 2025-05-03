@@ -31,7 +31,6 @@ class magicMomentDatabase {
   Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     try {
       final db = await database;
-      if (db == null) throw Exception('Database is not initialized');
 
       final maps = await db.query(
         'edit_history',
@@ -49,7 +48,6 @@ class magicMomentDatabase {
   Future<int> insertHistory(EditHistory history) async {
     try {
       final db = await database;
-      if (db == null) throw Exception('Database is not initialized');
 
       return await db.insert('edit_history', history.toMap());
     } catch (e) {
@@ -61,7 +59,6 @@ class magicMomentDatabase {
   Future<int> updateCurrentState(int imageId, int lastHistoryId, String? snapshotPath) async {
     try {
       final db = await database;
-      if (db == null) throw Exception('Database is not initialized');
 
       return await db.insert(
         'current_state',
@@ -81,7 +78,6 @@ class magicMomentDatabase {
   Future<Map<String, dynamic>?> getCurrentState(int imageId) async {
     try {
       final db = await database;
-      if (db == null) throw Exception('Database is not initialized');
 
       final maps = await db.query(
         'current_state',

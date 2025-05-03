@@ -227,19 +227,7 @@ class _FiltersPanelState extends State<FiltersPanel> {
     );
   }
 
-  void _checkAndLoadImage(Uint8List bytes) {
-    if (bytes.isEmpty) {
-      debugPrint('Image bytes are empty');
-      return;
-    }
 
-    // Попробуйте загрузить изображение
-    _loadImage(bytes).then((image) {
-      debugPrint('Image loaded successfully');
-    }).catchError((e) {
-      debugPrint('Failed to load image: $e');
-    });
-  }
 
   Widget _buildScaleControlPanel() {
     return Container(
