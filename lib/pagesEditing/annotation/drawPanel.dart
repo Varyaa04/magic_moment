@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/rendering.dart';
 
 class DrawPanel extends StatefulWidget {
   final Uint8List image;
@@ -14,8 +14,8 @@ class DrawPanel extends StatefulWidget {
     required this.image,
     required this.onCancel,
     required this.onApply,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   _DrawPanelState createState() => _DrawPanelState();
@@ -30,6 +30,7 @@ class _DrawPanelState extends State<DrawPanel> {
   double _currentStrokeWidth = 5.0;
   bool _isErasing = false;
   final GlobalKey _paintingKey = GlobalKey();
+  Offset? _lastPosition;
 
   @override
   void initState() {
@@ -46,7 +47,6 @@ class _DrawPanelState extends State<DrawPanel> {
     setState(() => _isInitialized = true);
   }
 
-
   Future<void> _saveDrawing() async {
     try {
       final RenderRepaintBoundary boundary =
@@ -55,10 +55,12 @@ class _DrawPanelState extends State<DrawPanel> {
       final ByteData? byteData =
       await image.toByteData(format: ui.ImageByteFormat.png);
       final Uint8List pngBytes = byteData!.buffer.asUint8List();
-
       widget.onApply(pngBytes);
     } catch (e) {
       debugPrint('Error saving image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to save drawing')),
+      );
     }
   }
 
@@ -94,151 +96,164 @@ class _DrawPanelState extends State<DrawPanel> {
   void _toggleEraser() {
     setState(() {
       _isErasing = !_isErasing;
-      if (_isErasing) {
-        _currentColor = Colors.transparent;
-      }
     });
   }
 
   void _handlePanStart(DragStartDetails details) {
     final RenderBox renderBox = _paintingKey.currentContext!.findRenderObject() as RenderBox;
     final Offset localPosition = renderBox.globalToLocal(details.globalPosition);
+    _lastPosition = localPosition;
 
-    if (!_isErasing) {
-      setState(() {
-        _drawingActions.add(DrawingAction(
-          points: [localPosition],
-          color: _currentColor,
-          strokeWidth: _currentStrokeWidth,
-          isErasing: false,
-        ));
-      });
-    }
+    setState(() {
+      _drawingActions.add(DrawingAction(
+        points: [localPosition],
+        color: _isErasing ? Colors.transparent : _currentColor,
+        strokeWidth: _currentStrokeWidth,
+        isErasing: _isErasing,
+      ));
+    });
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
     final RenderBox renderBox = _paintingKey.currentContext!.findRenderObject() as RenderBox;
     final Offset localPosition = renderBox.globalToLocal(details.globalPosition);
 
-    if (!_isErasing) {
-      setState(() {
-        _drawingActions.last.points.add(localPosition);
-      });
-    }
+    setState(() {
+      _drawingActions.last.points.add(localPosition);
+      _lastPosition = localPosition;
+    });
+  }
+
+  void _handlePanEnd(DragEndDetails details) {
+    _lastPosition = null;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-        child: Container(
-          color: Colors.black.withOpacity(0.8),
-          child: Column(
-            children: [
-              AppBar(
-                backgroundColor: Colors.transparent,
-                leading: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: widget.onCancel,
-                ),
-                title: const Text('Draw', style: TextStyle(color: Colors.white)),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.undo, color: Colors.white),
-                    onPressed: _undoLastAction,
-                    color: _drawingActions.isEmpty ? Colors.grey : Colors.white,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.redo, color: Colors.white),
-                    onPressed: _redoLastAction,
-                    color: _undoStack.isEmpty ? Colors.grey : Colors.white,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.white),
-                    onPressed: _saveDrawing,
-                  ),
-                ],
-              ),
-              Expanded(
-                child: _isInitialized
-                    ? GestureDetector(
-                  onPanStart: _handlePanStart,
-                  onPanUpdate: _handlePanUpdate,
+    return Scaffold(
+      backgroundColor: Colors.black.withOpacity(0.8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(),
+            Expanded(
+              child: _isInitialized
+                  ? GestureDetector(
+                onPanStart: _handlePanStart,
+                onPanUpdate: _handlePanUpdate,
+                onPanEnd: _handlePanEnd,
+                child: RepaintBoundary(
+                  key: _paintingKey,
                   child: CustomPaint(
-                    key: _paintingKey,
                     size: Size.infinite,
                     painter: DrawingPainter(
                       backgroundImage: _backgroundImage,
                       drawingActions: _drawingActions,
                     ),
                   ),
-                )
-                    : const Center(child: CircularProgressIndicator()),
-              ),
-              // Панель инструментов для рисования
-              Container(
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 10,
-                      spreadRadius: 5,
-                    )
-                  ],
                 ),
-                child: Column(
-                  children: [
-                    // Выбор цвета и размера кисти
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildColorButton(Colors.red),
-                        _buildColorButton(Colors.blue),
-                        _buildColorButton(Colors.green),
-                        _buildColorButton(Colors.yellow),
-                        _buildColorButton(Colors.white),
-                        _buildColorButton(Colors.black),
-                        _buildColorButton(Colors.grey),
-                        _buildColorButton(Colors.purple),
-                        _buildColorButton(Colors.pinkAccent),
-                        _buildColorButton(Colors.lightBlueAccent),
-                        _buildColorButton(Colors.lightGreenAccent),
-                        IconButton(
-                          icon: Icon(
-                            FluentIcons.eraser_20_filled,
-                            color: _isErasing ? Colors.blue : Colors.white,
-                          ),
-                          onPressed: _toggleEraser,
-                        ),
-                      ],
-                    ),
-                    // Слайдер для размера кисти
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          const Text('Size:', style: TextStyle(color: Colors.white)),
-                          Expanded(
-                            child: Slider(
-                              value: _currentStrokeWidth,
-                              min: 1,
-                              max: 30,
-                              activeColor: Colors.blue,
-                              inactiveColor: Colors.grey,
-                              onChanged: _changeStrokeWidth,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+              )
+                  : const Center(child: CircularProgressIndicator(color: Colors.white)),
+            ),
+            _buildToolbar(),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.black.withOpacity(0.7),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: widget.onCancel,
+      ),
+      title: const Text('Draw', style: TextStyle(color: Colors.white)),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.undo, color: _drawingActions.isEmpty ? Colors.grey : Colors.white),
+          onPressed: _drawingActions.isEmpty ? null : _undoLastAction,
+        ),
+        IconButton(
+          icon: Icon(Icons.redo, color: _undoStack.isEmpty ? Colors.grey : Colors.white),
+          onPressed: _undoStack.isEmpty ? null : _redoLastAction,
+        ),
+        IconButton(
+          icon: const Icon(Icons.check, color: Colors.white),
+          onPressed: _saveDrawing,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToolbar() {
+    return Container(
+      height: 100,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                ...[
+                  Colors.red,
+                  Colors.blue,
+                  Colors.green,
+                  Colors.yellow,
+                  Colors.white,
+                  Colors.black,
+                  Colors.grey,
+                  Colors.purple,
+                  Colors.pinkAccent,
+                  Colors.lightBlueAccent,
+                  Colors.lightGreenAccent,
+                ].map((color) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _buildColorButton(color),
+                )),
+                const SizedBox(width: 8),
+                _buildEraserButton(),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Text('Size:', style: TextStyle(color: Colors.white)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Slider(
+                    value: _currentStrokeWidth,
+                    min: 1,
+                    max: 30,
+                    divisions: 29,
+                    activeColor: Colors.blue,
+                    inactiveColor: Colors.grey.withOpacity(0.5),
+                    onChanged: _changeStrokeWidth,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -246,15 +261,35 @@ class _DrawPanelState extends State<DrawPanel> {
     return GestureDetector(
       onTap: () => _changeColor(color),
       child: Container(
-        width: 26,
-        height: 26,
+        width: 28,
+        height: 28,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
           border: Border.all(
-            color: _currentColor == color && !_isErasing ? Colors.blue : Colors.transparent,
+            color: _currentColor == color && !_isErasing ? Colors.blue : Colors.white,
             width: 2,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEraserButton() {
+    return GestureDetector(
+      onTap: _toggleEraser,
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: _isErasing ? Colors.blue : Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+        ),
+        child: Icon(
+          FluentIcons.eraser_20_filled,
+          size: 16,
+          color: _isErasing ? Colors.white : Colors.black,
         ),
       ),
     );
@@ -272,20 +307,29 @@ class DrawingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Рисуем фоновое изображение
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final imageSize = Size(
+      backgroundImage.width.toDouble(),
+      backgroundImage.height.toDouble(),
+    );
+    final FittedSizes fittedSizes = applyBoxFit(BoxFit.contain, imageSize, size);
+    final Rect dstRect = Alignment.center.inscribe(fittedSizes.destination, rect);
+
     paintImage(
       canvas: canvas,
-      rect: Rect.fromLTWH(0, 0, size.width, size.height),
+      rect: dstRect,
       image: backgroundImage,
       fit: BoxFit.contain,
     );
 
-    // Рисуем все действия пользователя
+    canvas.clipRect(rect);
+
     for (final action in drawingActions) {
       final paint = Paint()
         ..color = action.color
         ..strokeWidth = action.strokeWidth
         ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
         ..blendMode = action.isErasing ? BlendMode.clear : BlendMode.srcOver;
 
       for (int i = 0; i < action.points.length - 1; i++) {
@@ -295,9 +339,7 @@ class DrawingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 class DrawingAction {

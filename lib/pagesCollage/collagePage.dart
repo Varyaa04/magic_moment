@@ -1,14 +1,10 @@
 import 'dart:io';
-import 'dart:nativewrappers/_internal/vm/lib/typed_data_patch.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
-
-// Импортируем файлы с шаблонами
 import '2photos_collage.dart';
 import '3photos_collage.dart';
 import '4photos_collage.dart';
@@ -33,11 +29,20 @@ class _CollagePageState extends State<CollagePage> {
   @override
   void initState() {
     super.initState();
-    _imageProviders = widget.images.map((file) => FileImage(file)).toList();
+    _imageProviders = widget.images
+        .where((file) => file.existsSync())
+        .map((file) => FileImage(file))
+        .toList();
+
     _loadCollageTemplates();
+
+    debugPrint('Loaded ${_imageProviders.length} images');
+    debugPrint('Available templates: ${_collageTemplates.length}');
   }
 
   void _loadCollageTemplates() {
+    debugPrint('Loading templates for ${widget.images.length} images');
+
     switch (widget.images.length) {
       case 2:
         _collageTemplates = getTwoPhotosCollages(_imageProviders);
@@ -57,13 +62,18 @@ class _CollagePageState extends State<CollagePage> {
       default:
         _collageTemplates = [];
     }
+
+    debugPrint('Loaded ${_collageTemplates.length} templates');
   }
 
   void _changeTemplate(int index) {
-    setState(() {
-      _currentTemplateIndex = index;
-    });
+    if (index >= 0 && index < _collageTemplates.length) {
+      setState(() {
+        _currentTemplateIndex = index;
+      });
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -75,24 +85,27 @@ class _CollagePageState extends State<CollagePage> {
         child: Column(
           children: [
             // Верхняя панель с кнопками
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(FluentIcons.arrow_left_16_filled),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.back,
-                ),
-                IconButton(
-                  onPressed:(){}, //_saveCollage,
-                  icon: const Icon(FluentIcons.arrow_right_16_filled),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.save,
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(FluentIcons.arrow_left_16_filled),
+                    color: Colors.white,
+                    iconSize: 30,
+                    tooltip: appLocalizations.back,
+                  ),
+                  IconButton(
+                    onPressed: _saveCollage,
+                    icon: const Icon(FluentIcons.arrow_right_16_filled),
+                    color: Colors.white,
+                    iconSize: 30,
+                    tooltip: appLocalizations.save,
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 10),
@@ -111,9 +124,15 @@ class _CollagePageState extends State<CollagePage> {
                   child: _collageTemplates[_currentTemplateIndex],
                 )
                     : Center(
-                  child: Text(
-                    'No templates available',
-                    style: TextStyle(color: Colors.white),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 50, color: Colors.white),
+                      Text(
+                        'No templates available for ${widget.images.length} images',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -134,24 +153,27 @@ class _CollagePageState extends State<CollagePage> {
             const SizedBox(height: 10),
 
             // Нижняя панель
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                IconButton(
-                  onPressed: _previousTemplate,
-                  icon: const Icon(FluentIcons.arrow_hook_up_left_16_regular),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.cancel,
-                ),
-                IconButton(
-                  onPressed: _nextTemplate,
-                  icon: const Icon(FluentIcons.arrow_hook_up_right_16_filled),
-                  color: Colors.white,
-                  iconSize: 30,
-                  tooltip: appLocalizations.returnd,
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  IconButton(
+                    onPressed: _previousTemplate,
+                    icon: const Icon(FluentIcons.arrow_hook_up_left_16_regular),
+                    color: Colors.white,
+                    iconSize: 30,
+                    tooltip: appLocalizations.cancel,
+                  ),
+                  IconButton(
+                    onPressed: _nextTemplate,
+                    icon: const Icon(FluentIcons.arrow_hook_up_right_16_filled),
+                    color: Colors.white,
+                    iconSize: 30,
+                    tooltip: appLocalizations.returnd,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -173,7 +195,7 @@ class _CollagePageState extends State<CollagePage> {
               decoration: BoxDecoration(
                 color: _currentTemplateIndex == index
                     ? Colors.blue
-                    : Colors.grey[800],
+                    : Colors.grey[800]!,
                 borderRadius: BorderRadius.circular(8),
                 border: _currentTemplateIndex == index
                     ? Border.all(color: Colors.white, width: 2)
@@ -214,22 +236,42 @@ class _CollagePageState extends State<CollagePage> {
     }
   }
 
-  // Future<void> _saveCollage() async {
-  //   try {
-  //     RenderRepaintBoundary boundary = _collageKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-  //     ui.Image image = await boundary.toImage();
-  //     ByteData? byteData = (await image.toByteData(format: ui.ImageByteFormat.png)) as ByteData?;
-  //     Uint8List pngBytes = byteData!.buffer.asUint8List();
-  //
-  //     // Сохраняем в галерею
-  //     final result = await ImageGallerySaver.saveImage(pngBytes);
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(content: Text('Collage saved successfully!')),
-  //     );
-  //   } catch (e) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text('Failed to save collage: $e')),
-  //     );
-  //   }
-  // }
+  Future<void> _saveCollage() async {
+    try {
+      final boundary = _collageKey.currentContext?.findRenderObject()
+      as RenderRepaintBoundary?;
+
+      if (boundary == null) {
+        throw Exception('Render boundary not found');
+      }
+
+      final image = await boundary.toImage();
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+      if (byteData == null) {
+        throw Exception('Failed to convert image to byte data');
+      }
+
+      final pngBytes = byteData.buffer.asUint8List();
+
+      // Сохраняем в галерею
+      final result = await ImageGallerySaver.saveImage(pngBytes);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['isSuccess'] == true
+              ? 'Collage saved successfully!'
+              : 'Failed to save collage'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save collage: $e')),
+      );
+    }
+  }
 }

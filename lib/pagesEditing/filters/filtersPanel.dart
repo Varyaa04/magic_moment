@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'exampleFilters.dart';
 
 class FiltersPanel extends StatefulWidget {
@@ -14,8 +13,8 @@ class FiltersPanel extends StatefulWidget {
     required this.imageBytes,
     required this.onCancel,
     required this.onApply,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   _FiltersPanelState createState() => _FiltersPanelState();
@@ -25,11 +24,11 @@ class _FiltersPanelState extends State<FiltersPanel> {
   late Uint8List _currentImageBytes;
   double _scaleFactor = 1.0;
   bool _isProcessing = false;
-  List<double> _currentFilter = [ // Добавляем переменную для хранения текущего фильтра
+  List<double> _currentFilter = [
     1.0, 0.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0, 0.0,
     0.0, 0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.0, 1.0, 0.0
+    0.0, 0.0, 0.0, 1.0, 0.0,
   ];
 
   final Map<String, List<double>> _filters = {
@@ -37,7 +36,7 @@ class _FiltersPanelState extends State<FiltersPanel> {
       1.0, 0.0, 0.0, 0.0, 0.0,
       0.0, 1.0, 0.0, 0.0, 0.0,
       0.0, 0.0, 1.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 1.0, 0.0
+      0.0, 0.0, 0.0, 1.0, 0.0,
     ],
     'Black & White': bw,
     'Sepia': sepium,
@@ -109,7 +108,8 @@ class _FiltersPanelState extends State<FiltersPanel> {
     'Fresh Mint': freshMint,
     'Artistic Blend': artisticBlend,
     'Faded Light': fadedLight,
-    'Clear Night': clearNight,  };
+    'Clear Night': clearNight,
+  };
 
   @override
   void initState() {
@@ -120,72 +120,35 @@ class _FiltersPanelState extends State<FiltersPanel> {
 
   Future<void> _verifyImage(Uint8List bytes) async {
     try {
-      await _loadImage(bytes);
+      final image = await _loadImage(bytes);
+      await image.toByteData();
     } catch (e) {
       debugPrint('Image verification failed: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid image format')),
-      );
-      widget.onCancel();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid image format')),
+        );
+        widget.onCancel();
+      }
     }
   }
 
+  @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          Container(
-            color: Colors.black.withOpacity(0.8),
-            child: Column(
+    return Scaffold(
+      backgroundColor: Colors.black.withOpacity(0.8),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
               children: [
-              AppBar(
-              backgroundColor: Colors.transparent,
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: widget.onCancel,
-              ),
-              title: const Text('Filters'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.check),
-                  onPressed: _isProcessing ? null : () async {
-                    // Применяем текущий фильр к оригинальному изображению перед сохранением
-                    setState(() => _isProcessing = true);
-                    try {
-                      final ui.Image originalImage = await _loadImage(widget.imageBytes);
-                      final ByteData? originalBytes = await originalImage.toByteData();
-
-                      if (originalBytes == null) {
-                        throw Exception("Failed to get byte data from image");
-                      }
-
-                      final Uint8List originalPixels = originalBytes.buffer.asUint8List();
-                      final Uint8List filteredPixels = await _applyColorMatrix(
-                        originalPixels,
-                        originalImage.width,
-                        originalImage.height,
-                        _currentFilter, // Используем сохраненный фильтр
-                      );
-
-                      widget.onApply(filteredPixels);
-                    } catch (e) {
-                      debugPrint('Error applying final filter: $e');
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to apply filter: ${e.toString()}')),
-                      );
-                    } finally {
-                      setState(() => _isProcessing = false);
-                    }
-                  },
-                ),
-              ],
-            ),
+                _buildAppBar(),
                 _buildScaleControlPanel(),
                 Expanded(
                   child: InteractiveViewer(
                     minScale: 0.5,
                     maxScale: 3.0,
-                    onInteractionUpdate: (ScaleUpdateDetails details) {
+                    onInteractionUpdate: (details) {
                       setState(() {
                         _scaleFactor = details.scale;
                       });
@@ -195,54 +158,81 @@ class _FiltersPanelState extends State<FiltersPanel> {
                         _currentImageBytes,
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
-                          return const Center(child: Text('Failed to load image'));
+                          return const Center(
+                            child: Text(
+                              'Failed to load image',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          );
                         },
                       ),
                     ),
                   ),
                 ),
-                SizedBox(
-                  height: 150,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: _filters.entries.map((entry) {
-                      return _buildFilterPreview(entry.key, entry.value);
-                    }).toList(),
-                  ),
-                ),
+                _buildFilterList(),
               ],
             ),
-          ),
-          if (_isProcessing)
-            Positioned.fill(
-              child: Container(
+            if (_isProcessing)
+              Container(
                 color: Colors.black.withOpacity(0.5),
-                child: const Center(
-                  child: CircularProgressIndicator(),
-                ),
+                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-
+  Widget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.black.withOpacity(0.7),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: widget.onCancel,
+      ),
+      title: const Text('Filters', style: TextStyle(color: Colors.white)),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.check, color: Colors.white),
+          onPressed: _isProcessing
+              ? null
+              : () async {
+            setState(() => _isProcessing = true);
+            try {
+              final filteredBytes = await _applyFilterToOriginal(_currentFilter);
+              widget.onApply(filteredBytes);
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to apply filter: ${e.toString()}')),
+                );
+              }
+            } finally {
+              setState(() => _isProcessing = false);
+            }
+          },
+        ),
+      ],
+    );
+  }
 
   Widget _buildScaleControlPanel() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.black.withOpacity(0.6),
       child: Row(
         children: [
           const Text('Scale:', style: TextStyle(color: Colors.white)),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Slider(
               value: _scaleFactor,
               min: 0.5,
               max: 3.0,
+              divisions: 25,
+              activeColor: Colors.blue,
+              inactiveColor: Colors.grey.withOpacity(0.5),
               onChanged: (value) {
                 setState(() {
                   _scaleFactor = value;
@@ -251,43 +241,94 @@ class _FiltersPanelState extends State<FiltersPanel> {
             ),
           ),
           TextButton(
-            child: const Text('Reset', style: TextStyle(color: Colors.white)),
             onPressed: () {
               setState(() {
                 _scaleFactor = 1.0;
               });
             },
+            child: const Text('Reset', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildFilterList() {
+    return Container(
+      height: 150,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: _filters.entries.map((entry) {
+          return _buildFilterPreview(entry.key, entry.value);
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildFilterPreview(String name, List<double> matrix) {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Column(
         children: [
-          InkWell(
+          GestureDetector(
             onTap: () => _applyFilter(matrix),
             child: Container(
-              width: 100,
-              height: 100,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                image: DecorationImage(
-                  image: MemoryImage(widget.imageBytes),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.matrix(matrix),
+                border: Border.all(
+                  color: _currentFilter == matrix ? Colors.blue : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: FutureBuilder<Uint8List>(
+                  future: _generateFilterPreview(widget.imageBytes, matrix),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      return Image.memory(
+                        snapshot.data!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(Icons.error, color: Colors.red, size: 24),
+                          );
+                        },
+                      );
+                    }
+                    return const Center(child: CircularProgressIndicator());
+                  },
                 ),
               ),
             ),
           ),
           const SizedBox(height: 4),
-          Text(name, style: const TextStyle(color: Colors.white)),
+          Text(
+            name,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
+  }
+
+  Future<Uint8List> _generateFilterPreview(Uint8List bytes, List<double> matrix) async {
+    try {
+      final image = await _loadImage(bytes);
+      final byteData = await image.toByteData();
+      if (byteData == null) {
+        throw Exception('Failed to get byte data for preview');
+      }
+      final pixels = byteData.buffer.asUint8List();
+      return await _applyColorMatrix(pixels, image.width, image.height, matrix);
+    } catch (e) {
+      debugPrint('Error generating filter preview: $e');
+      rethrow;
+    }
   }
 
   Future<void> _applyFilter(List<double> matrix) async {
@@ -295,92 +336,88 @@ class _FiltersPanelState extends State<FiltersPanel> {
 
     setState(() {
       _isProcessing = true;
-      _currentFilter = matrix; // Сохраняем выбранный фильтр
+      _currentFilter = matrix;
     });
 
     try {
-      final ui.Image originalImage = await _loadImage(widget.imageBytes);
-      final ByteData? originalBytes = await originalImage.toByteData();
-
-      if (originalBytes == null) {
-        throw Exception("Failed to get byte data from image");
-      }
-
-      final Uint8List originalPixels = originalBytes.buffer.asUint8List();
-      final Uint8List filteredPixels = await _applyColorMatrix(
-        originalPixels,
-        originalImage.width,
-        originalImage.height,
-        matrix,
-      );
-
+      final filteredBytes = await _applyFilterToOriginal(matrix);
       setState(() {
-        _currentImageBytes = filteredPixels;
+        _currentImageBytes = filteredBytes;
       });
-
-      if (_scaleFactor != 1.0) {
-        final Uint8List scaledPixels = await _applyScale(
-          filteredPixels,
-          originalImage.width,
-          originalImage.height,
-          _scaleFactor,
-        );
-
-        setState(() {
-          _currentImageBytes = scaledPixels;
-        });
-      }
     } catch (e) {
       debugPrint('Error applying filter: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to apply filter: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to apply filter')),
+        );
+      }
     } finally {
       setState(() => _isProcessing = false);
     }
   }
 
+  Future<Uint8List> _applyFilterToOriginal(List<double> matrix) async {
+    final image = await _loadImage(widget.imageBytes);
+    final byteData = await image.toByteData();
+    if (byteData == null) {
+      throw Exception('Failed to get byte data from original image');
+    }
+    final pixels = byteData.buffer.asUint8List();
+    var filteredPixels = await _applyColorMatrix(pixels, image.width, image.height, matrix);
+
+    if (_scaleFactor != 1.0) {
+      filteredPixels = await _applyScale(filteredPixels, image.width, image.height, _scaleFactor);
+    }
+
+    return filteredPixels;
+  }
+
   Future<ui.Image> _loadImage(Uint8List bytes) async {
     try {
-      debugPrint('Loading image of size: ${bytes.length} bytes');
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       return frame.image;
     } catch (e) {
       debugPrint('Error loading image: $e');
-      rethrow;
+      throw Exception('Failed to load image: $e');
     }
   }
+
   Future<Uint8List> _applyColorMatrix(
       Uint8List pixels,
       int width,
       int height,
       List<double> matrix,
       ) async {
-    final ByteData input = ByteData.sublistView(pixels);
-    final ByteData output = ByteData(pixels.length);
+    try {
+      final input = ByteData.sublistView(pixels);
+      final output = ByteData(pixels.length);
 
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        final int offset = (y * width + x) * 4;
-        final int r = input.getUint8(offset);
-        final int g = input.getUint8(offset + 1);
-        final int b = input.getUint8(offset + 2);
-        final int a = input.getUint8(offset + 3);
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          final offset = (y * width + x) * 4;
+          final r = input.getUint8(offset);
+          final g = input.getUint8(offset + 1);
+          final b = input.getUint8(offset + 2);
+          final a = input.getUint8(offset + 3);
 
-        final double newR = (r * matrix[0] + g * matrix[1] + b * matrix[2] + a * matrix[3] + matrix[4]).clamp(0, 255);
-        final double newG = (r * matrix[5] + g * matrix[6] + b * matrix[7] + a * matrix[8] + matrix[9]).clamp(0, 255);
-        final double newB = (r * matrix[10] + g * matrix[11] + b * matrix[12] + a * matrix[13] + matrix[14]).clamp(0, 255);
-        final double newA = (r * matrix[15] + g * matrix[16] + b * matrix[17] + a * matrix[18] + matrix[19]).clamp(0, 255);
+          final newR = (r * matrix[0] + g * matrix[1] + b * matrix[2] + a * matrix[3] + matrix[4]).clamp(0, 255);
+          final newG = (r * matrix[5] + g * matrix[6] + b * matrix[7] + a * matrix[8] + matrix[9]).clamp(0, 255);
+          final newB = (r * matrix[10] + g * matrix[11] + b * matrix[12] + a * matrix[13] + matrix[14]).clamp(0, 255);
+          final newA = (r * matrix[15] + g * matrix[16] + b * matrix[17] + a * matrix[18] + matrix[19]).clamp(0, 255);
 
-        output.setUint8(offset, newR.round());
-        output.setUint8(offset + 1, newG.round());
-        output.setUint8(offset + 2, newB.round());
-        output.setUint8(offset + 3, newA.round());
+          output.setUint8(offset, newR.round());
+          output.setUint8(offset + 1, newG.round());
+          output.setUint8(offset + 2, newB.round());
+          output.setUint8(offset + 3, newA.round());
+        }
       }
-    }
 
-    return Uint8List.view(output.buffer);
+      return Uint8List.view(output.buffer);
+    } catch (e) {
+      debugPrint('Error applying color matrix: $e');
+      throw Exception('Failed to apply color matrix: $e');
+    }
   }
 
   Future<Uint8List> _applyScale(
@@ -394,14 +431,14 @@ class _FiltersPanelState extends State<FiltersPanel> {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      final paint = Paint();
+      final paint = Paint()..filterQuality = FilterQuality.high;
 
       final codec = await ui.instantiateImageCodec(pixels);
       final frame = await codec.getNextFrame();
       final image = frame.image;
 
-      final newWidth = (width * scale).toInt();
-      final newHeight = (height * scale).toInt();
+      final newWidth = (width * scale).round();
+      final newHeight = (height * scale).round();
 
       canvas.drawImageRect(
         image,
@@ -415,13 +452,13 @@ class _FiltersPanelState extends State<FiltersPanel> {
       final byteData = await scaledImage.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData == null) {
-        throw Exception("Failed to convert scaled image to bytes");
+        throw Exception('Failed to convert scaled image to bytes');
       }
 
       return byteData.buffer.asUint8List();
     } catch (e) {
-      debugPrint('Error in _applyScale: $e');
-      return pixels;
+      debugPrint('Error applying scale: $e');
+      throw Exception('Failed to apply scale: $e');
     }
   }
 }

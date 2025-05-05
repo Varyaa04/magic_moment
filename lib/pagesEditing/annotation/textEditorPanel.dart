@@ -1,7 +1,7 @@
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-
 import 'package:flutter/rendering.dart';
 
 class TextEmojiEditor extends StatefulWidget {
@@ -13,8 +13,8 @@ class TextEmojiEditor extends StatefulWidget {
     required this.image,
     required this.onCancel,
     required this.onApply,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   _TextEmojiEditorState createState() => _TextEmojiEditorState();
@@ -27,7 +27,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   TextItem? _selectedTextItem;
   int _currentTabIndex = 0;
 
-  // Стили текста
+  // Text styles
   Color _textColor = Colors.white;
   double _textSize = 24.0;
   String _fontFamily = 'Roboto';
@@ -36,14 +36,14 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   bool _hasShadow = true;
   TextAlign _textAlign = TextAlign.center;
 
-  // Эмодзи
+  // Emojis
   final List<String> _emojis = [
     '😀', '😂', '😍', '😎', '😜', '🤩', '🥳', '😇',
     '🐶', '🐱', '🦁', '🐯', '🦊', '🐻', '🐼', '🐨',
     '🍎', '🍕', '🍔', '🍟', '🍦', '🍩', '🍪', '🍫',
     '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🎱', '🏓',
     '🚗', '✈️', '🚀', '🛳️', '🚲', '🏍️', '🚂', '🚁',
-    '❤️', '✨', '🌟', '💎', '🔥', '🌈', '☀️', '⭐'
+    '❤️', '✨', '🌟', '💎', '🔥', '🌈', '☀️', '⭐',
   ];
 
   @override
@@ -55,27 +55,25 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.black.withOpacity(0.8),
       body: SafeArea(
         child: Column(
           children: [
             _buildTopBar(),
-
             Expanded(
-              child: RepaintBoundary(
-                key: _renderKey,
-                child: Center(
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedTextItem = null),
+                child: RepaintBoundary(
+                  key: _renderKey,
                   child: Stack(
                     children: [
-                      Image.memory(widget.image, fit: BoxFit.contain),
+                      Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
                       ..._textItems.map(_buildTextItemWidget),
                     ],
                   ),
                 ),
               ),
             ),
-
-            // Нижняя панель инструментов
             _buildBottomPanel(),
           ],
         ),
@@ -85,21 +83,32 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
 
   Widget _buildTopBar() {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       height: 56,
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        border: Border(bottom: BorderSide(color: Colors.grey[800]!)),
+        color: Colors.black.withOpacity(0.7),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, spreadRadius: 1),
+        ],
       ),
       child: Row(
         children: [
           IconButton(
             icon: const Icon(Icons.close, color: Colors.white),
             onPressed: widget.onCancel,
+            tooltip: 'Cancel',
           ),
           const Spacer(),
+          if (_selectedTextItem != null)
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: _deleteSelectedItem,
+              tooltip: 'Delete selected item',
+            ),
           IconButton(
             icon: const Icon(Icons.check, color: Colors.white),
             onPressed: _saveChanges,
+            tooltip: 'Apply changes',
           ),
         ],
       ),
@@ -118,11 +127,15 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
           });
         },
         child: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             border: _selectedTextItem == item
                 ? Border.all(color: Colors.blue, width: 2)
                 : null,
+            color: _selectedTextItem == item
+                ? Colors.black.withOpacity(0.3)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
             item.text,
@@ -132,13 +145,15 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
               fontFamily: item.fontFamily,
               fontWeight: item.isBold ? FontWeight.bold : FontWeight.normal,
               fontStyle: item.isItalic ? FontStyle.italic : FontStyle.normal,
-              shadows: item.hasShadow ? [
+              shadows: item.hasShadow
+                  ? [
                 Shadow(
                   blurRadius: 5,
                   color: Colors.black.withOpacity(0.8),
                   offset: const Offset(1, 1),
                 ),
-              ] : null,
+              ]
+                  : null,
             ),
             textAlign: item.textAlign,
           ),
@@ -148,92 +163,77 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   }
 
   Widget _buildBottomPanel() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Табы
-        Container(
-          height: 48,
-          color: Colors.grey[900],
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() => _currentTabIndex = 0),
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: _currentTabIndex == 0
-                              ? Colors.blue
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      'Text',
-                      style: TextStyle(
-                        color: _currentTabIndex == 0
-                            ? Colors.blue
-                            : Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, spreadRadius: 1),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildTabBar(),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            child: _currentTabIndex == 0 ? _buildTextTab() : _buildEmojiTab(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar() {
+    return Container(
+      height: 48,
+      child: Row(
+        children: [
+          _buildTabButton('Text', 0),
+          _buildTabButton('Emoji', 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String title, int index) {
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _currentTabIndex = index),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: _currentTabIndex == index ? Colors.blue : Colors.transparent,
+                width: 2,
               ),
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() => _currentTabIndex = 1),
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: _currentTabIndex == 1
-                              ? Colors.blue
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      'Emoji',
-                      style: TextStyle(
-                        color: _currentTabIndex == 1
-                            ? Colors.blue
-                            : Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
+          ),
+          child: Text(
+            title,
+            style: TextStyle(
+              color: _currentTabIndex == index ? Colors.blue : Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
-
-        // Контент табов
-        _currentTabIndex == 0 ? _buildTextTab() : _buildEmojiTab(),
-      ],
+      ),
     );
   }
 
   Widget _buildTextTab() {
-    return Column(
-      children: [
-        // Поле ввода текста
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          TextField(
             controller: _textController,
             decoration: InputDecoration(
-              hintText: 'Enter text here',
+              hintText: 'Enter text or emoji',
               hintStyle: TextStyle(color: Colors.grey[500]),
               filled: true,
-              fillColor: Colors.grey[800],
+              fillColor: Colors.grey[900],
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
@@ -241,69 +241,66 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
               suffixIcon: IconButton(
                 icon: const Icon(Icons.add, color: Colors.blue),
                 onPressed: _addText,
+                tooltip: 'Add text',
               ),
             ),
             style: const TextStyle(color: Colors.white),
+            onSubmitted: (_) => _addText(),
           ),
-        ),
-
-        // Панель стилей текста
-        Container(
-          height: 80,
-          color: Colors.grey[900],
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStyleButton(
-                Icons.format_size,
-                'Size',
-                    () => _showSizeDialog(),
-              ),
-              _buildStyleButton(
-                Icons.color_lens,
-                'Color',
-                    () => _showColorDialog(),
-              ),
-              _buildStyleButton(
-                Icons.font_download,
-                'Font',
-                    () => _showFontDialog(),
-              ),
-              _buildStyleButton(
-                Icons.format_align_center,
-                'Align',
-                    () => _showAlignDialog(),
-              ),
-              _buildStyleButton(
-                Icons.format_bold,
-                'Bold',
-                    () => setState(() => _isBold = !_isBold),
-                isActive: _isBold,
-              ),
-              _buildStyleButton(
-                Icons.format_italic,
-                'Italic',
-                    () => setState(() => _isItalic = !_isItalic),
-                isActive: _isItalic,
-              ),
-              _buildStyleButton(
-                Icons.format_underlined,
-                'Shadow',
-                    () => setState(() => _hasShadow = !_hasShadow),
-                isActive: _hasShadow,
-              ),
-            ],
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildStyleButton(
+                  Icons.format_size,
+                  'Size',
+                      () => _showSizeDialog(),
+                ),
+                _buildStyleButton(
+                  Icons.color_lens,
+                  'Color',
+                      () => _showColorDialog(),
+                ),
+                _buildStyleButton(
+                  Icons.font_download,
+                  'Font',
+                      () => _showFontDialog(),
+                ),
+                _buildStyleButton(
+                  Icons.format_align_center,
+                  'Align',
+                      () => _showAlignDialog(),
+                ),
+                _buildStyleButton(
+                  Icons.format_bold,
+                  'Bold',
+                      () => _toggleStyle(() => _isBold = !_isBold),
+                  isActive: _isBold,
+                ),
+                _buildStyleButton(
+                  Icons.format_italic,
+                  'Italic',
+                      () => _toggleStyle(() => _isItalic = !_isItalic),
+                  isActive: _isItalic,
+                ),
+                _buildStyleButton(
+                  FluentIcons.image_shadow_20_filled,
+                  'Shadow',
+                      () => _toggleStyle(() => _hasShadow = !_hasShadow),
+                  isActive: _hasShadow,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildEmojiTab() {
     return Container(
       height: 200,
-      color: Colors.grey[900],
       padding: const EdgeInsets.all(8),
       child: GridView.builder(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -316,10 +313,15 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
           return GestureDetector(
             onTap: () => _addEmoji(_emojis[index]),
             child: Container(
-              alignment: Alignment.center,
-              child: Text(
-                _emojis[index],
-                style: const TextStyle(fontSize: 24),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Text(
+                  _emojis[index],
+                  style: const TextStyle(fontSize: 24),
+                ),
               ),
             ),
           );
@@ -328,23 +330,26 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Widget _buildStyleButton(IconData icon, String label, VoidCallback onTap,
-      {bool isActive = false}) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          icon: Icon(icon, color: isActive ? Colors.blue : Colors.white),
-          onPressed: onTap,
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.blue : Colors.white,
-            fontSize: 10,
+  Widget _buildStyleButton(IconData icon, String label, VoidCallback onTap, {bool isActive = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(icon, color: isActive ? Colors.blue : Colors.white, size: 24),
+            onPressed: onTap,
+            tooltip: label,
           ),
-        ),
-      ],
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? Colors.blue : Colors.white,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -403,12 +408,36 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     });
   }
 
+  void _deleteSelectedItem() {
+    if (_selectedTextItem != null) {
+      setState(() {
+        _textItems.remove(_selectedTextItem);
+        _selectedTextItem = null;
+        _textController.clear();
+      });
+    }
+  }
+
+  void _toggleStyle(VoidCallback toggle) {
+    setState(() {
+      toggle();
+      if (_selectedTextItem != null) {
+        _selectedTextItem!.isBold = _isBold;
+        _selectedTextItem!.isItalic = _isItalic;
+        _selectedTextItem!.hasShadow = _hasShadow;
+      }
+    });
+  }
+
   Future<void> _showSizeDialog() async {
-    double newSize = _textSize;
+    double tempSize = _textSize;
 
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
@@ -417,44 +446,41 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                const Text(
-                'Text Size',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Slider(
-                value: newSize,
-                min: 10,
-                max: 72,
-                divisions: 10,
-                activeColor: Colors.blue,
-                inactiveColor: Colors.grey[700],
-                onChanged: (value) {
-                  setState(() => newSize = value);
-                },
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.white)),),
-                    TextButton(
-                      onPressed: () {
-                        setState(() => _textSize = newSize);
-                        if (_selectedTextItem != null) {
-                          _selectedTextItem!.size = newSize;
-                          _textController.text = _selectedTextItem!.text;
-                        }
-                        Navigator.pop(context);
-                      },
-                      child: const Text('Apply', style: TextStyle(color: Colors.blue)),
-                    ),
+                  const Text(
+                    'Text Size',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  Slider(
+                    value: tempSize,
+                    min: 10,
+                    max: 72,
+                    divisions: 62,
+                    activeColor: Colors.blue,
+                    inactiveColor: Colors.grey[700],
+                    label: tempSize.round().toString(),
+                    onChanged: (value) => setState(() => tempSize = value),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _textSize = tempSize;
+                            if (_selectedTextItem != null) {
+                              _selectedTextItem!.size = tempSize;
+                            }
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Apply', style: TextStyle(color: Colors.blue)),
+                      ),
                     ],
                   ),
                 ],
@@ -467,15 +493,18 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   }
 
   Future<void> _showColorDialog() async {
-    final List<Color> colors = [
-      Colors.white, Colors.black, Colors.red, Colors.orange,
-      Colors.yellow, Colors.green, Colors.blue, Colors.purple,
-      Colors.pink, Colors.teal, Colors.cyan, Colors.lime,
+    final colors = [
+      Colors.white, Colors.black, Colors.red, Colors.orange, Colors.yellow,
+      Colors.green, Colors.blue, Colors.purple, Colors.pink, Colors.teal,
+      Colors.cyan, Colors.lime,
     ];
 
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (context) {
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -484,25 +513,22 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
             children: [
               const Text(
                 'Text Color',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
+                alignment: WrapAlignment.center,
                 children: colors.map((color) {
                   return GestureDetector(
                     onTap: () {
-                      setState(() => _textColor = color);
-                      _textColor = color;
-                      if (_selectedTextItem != null) {
-                        _selectedTextItem!.color = color;
-                        _textController.text = _selectedTextItem!.text;
-                      }
+                      setState(() {
+                        _textColor = color;
+                        if (_selectedTextItem != null) {
+                          _selectedTextItem!.color = color;
+                        }
+                      });
                       Navigator.pop(context);
                     },
                     child: Container(
@@ -512,8 +538,8 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                         color: color,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Colors.white,
-                          width: _textColor == color ? 2 : 0,
+                          color: _textColor == color ? Colors.blue : Colors.white,
+                          width: 2,
                         ),
                       ),
                     ),
@@ -538,6 +564,9 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (context) {
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -546,33 +575,25 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
             children: [
               const Text(
                 'Font Family',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               ...fonts.map((font) {
                 return ListTile(
                   title: Text(
                     font,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontFamily: font,
-                      fontSize: 18,
-                    ),
+                    style: TextStyle(color: Colors.white, fontFamily: font, fontSize: 18),
                   ),
                   trailing: _fontFamily == font
                       ? const Icon(Icons.check, color: Colors.blue)
                       : null,
                   onTap: () {
-                    setState(() => _fontFamily = font);
-                    if (_selectedTextItem != null) {
-                      _selectedTextItem!.fontFamily = font;
-                      _textController.text = _selectedTextItem!.text;
-
-                    }
+                    setState(() {
+                      _fontFamily = font;
+                      if (_selectedTextItem != null) {
+                        _selectedTextItem!.fontFamily = font;
+                      }
+                    });
                     Navigator.pop(context);
                   },
                 );
@@ -593,6 +614,9 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (context) {
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -601,11 +625,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
             children: [
               const Text(
                 'Text Alignment',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               Row(
@@ -632,14 +652,15 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     return IconButton(
       icon: Icon(icon, size: 32, color: _textAlign == align ? Colors.blue : Colors.white),
       onPressed: () {
-        setState(() => _textAlign = align);
-
-        if (_selectedTextItem != null) {
-          _selectedTextItem!.textAlign = align;
-          _textController.text = _selectedTextItem!.text;
-        }
+        setState(() {
+          _textAlign = align;
+          if (_selectedTextItem != null) {
+            _selectedTextItem!.textAlign = align;
+          }
+        });
         Navigator.pop(context);
       },
+      tooltip: align.toString().split('.').last,
     );
   }
 
@@ -648,13 +669,19 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
       final RenderRepaintBoundary boundary =
       _renderKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      final ByteData? byteData =
-      await image.toByteData(format: ui.ImageByteFormat.png);
-      final Uint8List pngBytes = byteData!.buffer.asUint8List();
-
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Failed to convert image to bytes');
+      }
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
       widget.onApply(pngBytes);
     } catch (e) {
       debugPrint('Error saving image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save changes')),
+        );
+      }
     }
   }
 }

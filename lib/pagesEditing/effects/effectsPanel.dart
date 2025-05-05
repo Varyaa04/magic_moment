@@ -1,9 +1,10 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:image/image.dart' as image;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'effects_utils.dart';
 
 class EffectsPanel extends StatefulWidget {
   final Uint8List image;
@@ -14,99 +15,91 @@ class EffectsPanel extends StatefulWidget {
     required this.image,
     required this.onCancel,
     required this.onApply,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   _EffectsPanelState createState() => _EffectsPanelState();
 }
 
 class _EffectsPanelState extends State<EffectsPanel> {
-  late ui.Image _backgroundImage;
-  final List<DrawingAction> _drawingActions = [];
-  final List<List<DrawingAction>> _undoStack = [];
   bool _isInitialized = false;
-  bool _isErasing = false;
-  double _currentStrokeWidth = 20.0;
-  final GlobalKey _paintingKey = GlobalKey();
+  bool _isProcessing = false;
+  late Uint8List _currentImageBytes;
+  Effect? _selectedEffect;
+  final GlobalKey _imageKey = GlobalKey();
+  final Map<String, double> _effectParams = {};
 
   @override
   void initState() {
     super.initState();
-    _loadImage();
+    _currentImageBytes = widget.image;
+    _initialize();
   }
 
-  Future<void> _loadImage() async {
-    final codec = await ui.instantiateImageCodec(widget.image);
-    final frame = await codec.getNextFrame();
-    setState(() {
-      _backgroundImage = frame.image;
-      _isInitialized = true;
-    });
-  }
-
-  void _changeStrokeWidth(double width) {
-    setState(() {
-      _currentStrokeWidth = width;
-    });
-  }
-
-  void _handlePanStart(DragStartDetails details) {
-    final renderBox =
-    _paintingKey.currentContext!.findRenderObject() as RenderBox;
-    final localPosition = renderBox.globalToLocal(details.globalPosition);
-
-    setState(() {
-      _drawingActions.add(DrawingAction(
-        points: [localPosition],
-        strokeWidth: _currentStrokeWidth,
-        isErasing: _isErasing,
-      ));
-    });
-  }
-
-  void _handlePanUpdate(DragUpdateDetails details) {
-    final renderBox =
-    _paintingKey.currentContext!.findRenderObject() as RenderBox;
-    final localPosition = renderBox.globalToLocal(details.globalPosition);
-
-    setState(() {
-      if (_drawingActions.isNotEmpty) {
-        _drawingActions.last.points.add(localPosition);
-      }
-    });
-  }
-
-  void _handlePanEnd(DragEndDetails details) {
-    setState(() {
-      _undoStack.add(List.from(_drawingActions));
-    });
-  }
-
-  void _undo() {
-    if (_undoStack.isNotEmpty) {
+  Future<void> _initialize() async {
+    try {
+      final image.Image decodedImage = await decodeImage(widget.image);
       setState(() {
-        _drawingActions.clear();
-        _undoStack.removeLast();
-        if (_undoStack.isNotEmpty) {
-          _drawingActions.addAll(_undoStack.last);
-        }
+        _isInitialized = true;
+        _selectedEffect = effects.first;
+        _effectParams.addAll(_selectedEffect!.defaultParams);
       });
+    } catch (e) {
+      debugPrint('Error initializing image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid image format')),
+        );
+        widget.onCancel();
+      }
     }
   }
 
-  Future<void> _applyChanges() async {
-    try {
-      final RenderRepaintBoundary boundary = _paintingKey.currentContext!
-          .findRenderObject()! as RenderRepaintBoundary;
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      final ByteData? byteData =
-      await image.toByteData(format: ui.ImageByteFormat.png);
-      final Uint8List pngBytes = byteData!.buffer.asUint8List();
+  Future<void> _applyEffect(Effect effect, Map<String, double> params) async {
+    if (_isProcessing) return;
 
-      widget.onApply(pngBytes);
+    setState(() => _isProcessing = true);
+    try {
+      final image.Image decodedImage = await decodeImage(widget.image);
+      final image.Image processedImage = await effect.apply(decodedImage, params);
+      final Uint8List processedBytes = await encodeImage(processedImage);
+      setState(() {
+        _currentImageBytes = processedBytes;
+        _selectedEffect = effect;
+        _effectParams.clear();
+        _effectParams.addAll(params);
+      });
     } catch (e) {
-      debugPrint('Error capturing image: $e');
+      debugPrint('Error applying effect: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to apply effect')),
+        );
+      }
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    if (_isProcessing) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      final image.Image decodedImage = await decodeImage(widget.image);
+      final image.Image processedImage = await _selectedEffect!.apply(decodedImage, _effectParams);
+      final Uint8List processedBytes = await encodeImage(processedImage);
+      widget.onApply(processedBytes);
+    } catch (e) {
+      debugPrint('Error saving image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save image')),
+        );
+      }
+    } finally {
+      setState(() => _isProcessing = false);
     }
   }
 
@@ -115,204 +108,185 @@ class _EffectsPanelState extends State<EffectsPanel> {
     final appLocalizations = AppLocalizations.of(context);
     final theme = Theme.of(context);
 
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.8),
-        child: Column(
+    return Scaffold(
+      backgroundColor: Colors.black.withOpacity(0.8),
+      body: SafeArea(
+        child: Stack(
           children: [
-            AppBar(
-              backgroundColor: Colors.transparent,
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: widget.onCancel,
-                color: Colors.white,
-              ),
-              title: const Text('Draw'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.undo),
-                  onPressed: _undo,
-                  color: _drawingActions.isEmpty ? Colors.grey : Colors.white,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.check),
-                  onPressed: _applyChanges,
-                  color: Colors.white,
-                ),
-              ],
-            ),
-            Expanded(
-              child: _isInitialized
-                  ? GestureDetector(
-                onPanStart: _handlePanStart,
-                onPanUpdate: _handlePanUpdate,
-                child: CustomPaint(
-                  key: _paintingKey,
-                  size: Size.infinite,
-                  painter: DrawingPainter(
-                    backgroundImage: _backgroundImage,
-                    drawingActions: _drawingActions,
-                  ),
-                ),
-              )
-                  : const Center(child: CircularProgressIndicator()),
-            ),
-            // Панель инструментов для рисования
-            Container(
-              height: 70,
-              color: Colors.black.withOpacity(0.7),
-              child: Column(
-                children: [
-                  _buildToolButton(
-                    icon: FluentIcons.eraser_20_filled,
-                    label: appLocalizations?.eraser ?? 'Eraser',
-                    isActive: _isErasing,
-                    onPressed: () => setState(() => _isErasing = true),
-                  ),
-                  // Слайдер для размера
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(children: [
-                      const Text('Size:',
-                          style: TextStyle(color: Colors.white)),
-                      Expanded(
-                        child: Slider(
-                          value: _currentStrokeWidth,
-                          min: 5,
-                          max: 50,
-                          divisions: 9,
-                          onChanged: _changeStrokeWidth,
-                          activeColor: theme.primaryColor,
-                          inactiveColor: theme.disabledColor,
+            Column(
+              children: [
+                _buildAppBar(theme),
+                Expanded(
+                  child: _isInitialized
+                      ? RepaintBoundary(
+                    key: _imageKey,
+                    child: Center(
+                      child: Image.memory(
+                        _currentImageBytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const Center(
+                          child: Text(
+                            'Failed to load image',
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
                       ),
-                    ]),
-                  ),
-                ],
-              ),
+                    ),
+                  )
+                      : const Center(child: CircularProgressIndicator(color: Colors.white)),
+                ),
+                _buildEffectControls(appLocalizations, theme),
+                _buildEffectList(theme),
+              ],
             ),
+            if (_isProcessing)
+              Container(
+                color: Colors.black.withOpacity(0.5),
+                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildToolButton({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onPressed,
-  }) {
-    final theme = Theme.of(context);
-
-    return SizedBox(
-      width: 80,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onPressed,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? theme.primaryColor.withOpacity(0.2)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isActive ? theme.primaryColor : Colors.transparent,
-                    ),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      icon,
-                      color:
-                      isActive ? theme.primaryColor : theme.iconTheme.color,
-                      size: 24,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: isActive
-                        ? theme.primaryColor
-                        : theme.textTheme.labelSmall?.color,
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Widget _buildAppBar(ThemeData theme) {
+    return AppBar(
+      backgroundColor: Colors.black.withOpacity(0.7),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: widget.onCancel,
+        tooltip: 'Cancel',
+      ),
+      title: Text(
+        AppLocalizations.of(context)?.effects ?? 'Effects',
+        style: const TextStyle(color: Colors.white),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.check, color: Colors.white),
+          onPressed: _isProcessing ? null : _saveChanges,
+          tooltip: 'Apply',
         ),
+      ],
+    );
+  }
+
+  Widget _buildEffectControls(AppLocalizations? appLocalizations, ThemeData theme) {
+    if (_selectedEffect == null || _selectedEffect!.params.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.black.withOpacity(0.7),
+      child: Column(
+        children: _selectedEffect!.params.map((param) {
+          return Row(
+            children: [
+              Text(
+                param.name,
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Slider(
+                  value: _effectParams[param.name] ?? param.defaultValue,
+                  min: param.minValue,
+                  max: param.maxValue,
+                  divisions: ((param.maxValue - param.minValue) / param.step).round(),
+                  activeColor: theme.primaryColor,
+                  inactiveColor: theme.disabledColor,
+                  label: _effectParams[param.name]?.toStringAsFixed(1),
+                  onChanged: (value) {
+                    setState(() {
+                      _effectParams[param.name] = value;
+                    });
+                    _applyEffect(_selectedEffect!, _effectParams);
+                  },
+                ),
+              ),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
-}
 
-class DrawingPainter extends CustomPainter {
-  final ui.Image backgroundImage;
-  final List<DrawingAction> drawingActions;
-
-  DrawingPainter({
-    required this.backgroundImage,
-    required this.drawingActions,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Draw background image
-    paintImage(
-      canvas: canvas,
-      rect: Rect.fromLTWH(0, 0, size.width, size.height),
-      image: backgroundImage,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.high,
+  Widget _buildEffectList(ThemeData theme) {
+    return Container(
+      height: 120,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      color: Colors.black.withOpacity(0.7),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: effects.length,
+        itemBuilder: (context, index) {
+          final effect = effects[index];
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: GestureDetector(
+              onTap: () => _applyEffect(effect, effect.defaultParams),
+              child: Column(
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedEffect == effect ? Colors.blue : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: FutureBuilder<Uint8List>(
+                        future: _generateEffectPreview(effect),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData) {
+                            return Image.memory(
+                              snapshot.data!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const Icon(
+                                Icons.error,
+                                color: Colors.red,
+                                size: 40,
+                              ),
+                            );
+                          }
+                          return const Center(child: CircularProgressIndicator());
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    effect.name,
+                    style: TextStyle(
+                      color: _selectedEffect == effect ? Colors.blue : Colors.white,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
-
-    // Draw all user actions
-    for (final action in drawingActions) {
-      final paint = Paint()
-        ..strokeWidth = action.strokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke
-        ..blendMode = action.isErasing ? BlendMode.clear : BlendMode.srcOver;
-
-      if (action.points.length == 1) {
-        // Draw a single point if there's only one point
-        canvas.drawCircle(
-          action.points.first,
-          action.strokeWidth / 2,
-          paint,
-        );
-      } else {
-        // Draw lines between points
-        for (int i = 0; i < action.points.length - 1; i++) {
-          canvas.drawLine(action.points[i], action.points[i + 1], paint);
-        }
-      }
-    }
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
-class DrawingAction {
-  List<Offset> points;
-  double strokeWidth;
-  bool isErasing;
-
-  DrawingAction({
-    required this.points,
-    required this.strokeWidth,
-    required this.isErasing,
-  });
+  Future<Uint8List> _generateEffectPreview(Effect effect) async {
+    try {
+      final image.Image decodedImage = await decodeImage(widget.image);
+      final image.Image thumbnail = image.copyResize(decodedImage, width: 100);
+      final image.Image processedImage = await effect.apply(thumbnail, effect.defaultParams);
+      return await encodeImage(processedImage);
+    } catch (e) {
+      debugPrint('Error generating preview: $e');
+      rethrow;
+    }
+  }
 }

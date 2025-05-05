@@ -46,6 +46,7 @@ flutter:
   assets:
     - lib/assets/icons/iconMM.webp
     - lib/assets/icons/photos.png
+    - lib/assets/stickers/
     - lib/assets/google_fonts/Oi-Regular.ttf
     - lib/assets/google_fonts/LilitaOne-Regular.ttf
     - lib/assets/google_fonts/PTSansNarrow-Regular.ttf

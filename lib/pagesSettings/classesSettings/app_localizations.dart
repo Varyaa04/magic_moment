@@ -81,6 +81,11 @@ class AppLocalizations {
       'tapToPlaceEmoji' : 'Tap to place emoji',
       'eraser' : 'Eraser',
       'brush' : 'Brush',
+      'error' : 'Error',
+      'permissionDenied' : 'Permission denied',
+      'clearAll' : 'Clear all',
+      'undo' : 'Undo',
+
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -149,6 +154,10 @@ class AppLocalizations {
       'tapToPlaceEmoji' : 'Нажмите, чтобы разместить эмодзи',
       'eraser' : 'Ластик',
       'brush' : 'Кисть',
+      'error' : 'Ошибка',
+      'clearAll' : 'Убрать все',
+      'permissionDenied' : 'Доступ запрещен',
+      'undo' : 'Назад'
     },
   };
 
@@ -225,8 +234,12 @@ class AppLocalizations {
   String get tapToPlaceEmoji => _localizedValues[locale.languageCode]!['tapToPlaceEmoji']!;
   String get eraser => _localizedValues[locale.languageCode]!['eraser']!;
   String get brush => _localizedValues[locale.languageCode]!['brush']!;
+  String get clearAll => _localizedValues[locale.languageCode]!['clearAll']!;
   String get areYouSure =>
       _localizedValues[locale.languageCode]!['areYouSure']!;
+  String get error => _localizedValues[locale.languageCode]!['error']!;
+  String get undo => _localizedValues[locale.languageCode]!['undo']!;
+  String get permissionDenied => _localizedValues[locale.languageCode]!['permissionDenied']!;
 }
 
 class _AppLocalizationsDelegate

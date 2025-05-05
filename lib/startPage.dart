@@ -22,21 +22,52 @@ class _StartPageState extends State<StartPage> {
   List<File> selectedImages = [];
 
   // Функция выбора изображений для коллажа
-  Future getImages() async {
+  Future<void> getImages() async {
     final appLocalizations = AppLocalizations.of(context)!;
-    final pickedFile = await picker.pickMultiImage(
+
+    // Запрос разрешений
+    if (!kIsWeb && await Permission.photos.request().isDenied) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(appLocalizations.permissionDenied)),
+      );
+      return;
+    }
+
+    try {
+      final pickedFiles = await picker.pickMultiImage(
         imageQuality: 100,
         maxHeight: 1000,
-        maxWidth: 1000);
-    List<XFile> xfilePick = pickedFile;
+        maxWidth: 1000,
+      );
 
-    if (xfilePick.isNotEmpty) {
-      for (var i = 0; i < xfilePick.length && i <= 5; i++) {
-        selectedImages.add(File(xfilePick[i].path));
+      if (pickedFiles == null || pickedFiles.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appLocalizations.selectedNon)),
+        );
+        return;
       }
-      setState(() {});
 
-      // После выбора изображений переходим на страницу коллажа
+      // Очищаем предыдущий выбор
+      selectedImages.clear();
+
+      // Берем максимум 6 изображений
+      for (final file in pickedFiles.take(6)) {
+        selectedImages.add(File(file.path));
+      }
+
+      // Проверяем что файлы существуют
+      for (final file in selectedImages) {
+        if (!await file.exists()) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('File ${file.path} not found')),
+          );
+          return;
+        }
+      }
+
       if (!mounted) return;
       Navigator.push(
         context,
@@ -44,40 +75,49 @@ class _StartPageState extends State<StartPage> {
           builder: (context) => CollagePage(images: selectedImages),
         ),
       );
-    } else {
+
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appLocalizations.selectedNon)));
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
-
-  // Функция для выбора фото из галереи
+  // Функция для выбора фото из галереи или камеры
   Future<void> _pickImage(ImageSource source) async {
-    final image = await picker.pickImage(source: source);
-    if (image != null) {
-      if (kIsWeb) {
-        final bytes = await image.readAsBytes(); // Для веба
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EditPage(imageBytes: bytes),
-          ),
-        );
-      } else {
-        final file = File(image.path); // Для мобильных/десктоп
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EditPage(imageBytes: file),
-          ),
-        );
+    try {
+      final image = await picker.pickImage(source: source);
+      if (image != null) {
+        if (kIsWeb) {
+          final bytes = await image.readAsBytes();
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditPage(imageBytes: bytes),
+            ),
+          );
+        } else {
+          final file = File(image.path);
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditPage(imageBytes: file),
+            ),
+          );
+        }
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${AppLocalizations.of(context)!.error}: $e')),
+      );
     }
   }
 
-  // Функция для выбора нескольких изображений из галереи для коллажа
-  void _dialogChoose() {
+  // Диалог выбора источника изображения
+  void _showImageSourceDialog() {
     final appLocalizations = AppLocalizations.of(context)!;
     showDialog(
       context: context,
@@ -89,18 +129,14 @@ class _StartPageState extends State<StartPage> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _pickImage(ImageSource.camera);
-                });
+                _pickImage(ImageSource.camera);
               },
               child: Text(appLocalizations.camera),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _pickImage(ImageSource.gallery);
-                });
+                _pickImage(ImageSource.gallery);
               },
               child: Text(appLocalizations.gallery),
             ),
@@ -109,7 +145,6 @@ class _StartPageState extends State<StartPage> {
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -123,41 +158,43 @@ class _StartPageState extends State<StartPage> {
         color: colorScheme.onInverseSurface,
         child: Row(
           children: [
-          Container(
-          margin: EdgeInsets.zero,
-          padding: EdgeInsets.zero,
-          child: Image.asset(
-            'lib/assets/icons/photos.png',
-            fit: BoxFit.contain,
-          ),
-        ),
-        Expanded(
-          flex: 1,
-          child: Column(
+            // Левая часть с изображением
+            Container(
+              margin: EdgeInsets.zero,
+              padding: EdgeInsets.zero,
+              child: Image.asset(
+                'lib/assets/icons/photos.png',
+                fit: BoxFit.contain,
+              ),
+            ),
+
+            // Правая часть с контентом
+            Expanded(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // Кнопка настроек
                   Container(
                     margin: const EdgeInsets.only(top: 10, right: 25),
-                    child: Tooltip(
-                      message: appLocalizations.settings,
-                      child: IconButton(
-                        iconSize: 30,
-                        onPressed: () async {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SettingsPage(),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.settings),
-                        color: colorScheme.onSecondary,
-                      ),
+                    child: IconButton(
+                      iconSize: 30,
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.settings),
+                      color: colorScheme.onSecondary,
+                      tooltip: appLocalizations.settings,
                     ),
                   ),
                   const SizedBox(height: 10),
 
+                  // Заголовок и описание
                   Container(
                     margin: const EdgeInsets.only(top: 40, right: 25),
                     child: Column(
@@ -175,19 +212,14 @@ class _StartPageState extends State<StartPage> {
                         Container(
                           width: 200,
                           padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
                           child: Text(
                             appLocalizations.challengeText,
-                            textAlign: TextAlign.justify,
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 13,
                               color: colorScheme.onSecondary,
                               fontFamily: 'PTSansNarrow-Regular',
                             ),
-                            softWrap: true,
                           ),
                         ),
                       ],
@@ -198,20 +230,15 @@ class _StartPageState extends State<StartPage> {
                   Container(
                     margin: const EdgeInsets.only(top: 20, right: 25),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         CustomButton(
-                          onPressed: () {
-                            _dialogChoose();
-                          },
+                          onPressed: _showImageSourceDialog,
                           text: appLocalizations.change,
                           icon: FluentIcons.image_24_regular,
                         ),
                         const SizedBox(height: 10),
                         CustomButton(
-                          onPressed: () {
-                            getImages();
-                          },
+                          onPressed: getImages,
                           text: appLocalizations.create,
                           secondaryText: appLocalizations.collage,
                           icon: FluentIcons.layout_column_two_split_left_24_regular,

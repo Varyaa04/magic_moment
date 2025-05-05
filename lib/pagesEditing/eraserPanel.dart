@@ -14,8 +14,8 @@ class EraserPanel extends StatefulWidget {
     required this.image,
     required this.onCancel,
     required this.onApply,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   _EraserPanelState createState() => _EraserPanelState();
@@ -26,7 +26,7 @@ class _EraserPanelState extends State<EraserPanel> {
   final List<DrawingAction> _drawingActions = [];
   final List<List<DrawingAction>> _undoStack = [];
   bool _isInitialized = false;
-  bool _isErasing = false;
+  bool _isProcessing = false;
   double _currentStrokeWidth = 20.0;
   final GlobalKey _paintingKey = GlobalKey();
 
@@ -37,12 +37,22 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 
   Future<void> _loadImage() async {
-    final codec = await ui.instantiateImageCodec(widget.image);
-    final frame = await codec.getNextFrame();
-    setState(() {
-      _backgroundImage = frame.image;
-      _isInitialized = true;
-    });
+    try {
+      final codec = await ui.instantiateImageCodec(widget.image);
+      final frame = await codec.getNextFrame();
+      setState(() {
+        _backgroundImage = frame.image;
+        _isInitialized = true;
+      });
+    } catch (e) {
+      debugPrint('Error loading image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid image format')),
+        );
+        widget.onCancel();
+      }
+    }
   }
 
   void _changeStrokeWidth(double width) {
@@ -52,22 +62,19 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 
   void _handlePanStart(DragStartDetails details) {
-    final renderBox =
-        _paintingKey.currentContext!.findRenderObject() as RenderBox;
+    final renderBox = _paintingKey.currentContext!.findRenderObject() as RenderBox;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
 
     setState(() {
       _drawingActions.add(DrawingAction(
         points: [localPosition],
         strokeWidth: _currentStrokeWidth,
-        isErasing: _isErasing,
       ));
     });
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
-    final renderBox =
-        _paintingKey.currentContext!.findRenderObject() as RenderBox;
+    final renderBox = _paintingKey.currentContext!.findRenderObject() as RenderBox;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
 
     setState(() {
@@ -95,18 +102,36 @@ class _EraserPanelState extends State<EraserPanel> {
     }
   }
 
-  Future<void> _applyChanges() async {
-    try {
-      final RenderRepaintBoundary boundary = _paintingKey.currentContext!
-          .findRenderObject()! as RenderRepaintBoundary;
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      final ByteData? byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
-      final Uint8List pngBytes = byteData!.buffer.asUint8List();
+  void _clearAll() {
+    setState(() {
+      _drawingActions.clear();
+      _undoStack.clear();
+    });
+  }
 
+  Future<void> _applyChanges() async {
+    if (_isProcessing) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      final RenderRepaintBoundary boundary =
+      _paintingKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Failed to convert image to bytes');
+      }
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
       widget.onApply(pngBytes);
     } catch (e) {
       debugPrint('Error capturing image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save image')),
+        );
+      }
+    } finally {
+      setState(() => _isProcessing = false);
     }
   }
 
@@ -115,84 +140,124 @@ class _EraserPanelState extends State<EraserPanel> {
     final appLocalizations = AppLocalizations.of(context);
     final theme = Theme.of(context);
 
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.8),
-        child: Column(
+    return Scaffold(
+      backgroundColor: Colors.black.withOpacity(0.8),
+      body: SafeArea(
+        child: Stack(
           children: [
-            AppBar(
-              backgroundColor: Colors.transparent,
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: widget.onCancel,
-                color: Colors.white,
-              ),
-              title: const Text('Draw'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.undo),
-                  onPressed: _undo,
-                  color: _drawingActions.isEmpty ? Colors.grey : Colors.white,
+            Column(
+              children: [
+                _buildAppBar(theme, appLocalizations),
+                Expanded(
+                  child: _isInitialized
+                      ? GestureDetector(
+                    onPanStart: _handlePanStart,
+                    onPanUpdate: _handlePanUpdate,
+                    onPanEnd: _handlePanEnd,
+                    child: CustomPaint(
+                      key: _paintingKey,
+                      size: Size.infinite,
+                      painter: EraserPainter(
+                        backgroundImage: _backgroundImage,
+                        drawingActions: _drawingActions,
+                      ),
+                    ),
+                  )
+                      : const Center(child: CircularProgressIndicator(color: Colors.white)),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.check),
-                  onPressed: _applyChanges,
-                  color: Colors.white,
-                ),
+                _buildToolbar(theme, appLocalizations),
               ],
             ),
-            Expanded(
-              child: _isInitialized
-                  ? GestureDetector(
-                      onPanStart: _handlePanStart,
-                      onPanUpdate: _handlePanUpdate,
-                      child: CustomPaint(
-                        key: _paintingKey,
-                        size: Size.infinite,
-                        painter: DrawingPainter(
-                          backgroundImage: _backgroundImage,
-                          drawingActions: _drawingActions,
-                        ),
-                      ),
-                    )
-                  : const Center(child: CircularProgressIndicator()),
-            ),
-            // Панель инструментов для рисования
-            Container(
-              height: 70,
-              color: Colors.black.withOpacity(0.7),
-              child: Column(
-                children: [
-                  _buildToolButton(
-                    icon: FluentIcons.eraser_20_filled,
-                    label: appLocalizations?.eraser ?? 'Eraser',
-                    isActive: _isErasing,
-                    onPressed: () => setState(() => _isErasing = true),
-                  ),
-                  // Слайдер для размера
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(children: [
-                      const Text('Size:',
-                          style: TextStyle(color: Colors.white)),
-                      Expanded(
-                        child: Slider(
-                          value: _currentStrokeWidth,
-                          min: 5,
-                          max: 50,
-                          divisions: 9,
-                          onChanged: _changeStrokeWidth,
-                          activeColor: theme.primaryColor,
-                          inactiveColor: theme.disabledColor,
-                        ),
-                      ),
-                    ]),
-                  ),
-                ],
+            if (_isProcessing)
+              Container(
+                color: Colors.black.withOpacity(0.5),
+                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
               ),
-            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAppBar(ThemeData theme, AppLocalizations? appLocalizations) {
+    return AppBar(
+      backgroundColor: Colors.black.withOpacity(0.7),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: widget.onCancel,
+        tooltip: appLocalizations?.cancel ?? 'Cancel',
+      ),
+      title: Text(
+        appLocalizations?.eraser ?? 'Eraser',
+        style: const TextStyle(color: Colors.white),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.undo, color: Colors.white),
+          onPressed: _undoStack.isEmpty ? null : _undo,
+          tooltip: appLocalizations?.undo ?? 'Undo',
+        ),
+        IconButton(
+          icon: const Icon(Icons.check, color: Colors.white),
+          onPressed: _isProcessing ? null : _applyChanges,
+          tooltip: appLocalizations?.apply ?? 'Apply',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToolbar(ThemeData theme, AppLocalizations? appLocalizations) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, spreadRadius: 1),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildToolButton(
+                icon: FluentIcons.eraser_20_filled,
+                label: appLocalizations?.eraser ?? 'Eraser',
+                isActive: true,
+                onPressed: () {},
+              ),
+              _buildToolButton(
+                icon: Icons.delete_sweep,
+                label: appLocalizations?.clearAll ?? 'Clear All',
+                isActive: false,
+                onPressed: _drawingActions.isEmpty ? null : _clearAll,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                appLocalizations?.size ?? 'Size:',
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Slider(
+                  value: _currentStrokeWidth,
+                  min: 5,
+                  max: 50,
+                  divisions: 9,
+                  activeColor: theme.primaryColor,
+                  inactiveColor: theme.disabledColor,
+                  label: _currentStrokeWidth.round().toString(),
+                  onChanged: _changeStrokeWidth,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -201,7 +266,7 @@ class _EraserPanelState extends State<EraserPanel> {
     required IconData icon,
     required String label,
     required bool isActive,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
   }) {
     final theme = Theme.of(context);
 
@@ -221,9 +286,7 @@ class _EraserPanelState extends State<EraserPanel> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: isActive
-                        ? theme.primaryColor.withOpacity(0.2)
-                        : Colors.transparent,
+                    color: isActive ? theme.primaryColor.withOpacity(0.2) : Colors.transparent,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isActive ? theme.primaryColor : Colors.transparent,
@@ -232,8 +295,7 @@ class _EraserPanelState extends State<EraserPanel> {
                   child: Center(
                     child: Icon(
                       icon,
-                      color:
-                          isActive ? theme.primaryColor : theme.iconTheme.color,
+                      color: isActive ? theme.primaryColor : theme.iconTheme.color,
                       size: 24,
                     ),
                   ),
@@ -242,9 +304,7 @@ class _EraserPanelState extends State<EraserPanel> {
                 Text(
                   label,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: isActive
-                        ? theme.primaryColor
-                        : theme.textTheme.labelSmall?.color,
+                    color: isActive ? theme.primaryColor : theme.textTheme.labelSmall?.color,
                   ),
                 ),
               ],
@@ -256,11 +316,11 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 }
 
-class DrawingPainter extends CustomPainter {
+class EraserPainter extends CustomPainter {
   final ui.Image backgroundImage;
   final List<DrawingAction> drawingActions;
 
-  DrawingPainter({
+  EraserPainter({
     required this.backgroundImage,
     required this.drawingActions,
   });
@@ -276,17 +336,17 @@ class DrawingPainter extends CustomPainter {
       filterQuality: FilterQuality.high,
     );
 
-    // Draw all user actions
+    // Draw erasing actions
     for (final action in drawingActions) {
       final paint = Paint()
         ..strokeWidth = action.strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke
-        ..blendMode = action.isErasing ? BlendMode.clear : BlendMode.srcOver;
+        ..blendMode = BlendMode.clear;
 
       if (action.points.length == 1) {
-        // Draw a single point if there's only one point
+        // Draw a single point
         canvas.drawCircle(
           action.points.first,
           action.strokeWidth / 2,
@@ -306,13 +366,11 @@ class DrawingPainter extends CustomPainter {
 }
 
 class DrawingAction {
-  List<Offset> points;
-  double strokeWidth;
-  bool isErasing;
+  final List<Offset> points;
+  final double strokeWidth;
 
   DrawingAction({
     required this.points,
     required this.strokeWidth,
-    required this.isErasing,
   });
 }
