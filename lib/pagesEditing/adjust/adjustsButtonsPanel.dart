@@ -1,20 +1,22 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'package:flutter/foundation.dart';
 import '../../themeWidjets/sliderAdjusts.dart';
 
 class AdjustPanel extends StatefulWidget {
   final Uint8List originalImage;
   final Function(Uint8List) onImageChanged;
   final VoidCallback onClose;
+  final Function(Uint8List, {String action, String operationType, Map<String, dynamic> parameters})? onUpdateImage;
 
   const AdjustPanel({
     required this.originalImage,
     required this.onImageChanged,
     required this.onClose,
+    this.onUpdateImage,
     super.key,
   });
 
@@ -24,9 +26,9 @@ class AdjustPanel extends StatefulWidget {
 
 class _AdjustPanelState extends State<AdjustPanel> {
   late img.Image _originalImage;
+  img.Image? _cachedImage;
   double _brightnessValue = 0.0;
   double _contrastValue = 0.0;
-  double _exposureValue = 0.0;
   double _saturationValue = 0.0;
   double _warmthValue = 0.0;
   double _noiseValue = 0.0;
@@ -34,6 +36,7 @@ class _AdjustPanelState extends State<AdjustPanel> {
 
   Timer? _debounceTimer;
   bool _isProcessing = false;
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -41,49 +44,88 @@ class _AdjustPanelState extends State<AdjustPanel> {
     _initializeImage();
   }
 
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _initializeImage() async {
     try {
       final image = img.decodeImage(widget.originalImage);
       if (image == null) throw Exception('Failed to decode image');
-      _originalImage = img.copyResize(image, width: image.width);
+      // Downscale for faster previews
+      final resized = img.copyResize(image, width: 512, interpolation: img.Interpolation.linear);
+      setState(() {
+        _originalImage = resized;
+        _cachedImage = resized;
+        _isInitialized = true;
+      });
+      widget.onImageChanged(widget.originalImage); // Set initial image
     } catch (e) {
-      debugPrint('Error initializing image: $e');
+      debugPrint('Error initializing image: $e, stack: ${StackTrace.current}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load image: $e')),
+        );
+        widget.onClose();
+      }
+    }
+  }
+
+  Future<void> _updateImage(
+      Uint8List newImage, {
+        required String action,
+        required String operationType,
+        required Map<String, dynamic> parameters,
+      }) async {
+    try {
+      await widget.onUpdateImage?.call(
+        newImage,
+        action: action,
+        operationType: operationType,
+        parameters: parameters,
+      );
+    } catch (e) {
+      debugPrint('Error updating image: $e, stack: ${StackTrace.current}');
     }
   }
 
   static img.Image _applyAllAdjustments(Map<String, dynamic> params) {
     img.Image image = params['image'];
-    double brightness = params['brightness'] / 100.0;
-    double contrast = params['contrast'] / 100.0;
-    double exposure = params['exposure'] / 100.0;
-    double saturation = params['saturation'] / 100.0;
-    double noise = params['noise'] / 100.0;
-    double smooth = params['smooth'] / 100.0;
-    double warmth = params['warmth'] / 100.0;
+    final brightness = params['brightness'].clamp(-100.0, 100.0) / 100.0;
+    final contrast = (1.0 + params['contrast'].clamp(-100.0, 100.0) / 100.0).clamp(0.1, 3.0);
+    final saturation = (1.0 + params['saturation'].clamp(-100.0, 100.0) / 100.0).clamp(0.0, 3.0);
+    final warmth = params['warmth'].clamp(-100.0, 100.0) / 100.0;
+    final noise = params['noise'].clamp(0.0, 100.0) / 100.0;
+    final smooth = params['smooth'].clamp(0.0, 100.0) / 100.0;
 
-    // Применяем все корректировки
-    image = img.adjustColor(image,
-      brightness: brightness,
-      contrast: contrast,
-      exposure: exposure,
-      saturation: saturation,
-    );
-
-    // Применяем теплоту (имитация изменения температуры)
-    if (warmth > 0) {
-      image = img.colorOffset(image, red: 1.0 + warmth*0.5, blue: 1.0 - warmth*0.3);
-    } else if (warmth < 0) {
-      image = img.colorOffset(image, red: 1.0 + warmth*0.3, blue: 1.0 - warmth*0.5);
+    // Apply adjustments in a fixed order
+    if (brightness != 0 || contrast != 1.0 || saturation != 1.0) {
+      image = img.adjustColor(
+        image,
+        brightness: (brightness * 100).toInt(),
+        contrast: contrast,
+        saturation: saturation,
+      );
     }
 
-    // Применяем шум
-    if (noise > 0) {
-      img.noise(image, noise * 100, type: img.NoiseType.gaussian);
+    if (warmth != 0) {
+      // Perceptually balanced warmth adjustment
+      final warmthFactor = warmth * 0.3;
+      image = img.colorOffset(
+        image,
+        red: warmth > 0 ? (warmthFactor * 50).toInt() : 0,
+        blue: warmth < 0 ? (-warmthFactor * 50).toInt() : 0,
+      );
     }
 
-    // Применяем сглаживание (упрощенная реализация)
-    if (smooth > 0) {
-      image = img.smooth(image, weight: smooth);
+    if (noise > 0.01) {
+      image = img.noise(image, (noise * 30).toInt(), type: img.NoiseType.gaussian);
+    }
+
+    if (smooth > 0.01) {
+      image = img.gaussianBlur(image, radius: (smooth * 3).toInt());
     }
 
     return image;
@@ -91,30 +133,102 @@ class _AdjustPanelState extends State<AdjustPanel> {
 
   void _applyAdjustmentsDebounced() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 100), _applyAdjustments);
+    _debounceTimer = Timer(const Duration(milliseconds: 30), _applyAdjustments);
   }
 
-  void _applyAdjustments() async {
-    if (_isProcessing) return;
+  Future<void> _applyAdjustments() async {
+    if (_isProcessing || !_isInitialized) return;
+
+    final params = {
+      'brightness': _brightnessValue,
+      'contrast': _contrastValue,
+      'saturation': _saturationValue,
+      'warmth': _warmthValue,
+      'noise': _noiseValue,
+      'smooth': _smoothValue,
+    };
 
     setState(() => _isProcessing = true);
 
     try {
       final result = await compute(_applyAllAdjustments, {
-        'image': img.Image.from(_originalImage),
+        'image': _originalImage, // Always start from original for consistency
         'brightness': _brightnessValue,
         'contrast': _contrastValue,
-        'exposure': _exposureValue,
         'saturation': _saturationValue,
         'warmth': _warmthValue,
         'noise': _noiseValue,
         'smooth': _smoothValue,
       });
 
-      final adjustedBytes = img.encodePng(result);
+      // Use JPG for previews, PNG for final output
+      final adjustedBytes = img.encodeJpg(result, quality: 85);
+      setState(() {
+        _cachedImage = result;
+      });
+
+      await _updateImage(
+        adjustedBytes,
+        action: 'Adjusted image',
+        operationType: 'adjustments',
+        parameters: params,
+      );
+
       widget.onImageChanged(adjustedBytes);
     } catch (e) {
-      debugPrint('Error applying adjustments: $e');
+      debugPrint('Error applying adjustments: $e, stack: ${StackTrace.current}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to apply adjustments: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _applyFinalAdjustments() async {
+    if (_isProcessing || !_isInitialized) return;
+
+    setState(() => _isProcessing = true);
+
+    try {
+      final result = await compute(_applyAllAdjustments, {
+        'image': img.decodeImage(widget.originalImage)!, // Use full-res original
+        'brightness': _brightnessValue,
+        'contrast': _contrastValue,
+        'saturation': _saturationValue,
+        'warmth': _warmthValue,
+        'noise': _noiseValue,
+        'smooth': _smoothValue,
+      });
+
+      // Use PNG for final output
+      final finalBytes = img.encodePng(result);
+      await _updateImage(
+        finalBytes,
+        action: 'Final adjusted image',
+        operationType: 'adjustments',
+        parameters: {
+          'brightness': _brightnessValue,
+          'contrast': _contrastValue,
+          'saturation': _saturationValue,
+          'warmth': _warmthValue,
+          'noise': _noiseValue,
+          'smooth': _smoothValue,
+        },
+      );
+
+      widget.onImageChanged(finalBytes);
+    } catch (e) {
+      debugPrint('Error applying final adjustments: $e, stack: ${StackTrace.current}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save adjustments: $e')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isProcessing = false);
@@ -123,18 +237,36 @@ class _AdjustPanelState extends State<AdjustPanel> {
   }
 
   void _resetAllAdjustments() {
-    _debounceTimer?.cancel();
-    setState(() {
-      _brightnessValue = 0.0;
-      _contrastValue = 0.0;
-      _exposureValue = 0.0;
-      _saturationValue = 0.0;
-      _warmthValue = 0.0;
-      _noiseValue = 0.0;
-      _smoothValue = 0.0;
-      _isProcessing = false;
-    });
-    widget.onImageChanged(widget.originalImage);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppLocalizations.of(context)?.reset ?? 'Reset Adjustments'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AppLocalizations.of(context)?.cancel ?? 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _debounceTimer?.cancel();
+              setState(() {
+                _brightnessValue = 0.0;
+                _contrastValue = 0.0;
+                _saturationValue = 0.0;
+                _warmthValue = 0.0;
+                _noiseValue = 0.0;
+                _smoothValue = 0.0;
+                _isProcessing = false;
+                _cachedImage = _originalImage;
+              });
+              widget.onImageChanged(widget.originalImage);
+              Navigator.pop(context);
+            },
+            child: Text(AppLocalizations.of(context)?.reset ?? 'Reset'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -142,15 +274,17 @@ class _AdjustPanelState extends State<AdjustPanel> {
     final appLocalizations = AppLocalizations.of(context);
     final theme = Theme.of(context);
 
-    return Positioned(
-        bottom: -30,
-        left: 0,
-        right: 0,
-        child: Material(
+    return Stack(
+      children: [
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Material(
             color: Colors.transparent,
             child: Container(
               decoration: BoxDecoration(
-                color: const Color.fromARGB(139, 0, 0, 0),
+                color: const Color.fromARGB(200, 0, 0, 0),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 boxShadow: [
                   BoxShadow(
@@ -164,149 +298,167 @@ class _AdjustPanelState extends State<AdjustPanel> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                // Заголовок и кнопки управления
-                Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    appLocalizations?.adjust ?? 'Регулировки',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                    ),
-                  ),
+                  // Header
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.refresh),
-                        onPressed: _resetAllAdjustments,
-                        tooltip: appLocalizations?.reset ?? 'Сброс',
-                        color: Colors.white,
+                      Text(
+                        appLocalizations?.adjust ?? 'Adjust',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: widget.onClose,
-                        color: Colors.white,
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            onPressed: _resetAllAdjustments,
+                            tooltip: appLocalizations?.reset ?? 'Reset',
+                            color: Colors.white,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.check),
+                            onPressed: _isProcessing ? null : _applyFinalAdjustments,
+                            tooltip: appLocalizations?.apply ?? 'Apply',
+                            color: Colors.white,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: widget.onClose,
+                            tooltip: appLocalizations?.exit ?? 'Close',
+                            color: Colors.white,
+                          ),
+                        ],
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Sliders in ListView
+                  SizedBox(
+                    height: 140,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _buildSlider(
+                          icon: Icons.brightness_4,
+                          label: appLocalizations?.brightness ?? 'Brightness',
+                          value: _brightnessValue,
+                          onChanged: (value) {
+                            setState(() => _brightnessValue = value);
+                            _applyAdjustmentsDebounced();
+                          },
+                        ),
+                        _buildSlider(
+                          icon: Icons.contrast,
+                          label: appLocalizations?.contrast ?? 'Contrast',
+                          value: _contrastValue,
+                          onChanged: (value) {
+                            setState(() => _contrastValue = value);
+                            _applyAdjustmentsDebounced();
+                          },
+                        ),
+                        _buildSlider(
+                          icon: Icons.gradient,
+                          label: appLocalizations?.saturation ?? 'Saturation',
+                          value: _saturationValue,
+                          onChanged: (value) {
+                            setState(() => _saturationValue = value);
+                            _applyAdjustmentsDebounced();
+                          },
+                        ),
+                        _buildSlider(
+                          icon: Icons.thermostat,
+                          label: appLocalizations?.warmth ?? 'Warmth',
+                          value: _warmthValue,
+                          onChanged: (value) {
+                            setState(() => _warmthValue = value);
+                            _applyAdjustmentsDebounced();
+                          },
+                        ),
+                        _buildSlider(
+                          icon: Icons.grain,
+                          label: appLocalizations?.noise ?? 'Noise',
+                          value: _noiseValue,
+                          min: 0,
+                          max: 50,
+                          onChanged: (value) {
+                            setState(() => _noiseValue = value);
+                            _applyAdjustmentsDebounced();
+                          },
+                        ),
+                        _buildSlider(
+                          icon: Icons.blur_on,
+                          label: appLocalizations?.smooth ?? 'Smooth',
+                          value: _smoothValue,
+                          min: 0,
+                          max: 50,
+                          onChanged: (value) {
+                            setState(() => _smoothValue = value);
+                            _applyAdjustmentsDebounced();
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-
-              const SizedBox(height: 8),
-
-              // Слайдеры регулировок
-              Container(
-                height: 100,
-                child: PageView(
-                  children: [
-                    // Яркость
-                    SliderRow(
-                      icon: Icons.brightness_4,
-                      value: _brightnessValue,
-                      min: -100,
-                      max: 100,
-                      label: '${_brightnessValue.round()}',
-                      onChanged: (value) {
-                        setState(() => _brightnessValue = value);
-                        _applyAdjustmentsDebounced();
-                      },
-                      divisions: 1,
-                      isProcessing: true,
-                    ),
-
-                    // Контраст
-                    SliderRow(
-                      icon: Icons.contrast,
-                      value: _contrastValue,
-                      min: -100,
-                      max: 100,
-                      label: '${_contrastValue.round()}',
-                      onChanged: (value) {
-                        setState(() => _contrastValue = value);
-                        _applyAdjustmentsDebounced();
-                      },
-                      divisions: 1,
-                      isProcessing: true,
-                    ),
-
-                    // Экспозиция
-                    SliderRow(
-                      icon: Icons.exposure,
-                      value: _exposureValue,
-                      min: -100,
-                      max: 100,
-                      label: '${_exposureValue.round()}',
-                      onChanged: (value) {
-                        setState(() => _exposureValue = value);
-                        _applyAdjustmentsDebounced();
-                      },
-                      divisions: 1,
-                      isProcessing: true,
-                    ),
-
-                    // Насыщенность
-                    SliderRow(
-                      icon: Icons.gradient,
-                      value: _saturationValue,
-                      min: -100,
-                      max: 100,
-                      label: '${_saturationValue.round()}',
-                      onChanged: (value) {
-                        setState(() => _saturationValue = value);
-                        _applyAdjustmentsDebounced();
-                      },
-                      divisions: 1,
-                      isProcessing: true,
-                    ),
-
-                    // Теплота
-                    SliderRow(
-                      icon: Icons.thermostat,
-                      value: _warmthValue,
-                      min: -100,
-                      max: 100,
-                      label: '${_warmthValue.round()}',
-                      onChanged: (value) {
-                        setState(() => _warmthValue = value);
-                        _applyAdjustmentsDebounced();
-                      },
-                      divisions: 1,
-                      isProcessing: true,
-                    ),
-
-                      // Зернистость
-                      SliderRow(
-                        icon: Icons.grain,
-                        value: _noiseValue,
-                        min: 0,
-                        max: 100,
-                        label: '${_noiseValue.round()}',
-                        onChanged: (value) {
-                          setState(() => _noiseValue = value);
-                          _applyAdjustmentsDebounced();
-                        },divisions: 1, isProcessing: true,
-                      ),
-
-                      // Сглаживание
-                      SliderRow(
-                        icon: Icons.blur_on,
-                        value: _smoothValue,
-                        min: 0,
-                        max: 100,
-                        label: '${_smoothValue.round()}',
-                        onChanged: (value) {
-                          setState(() => _smoothValue = value);
-                          _applyAdjustmentsDebounced();
-                        },divisions: 1, isProcessing: true,
-                      ),
-                    ],
-                  ),
-                ),
-              if (_isProcessing)
-                const LinearProgressIndicator(),
-            ],
+            ),
           ),
         ),
+        if (_isProcessing)
+          Container(
+            color: Colors.black.withOpacity(0.5),
+            child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSlider({
+    required IconData icon,
+    required String label,
+    required double value,
+    double min = -100,
+    double max = 100,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Container(
+      width: 160,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ],
+              ),
+              Text(
+                value.round().toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+          ),
+          Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: 400,
+            label: value.round().toString(),
+            onChanged: _isProcessing ? null : onChanged,
+            activeColor: Colors.blue,
+            inactiveColor: Colors.grey,
+          ),
+        ],
       ),
     );
   }

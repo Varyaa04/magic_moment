@@ -23,15 +23,28 @@ class _StartPageState extends State<StartPage> {
 
   // Функция выбора изображений для коллажа
   Future<void> getImages() async {
-    final appLocalizations = AppLocalizations.of(context)!;
+    final appLocalizations = AppLocalizations.of(context);
 
     // Запрос разрешений
-    if (!kIsWeb && await Permission.photos.request().isDenied) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(appLocalizations.permissionDenied)),
-      );
-      return;
+    if (!kIsWeb) {
+      final permission = await Permission.photos.request();
+      if (permission.isDenied || permission.isPermanentlyDenied) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(appLocalizations?.permissionDeniedTitle ?? 'Permission Denied'),
+            content: Text(appLocalizations?.permissionDenied ?? 'Please grant photo access to select images.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(appLocalizations?.ok ?? 'OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
     }
 
     try {
@@ -41,12 +54,60 @@ class _StartPageState extends State<StartPage> {
         maxWidth: 1000,
       );
 
-      if (pickedFiles == null || pickedFiles.isEmpty) {
+      if (pickedFiles.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appLocalizations.selectedNon)),
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(appLocalizations?.errorTitle ?? 'Error'),
+            content: Text(appLocalizations?.selectedNon ?? 'No images selected.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(appLocalizations?.ok ?? 'OK'),
+              ),
+            ],
+          ),
         );
         return;
+      }
+
+      // Проверяем количество выбранных изображений
+      if (pickedFiles.length < 2) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(appLocalizations?.errorTitle ?? 'Error'),
+            content: Text(appLocalizations?.tooFewImages ?? 'Please select at least 2 images for a collage.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(appLocalizations?.ok ?? 'OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      if (pickedFiles.length > 6) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(appLocalizations?.errorTitle ?? 'Error'),
+            content: Text(
+              appLocalizations?.tooManyImages ?? 'You selected more than 6 images. Only the first 6 will be used.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(appLocalizations?.ok ?? 'OK'),
+              ),
+            ],
+          ),
+        );
       }
 
       // Очищаем предыдущий выбор
@@ -54,18 +115,25 @@ class _StartPageState extends State<StartPage> {
 
       // Берем максимум 6 изображений
       for (final file in pickedFiles.take(6)) {
-        selectedImages.add(File(file.path));
-      }
-
-      // Проверяем что файлы существуют
-      for (final file in selectedImages) {
-        if (!await file.exists()) {
+        final imageFile = File(file.path);
+        if (!kIsWeb && !await imageFile.exists()) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('File ${file.path} not found')),
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(appLocalizations?.errorTitle ?? 'Error'),
+              content: Text('File ${file.path} not found.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(appLocalizations?.ok ?? 'OK'),
+                ),
+              ],
+            ),
           );
           return;
         }
+        selectedImages.add(imageFile);
       }
 
       if (!mounted) return;
@@ -75,70 +143,123 @@ class _StartPageState extends State<StartPage> {
           builder: (context) => CollagePage(images: selectedImages),
         ),
       );
-
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(appLocalizations?.errorTitle ?? 'Error'),
+          content: Text('${appLocalizations?.error ?? 'An error occurred'}: $e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(appLocalizations?.ok ?? 'OK'),
+            ),
+          ],
+        ),
       );
     }
   }
+
   // Функция для выбора фото из галереи или камеры
   Future<void> _pickImage(ImageSource source) async {
     try {
       final image = await picker.pickImage(source: source);
-      if (image != null) {
-        if (kIsWeb) {
-          final bytes = await image.readAsBytes();
+      if (image == null) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(AppLocalizations.of(context)?.errorTitle ?? 'Error'),
+            content: Text(AppLocalizations.of(context)?.selectedNon ?? 'No image selected.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(AppLocalizations.of(context)?.ok ?? 'OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes();
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EditPage(imageBytes: bytes, imageId: DateTime.now().microsecondsSinceEpoch,),
+          ),
+        );
+      } else {
+        final file = File(image.path);
+        if (!await file.exists()) {
           if (!mounted) return;
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EditPage(imageBytes: bytes),
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(AppLocalizations.of(context)?.errorTitle ?? 'Error'),
+              content: Text('File ${file.path} not found.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(AppLocalizations.of(context)?.ok ?? 'OK'),
+                ),
+              ],
             ),
           );
-        } else {
-          final file = File(image.path);
-          if (!mounted) return;
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EditPage(imageBytes: file),
-            ),
-          );
+          return;
         }
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EditPage(imageBytes: file,imageId: DateTime.now().microsecondsSinceEpoch,),
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${AppLocalizations.of(context)!.error}: $e')),
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(AppLocalizations.of(context)?.errorTitle ?? 'Error'),
+          content: Text('${AppLocalizations.of(context)?.error ?? 'An error occurred'}: $e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(AppLocalizations.of(context)?.ok ?? 'OK'),
+            ),
+          ],
+        ),
       );
     }
   }
 
   // Диалог выбора источника изображения
   void _showImageSourceDialog() {
-    final appLocalizations = AppLocalizations.of(context)!;
+    final appLocalizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(appLocalizations.choose),
-          content: Text(appLocalizations.from),
+          title: Text(appLocalizations?.choose ?? 'Choose Image Source'),
+          content: Text(appLocalizations?.from ?? 'Select an image from:'),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.camera);
               },
-              child: Text(appLocalizations.camera),
+              child: Text(appLocalizations?.camera ?? 'Camera'),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.gallery);
               },
-              child: Text(appLocalizations.gallery),
+              child: Text(appLocalizations?.gallery ?? 'Gallery'),
             ),
           ],
         );
@@ -148,7 +269,7 @@ class _StartPageState extends State<StartPage> {
 
   @override
   Widget build(BuildContext context) {
-    final appLocalizations = AppLocalizations.of(context)!;
+    final appLocalizations = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -189,7 +310,7 @@ class _StartPageState extends State<StartPage> {
                       },
                       icon: const Icon(Icons.settings),
                       color: colorScheme.onSecondary,
-                      tooltip: appLocalizations.settings,
+                      tooltip: appLocalizations?.settings ?? 'Settings',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -213,7 +334,7 @@ class _StartPageState extends State<StartPage> {
                           width: 200,
                           padding: const EdgeInsets.all(10),
                           child: Text(
-                            appLocalizations.challengeText,
+                            appLocalizations?.challengeText ?? 'Create amazing moments!',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 13,
@@ -233,14 +354,14 @@ class _StartPageState extends State<StartPage> {
                       children: [
                         CustomButton(
                           onPressed: _showImageSourceDialog,
-                          text: appLocalizations.change,
+                          text: appLocalizations?.change ?? 'Edit Photo',
                           icon: FluentIcons.image_24_regular,
                         ),
                         const SizedBox(height: 10),
                         CustomButton(
                           onPressed: getImages,
-                          text: appLocalizations.create,
-                          secondaryText: appLocalizations.collage,
+                          text: appLocalizations?.create ?? 'Create',
+                          secondaryText: appLocalizations?.collage ?? 'Collage',
                           icon: FluentIcons.layout_column_two_split_left_24_regular,
                         ),
                       ],

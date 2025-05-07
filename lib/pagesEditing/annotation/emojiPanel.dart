@@ -9,11 +9,13 @@ class EmojiPanel extends StatefulWidget {
   final Uint8List image;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
+  final onUpdateImage;
 
   const EmojiPanel({
     required this.image,
     required this.onCancel,
     required this.onApply,
+    required this.onUpdateImage,
     super.key,
   });
 
@@ -22,57 +24,68 @@ class EmojiPanel extends StatefulWidget {
 }
 
 class _EmojiPanelState extends State<EmojiPanel> {
-  final Map<String, List<String>> _stickerCategories = {
+  final Map<String, List<StickerData>> _stickerCategories = {
     'Fun': [
-      'assets/stickers/fun1.png',
-      'assets/stickers/fun2.png',
-      'assets/stickers/fun3.png',
-      'assets/stickers/fun4.png',
-      'assets/stickers/fun5.png',
+      StickerData(path: 'lib/assets/stickers/fun1.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/fun2.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/fun3.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/fun4.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/fun5.png', isAsset: true),
     ],
     'Animals': [
-      'assets/stickers/animals1.png',
-      'assets/stickers/animals2.png',
-      'assets/stickers/animals3.png',
-      'assets/stickers/animals4.png',
-      'assets/stickers/animals5.png',
-      'assets/stickers/animals6.png',
-      'assets/stickers/animals7.png',
-      'assets/stickers/animals8.png',
+      StickerData(path: 'lib/assets/stickers/animals1.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/animals2.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/animals3.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/animals4.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/animals5.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/animals6.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/animals7.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/animals8.png', isAsset: true),
     ],
     'Birthday': [
-      'assets/stickers/birthday1.png',
-      'assets/stickers/birthday2.png',
-      'assets/stickers/birthday3.png',
-      'assets/stickers/birthday4.png',
-      'assets/stickers/birthday5.png',
-      'assets/stickers/birthday6.png',
-      'assets/stickers/birthday7.png',
+      StickerData(path: 'lib/assets/stickers/birthday1.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/birthday2.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/birthday3.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/birthday4.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/birthday5.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/birthday6.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/birthday7.png', isAsset: true),
     ],
     'Nature': [
-      'assets/stickers/nature1.png',
-      'assets/stickers/nature2.png',
-      'assets/stickers/nature3.png',
-      'assets/stickers/nature4.png',
-      'assets/stickers/nature5.png',
-      'assets/stickers/nature6.png',
-      'assets/stickers/nature7.png',
+      StickerData(path: 'lib/assets/stickers/nature1.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/nature2.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/nature3.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/nature4.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/nature5.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/nature6.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/nature7.png', isAsset: true),
     ],
     'Christmas': [
-      'assets/stickers/ch1.png',
-      'assets/stickers/ch2.png',
-      'assets/stickers/ch3.png',
-      'assets/stickers/ch4.png',
-      'assets/stickers/ch5.png',
-      'assets/stickers/ch6.png',
-      'assets/stickers/ch7.png',
-      'assets/stickers/ch8.png',
-      'assets/stickers/ch9.png',
-      'assets/stickers/ch10.png',
-      'assets/stickers/ch11.png',
+      StickerData(path: 'lib/assets/stickers/ch1.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch2.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch3.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch4.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch5.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch6.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch7.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch8.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch9.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch10.png', isAsset: true),
+      StickerData(path: 'lib/assets/stickers/ch11.png', isAsset: true),
     ],
     'Custom': [],
   };
+
+  Future<void> _updateImage(
+      Uint8List newImage, {
+        required String action,
+        required String operationType,
+        required Map<String, dynamic> parameters,
+      }) async {
+    if (widget.onUpdateImage != null) {
+      await widget.onUpdateImage!(newImage, action: action, operationType: operationType, parameters: parameters);
+    }
+  }
 
   String _selectedCategory = 'Fun';
   final List<StickerData> _addedStickers = [];
@@ -140,26 +153,27 @@ class _EmojiPanelState extends State<EmojiPanel> {
             sticker.position += details.delta;
           });
         },
-        onTap: () {
-          // Optional: Add selection logic if needed
-        },
+        onTap: () {},
         child: sticker.isAsset
             ? Image.asset(
           sticker.path,
           width: sticker.size,
           height: sticker.size,
           fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('Error loading asset sticker: ${sticker.path}, $error');
+            return const Icon(Icons.error, color: Colors.red, size: 50);
+          },
         )
             : Image.memory(
           sticker.bytes!,
           width: sticker.size,
           height: sticker.size,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const Icon(
-            Icons.error,
-            color: Colors.red,
-            size: 50,
-          ),
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('Error loading gallery sticker: ${sticker.path}, $error');
+            return const Icon(Icons.error, color: Colors.red, size: 50);
+          },
         ),
       ),
     );
@@ -260,15 +274,17 @@ class _EmojiPanelState extends State<EmojiPanel> {
               ),
             );
           }
-          final stickerPath = stickers[_selectedCategory == 'Custom' ? index - 1 : index];
+          final adjustedIndex = _selectedCategory == 'Custom' ? index - 1 : index;
+          final sticker = stickers[adjustedIndex];
           return GestureDetector(
             onTap: () {
               setState(() {
                 _addedStickers.add(StickerData(
-                  path: stickerPath,
+                  path: sticker.path,
+                  bytes: sticker.bytes,
                   position: const Offset(100, 100),
                   size: _stickerSize,
-                  isAsset: true,
+                  isAsset: sticker.isAsset,
                 ));
               });
             },
@@ -277,14 +293,22 @@ class _EmojiPanelState extends State<EmojiPanel> {
                 color: Colors.grey[900],
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Image.asset(
-                stickerPath,
+              child: sticker.isAsset
+                  ? Image.asset(
+                sticker.path,
                 fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.error,
-                  color: Colors.red,
-                  size: 30,
-                ),
+                errorBuilder: (context, error, stackTrace) {
+                  debugPrint('Error loading asset sticker in grid: ${sticker.path}, $error');
+                  return const Icon(Icons.error, color: Colors.red, size: 30);
+                },
+              )
+                  : Image.memory(
+                sticker.bytes!,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  debugPrint('Error loading gallery sticker in grid: ${sticker.path}, $error');
+                  return const Icon(Icons.error, color: Colors.red, size: 30);
+                },
               ),
             ),
           );
@@ -298,10 +322,18 @@ class _EmojiPanelState extends State<EmojiPanel> {
       final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
       if (pickedFile != null) {
         final bytes = await pickedFile.readAsBytes();
+        if (bytes.isEmpty) {
+          throw Exception('Empty image bytes');
+        }
+        final sticker = StickerData(
+          path: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+          bytes: bytes,
+          isAsset: false,
+        );
         setState(() {
-          _stickerCategories['Custom']!.add(pickedFile.path);
+          _stickerCategories['Custom']!.add(sticker);
           _addedStickers.add(StickerData(
-            path: pickedFile.path,
+            path: sticker.path,
             bytes: bytes,
             position: const Offset(100, 100),
             size: _stickerSize,
@@ -314,7 +346,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
       debugPrint('Error picking image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load image from gallery')),
+          SnackBar(content: Text('Failed to load image: $e')),
         );
       }
     }
@@ -324,27 +356,42 @@ class _EmojiPanelState extends State<EmojiPanel> {
     try {
       final RenderRepaintBoundary? boundary =
       _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-
       if (boundary == null) {
-        throw Exception('Could not find render boundary');
+        throw Exception('RenderRepaintBoundary not found. Ensure the widget is rendered.');
       }
 
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-
       if (byteData == null) {
-        throw Exception('Failed to convert image to bytes');
+        throw Exception('Failed to convert image to byte data.');
       }
 
       final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      await _updateImage(
+        pngBytes,
+        action: 'Added stickers',
+        operationType: 'stickers',
+        parameters: {
+          'stickers_count': _addedStickers.length,
+          'category': _selectedCategory,
+        },
+      );
+
       widget.onApply(pngBytes);
-    } catch (e) {
-      debugPrint('Error capturing image: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Error capturing image: $e\nStackTrace: $stackTrace');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save image: ${e.toString()}')),
+          SnackBar(
+            content: Text('Failed to save image: $e'),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
+    } finally {
+
     }
   }
 }
@@ -359,8 +406,8 @@ class StickerData {
   StickerData({
     required this.path,
     this.bytes,
-    required this.position,
-    required this.size,
+    this.position = const Offset(0, 0),
+    this.size = 100.0,
     required this.isAsset,
   });
 }

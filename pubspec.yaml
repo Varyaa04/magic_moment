@@ -14,9 +14,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
   sqflite: ^2.4.1
+  flutter_image_compress: ^1.1.0
+  device_info_plus: ^10.1.2
   permission_handler: ^11.4.0
   shared_preferences: ^2.5.2
-  image_collage_widget: ^1.0.6
   flutter_staggered_grid_view: ^0.7.0
   image_gallery_saver: ^2.0.3
   flutter_localizations:
@@ -25,10 +26,7 @@ dependencies:
   path_provider: ^2.0.11
   image_picker: ^1.1.2
   universal_html: ^2.2.4
-  image_filter_pro: ^0.1.11
   image_cropper:  ^9.1.0
-  pro_image_editor: ^6.2.1
-  flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3
@@ -46,11 +44,48 @@ flutter:
   assets:
     - lib/assets/icons/iconMM.webp
     - lib/assets/icons/photos.png
-    - lib/assets/stickers/
     - lib/assets/google_fonts/Oi-Regular.ttf
     - lib/assets/google_fonts/LilitaOne-Regular.ttf
     - lib/assets/google_fonts/PTSansNarrow-Regular.ttf
     - lib/assets/google_fonts/Comfortaa-VariableFont_wght.ttf
+    - lib/assets/stickers/fun1.png
+    - lib/assets/stickers/fun2.png
+    - lib/assets/stickers/fun3.png
+    - lib/assets/stickers/fun4.png
+    - lib/assets/stickers/fun5.png
+    - lib/assets/stickers/animals1.png
+    - lib/assets/stickers/animals2.png
+    - lib/assets/stickers/animals3.png
+    - lib/assets/stickers/animals4.png
+    - lib/assets/stickers/animals5.png
+    - lib/assets/stickers/animals6.png
+    - lib/assets/stickers/animals7.png
+    - lib/assets/stickers/animals8.png
+    - lib/assets/stickers/birthday1.png
+    - lib/assets/stickers/birthday2.png
+    - lib/assets/stickers/birthday3.png
+    - lib/assets/stickers/birthday4.png
+    - lib/assets/stickers/birthday5.png
+    - lib/assets/stickers/birthday6.png
+    - lib/assets/stickers/birthday7.png
+    - lib/assets/stickers/nature1.png
+    - lib/assets/stickers/nature2.png
+    - lib/assets/stickers/nature3.png
+    - lib/assets/stickers/nature4.png
+    - lib/assets/stickers/nature5.png
+    - lib/assets/stickers/nature6.png
+    - lib/assets/stickers/nature7.png
+    - lib/assets/stickers/ch1.png
+    - lib/assets/stickers/ch2.png
+    - lib/assets/stickers/ch3.png
+    - lib/assets/stickers/ch4.png
+    - lib/assets/stickers/ch5.png
+    - lib/assets/stickers/ch6.png
+    - lib/assets/stickers/ch7.png
+    - lib/assets/stickers/ch8.png
+    - lib/assets/stickers/ch9.png
+    - lib/assets/stickers/ch10.png
+    - lib/assets/stickers/ch11.png
 
   fonts:
     - family: Oi-Regular

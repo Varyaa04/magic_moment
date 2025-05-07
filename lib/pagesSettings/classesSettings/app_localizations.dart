@@ -85,7 +85,18 @@ class AppLocalizations {
       'permissionDenied' : 'Permission denied',
       'clearAll' : 'Clear all',
       'undo' : 'Undo',
-
+      'noImages' : 'No valid images provided',
+      'noTemplates' : 'No templates',
+      'previous' : 'Previous',
+      "errorTitle": "Error",
+      "tooFewImages": "Please select at least 2 images for a collage.",
+      "tooManyImages": "You selected more than 6 images. Only the first 6 will be used.",
+      "permissionDeniedTitle": "Permission Denied",
+      "ok": "OK",
+      "borderWidth": "Border Width",
+      "borderRadius": "Border Radius",
+      "borderColor": "Border Color",
+      "selectFormat": "Select format",
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -157,7 +168,19 @@ class AppLocalizations {
       'error' : 'Ошибка',
       'clearAll' : 'Убрать все',
       'permissionDenied' : 'Доступ запрещен',
-      'undo' : 'Назад'
+      'undo' : 'Назад',
+      'noImages' : 'Не предоставлено ни одного допустимого изображения.',
+      'noTemplates' : 'Нет шаблонов',
+      'previous' : 'Предыдущий',
+      "errorTitle": "Ошибка",
+      "tooFewImages": "Выберите как минимум 2 изображения для коллажа.",
+      "tooManyImages": "Вы выбрали более 6 изображений. Будут использованы только первые 6.",
+      "permissionDeniedTitle": "Доступ запрещен",
+      "ok": "ОК",
+      "borderWidth": "Толщина границы",
+      "borderRadius": "Радиус углов",
+      "borderColor": "Цвет границы",
+      "selectFormat": "Выберите формат",
     },
   };
 
@@ -240,6 +263,18 @@ class AppLocalizations {
   String get error => _localizedValues[locale.languageCode]!['error']!;
   String get undo => _localizedValues[locale.languageCode]!['undo']!;
   String get permissionDenied => _localizedValues[locale.languageCode]!['permissionDenied']!;
+  String get noImages => _localizedValues[locale.languageCode]!['noImages']!;
+  String get noTemplates => _localizedValues[locale.languageCode]!['noTemplates']!;
+  String get previous => _localizedValues[locale.languageCode]!['previous']!;
+  String get errorTitle => _localizedValues[locale.languageCode]!['errorTitle']!;
+  String get tooFewImages => _localizedValues[locale.languageCode]!['tooFewImages']!;
+  String get tooManyImages => _localizedValues[locale.languageCode]!['tooManyImages']!;
+  String get permissionDeniedTitle => _localizedValues[locale.languageCode]!['permissionDeniedTitle']!;
+  String get ok => _localizedValues[locale.languageCode]!['ok']!;
+  String get borderWidth => _localizedValues[locale.languageCode]!['borderWidth']!;
+  String get borderRadius => _localizedValues[locale.languageCode]!['borderRadius']!;
+  String get borderColor => _localizedValues[locale.languageCode]!['borderColor']!;
+  String get selectFormat => _localizedValues[locale.languageCode]!['selectFormat']!;
 }
 
 class _AppLocalizationsDelegate

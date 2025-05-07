@@ -92,6 +92,21 @@ class magicMomentDatabase {
     }
   }
 
+  Future<void> setImageFormat(String format) async {
+    final db = await database;
+    await db.insert(
+      'image_format',
+      {'format': format},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<String?> getImageFormat() async {
+    final db = await database;
+    final result = await db.query('image_format', limit: 1);
+    return result.isNotEmpty ? result.first['format'] as String? : null;
+  }
+
   Future<void> _onCreate(Database db, int version) async {
     // Таблица форматов изображений
     await db.execute('''
@@ -528,9 +543,8 @@ class CollageData {
 }
 
 class EditHistory {
-  int? historyId; // Убираем final
+  int? historyId;
   final int imageId;
-  final int? filterId;
   final String operationType;
   final Map<String, dynamic> operationParameters;
   final DateTime operationDate;
@@ -540,7 +554,6 @@ class EditHistory {
   EditHistory({
     this.historyId,
     required this.imageId,
-    this.filterId,
     required this.operationType,
     required this.operationParameters,
     required this.operationDate,
@@ -552,7 +565,6 @@ class EditHistory {
     return {
       'history_id': historyId,
       'image_id': imageId,
-      'filter_id': filterId,
       'operation_type': operationType,
       'operation_parameters': jsonEncode(operationParameters),
       'operation_date': operationDate.toIso8601String(),
@@ -565,7 +577,6 @@ class EditHistory {
     return EditHistory(
       historyId: map['history_id'],
       imageId: map['image_id'],
-      filterId: map['filter_id'],
       operationType: map['operation_type'],
       operationParameters: jsonDecode(map['operation_parameters']),
       operationDate: DateTime.parse(map['operation_date']),
@@ -573,4 +584,46 @@ class EditHistory {
       previousStateId: map['previous_state_id'],
     );
   }
+}
+
+Future<int> insertHistory(EditHistory history) async {
+  var database;
+  final db = await database;
+  return await db.insert('edit_history', history.toMap());
+}
+
+Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
+  var database;
+  final db = await database;
+  final List<Map<String, dynamic>> maps = await db.query(
+    'edit_history',
+    where: 'image_id = ?',
+    whereArgs: [imageId],
+    orderBy: 'operation_date ASC',
+  );
+  return List.generate(maps.length, (i) => EditHistory.fromMap(maps[i]));
+}
+
+Future<void> updateCurrentState(int imageId, int historyId, String? snapshotPath) async {
+  var database;
+  final db = await database;
+  await db.update(
+    'images',
+    {
+      'current_history_id': historyId,
+      'current_snapshot_path': snapshotPath,
+    },
+    where: 'image_id = ?',
+    whereArgs: [imageId],
+  );
+}
+
+Future<void> deleteHistory(int historyId) async {
+  var database;
+  final db = await database;
+  await db.delete(
+    'edit_history',
+    where: 'history_id = ?',
+    whereArgs: [historyId],
+  );
 }

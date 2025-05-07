@@ -27,6 +27,7 @@ class MyApp extends StatelessWidget {
     return Consumer2<LanguageProvider, ThemeProvider>(
       builder: (context, languageProvider, themeProvider, child) {
         return MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: ThemeData(
             colorScheme: ColorScheme.light(
               primary: Colors.pinkAccent,

@@ -9,11 +9,13 @@ class DrawPanel extends StatefulWidget {
   final Uint8List image;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
+  final onUpdateImage;
 
   const DrawPanel({
     required this.image,
     required this.onCancel,
     required this.onApply,
+    required this.onUpdateImage,
     super.key,
   });
 
@@ -47,14 +49,35 @@ class _DrawPanelState extends State<DrawPanel> {
     setState(() => _isInitialized = true);
   }
 
+  Future<void> _updateImage(
+      Uint8List newImage, {
+        required String action,
+        required String operationType,
+        required Map<String, dynamic> parameters,
+      }) async {
+    if (widget.onUpdateImage != null) {
+      await widget.onUpdateImage!(newImage, action: action, operationType: operationType, parameters: parameters);
+    }
+  }
+
+
   Future<void> _saveDrawing() async {
     try {
-      final RenderRepaintBoundary boundary =
-      _paintingKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final RenderRepaintBoundary boundary = _paintingKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      final ByteData? byteData =
-      await image.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+      await _updateImage(
+        pngBytes,
+        action: 'Applied drawing',
+        operationType: 'drawing',
+        parameters: {
+          'stroke_width': _currentStrokeWidth,
+          'actions_count': _drawingActions.length,
+        },
+      );
+
       widget.onApply(pngBytes);
     } catch (e) {
       debugPrint('Error saving image: $e');
@@ -63,6 +86,7 @@ class _DrawPanelState extends State<DrawPanel> {
       );
     }
   }
+
 
   void _undoLastAction() {
     if (_drawingActions.isNotEmpty) {

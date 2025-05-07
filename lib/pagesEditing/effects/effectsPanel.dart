@@ -1,8 +1,7 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:image/image.dart' as image;
+import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'effects_utils.dart';
 
@@ -10,11 +9,18 @@ class EffectsPanel extends StatefulWidget {
   final Uint8List image;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
+  final Future<void> Function(
+      Uint8List, {
+      required String action,
+      required String operationType,
+      required Map<String, dynamic> parameters,
+      })? onUpdateImage;
 
   const EffectsPanel({
     required this.image,
     required this.onCancel,
     required this.onApply,
+    this.onUpdateImage,
     super.key,
   });
 
@@ -29,6 +35,7 @@ class _EffectsPanelState extends State<EffectsPanel> {
   Effect? _selectedEffect;
   final GlobalKey _imageKey = GlobalKey();
   final Map<String, double> _effectParams = {};
+  DateTime _lastUpdate = DateTime.now();
 
   @override
   void initState() {
@@ -39,67 +46,116 @@ class _EffectsPanelState extends State<EffectsPanel> {
 
   Future<void> _initialize() async {
     try {
-      final image.Image decodedImage = await decodeImage(widget.image);
-      setState(() {
-        _isInitialized = true;
-        _selectedEffect = effects.first;
-        _effectParams.addAll(_selectedEffect!.defaultParams);
-      });
-    } catch (e) {
-      debugPrint('Error initializing image: $e');
+      debugPrint('Initializing EffectsPanel');
+      final img.Image decodedImage = await decodeImage(widget.image);
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+          _selectedEffect = effects.first;
+          _effectParams.addAll(_selectedEffect!.defaultParams);
+        });
+        await _applyEffect(_selectedEffect!, _effectParams, force: true);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error initializing image: $e\nStackTrace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid image format')),
+          SnackBar(content: Text('Invalid image format: $e')),
         );
         widget.onCancel();
       }
     }
   }
 
-  Future<void> _applyEffect(Effect effect, Map<String, double> params) async {
-    if (_isProcessing) return;
+  Future<void> _applyEffect(Effect effect, Map<String, double> params, {bool force = false}) async {
+    if (_isProcessing && !force) return;
+
+    final now = DateTime.now();
+    if (!force && now.difference(_lastUpdate).inMilliseconds < 100) return;
+    _lastUpdate = now;
 
     setState(() => _isProcessing = true);
     try {
-      final image.Image decodedImage = await decodeImage(widget.image);
-      final image.Image processedImage = await effect.apply(decodedImage, params);
+      debugPrint('Applying effect: ${effect.name}');
+      final img.Image decodedImage = await decodeImage(widget.image);
+      final img.Image processedImage = await effect.apply(decodedImage, params);
       final Uint8List processedBytes = await encodeImage(processedImage);
-      setState(() {
-        _currentImageBytes = processedBytes;
-        _selectedEffect = effect;
-        _effectParams.clear();
-        _effectParams.addAll(params);
-      });
-    } catch (e) {
-      debugPrint('Error applying effect: $e');
+      if (mounted) {
+        setState(() {
+          _currentImageBytes = processedBytes;
+          _selectedEffect = effect;
+          _effectParams.clear();
+          _effectParams.addAll(params);
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error applying effect ${effect.name}: $e\nStackTrace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to apply effect')),
+          SnackBar(content: Text('Failed to apply effect ${effect.name}: $e')),
         );
       }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _updateImage(
+      Uint8List newImage, {
+        required String action,
+        required String operationType,
+        required Map<String, dynamic> parameters,
+      }) async {
+    try {
+      debugPrint('Updating image with action: $action');
+      if (widget.onUpdateImage != null) {
+        await widget.onUpdateImage!(newImage, action: action, operationType: operationType, parameters: parameters);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error in onUpdateImage: $e\nStackTrace: $stackTrace');
+      rethrow;
     }
   }
 
   Future<void> _saveChanges() async {
-    if (_isProcessing) return;
+    if (_isProcessing || _selectedEffect == null) {
+      debugPrint('Save aborted: Processing=$_isProcessing, SelectedEffect=$_selectedEffect');
+      return;
+    }
 
     setState(() => _isProcessing = true);
     try {
-      final image.Image decodedImage = await decodeImage(widget.image);
-      final image.Image processedImage = await _selectedEffect!.apply(decodedImage, _effectParams);
+      debugPrint('Saving changes with effect: ${_selectedEffect!.name}');
+      final img.Image decodedImage = await decodeImage(widget.image);
+      final img.Image processedImage = await _selectedEffect!.apply(decodedImage, _effectParams);
       final Uint8List processedBytes = await encodeImage(processedImage);
+
+      debugPrint('Image encoded, bytes length: ${processedBytes.length}');
+      await _updateImage(
+        processedBytes,
+        action: 'Applied effect: ${_selectedEffect!.name}',
+        operationType: 'effect',
+        parameters: {
+          'effect_name': _selectedEffect!.name,
+          ..._effectParams,
+        },
+      );
+
+      debugPrint('Calling onApply');
       widget.onApply(processedBytes);
-    } catch (e) {
-      debugPrint('Error saving image: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Error saving image: $e\nStackTrace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save image')),
+          SnackBar(content: Text('Failed to save image: $e')),
         );
       }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -124,12 +180,15 @@ class _EffectsPanelState extends State<EffectsPanel> {
                       child: Image.memory(
                         _currentImageBytes,
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => const Center(
-                          child: Text(
-                            'Failed to load image',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
+                        errorBuilder: (context, error, stackTrace) {
+                          debugPrint('Image display error: $error');
+                          return const Center(
+                            child: Text(
+                              'Failed to load image',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   )
@@ -159,14 +218,10 @@ class _EffectsPanelState extends State<EffectsPanel> {
         onPressed: widget.onCancel,
         tooltip: 'Cancel',
       ),
-      title: Text(
-        AppLocalizations.of(context)?.effects ?? 'Effects',
-        style: const TextStyle(color: Colors.white),
-      ),
       actions: [
         IconButton(
           icon: const Icon(Icons.check, color: Colors.white),
-          onPressed: _isProcessing ? null : _saveChanges,
+          onPressed: _isProcessing || _selectedEffect == null ? null : _saveChanges,
           tooltip: 'Apply',
         ),
       ],
@@ -185,9 +240,13 @@ class _EffectsPanelState extends State<EffectsPanel> {
         children: _selectedEffect!.params.map((param) {
           return Row(
             children: [
-              Text(
-                param.name,
-                style: const TextStyle(color: Colors.white),
+              SizedBox(
+                width: 100,
+                child: Text(
+                  param.name,
+                  style: const TextStyle(color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -198,7 +257,7 @@ class _EffectsPanelState extends State<EffectsPanel> {
                   divisions: ((param.maxValue - param.minValue) / param.step).round(),
                   activeColor: theme.primaryColor,
                   inactiveColor: theme.disabledColor,
-                  label: _effectParams[param.name]?.toStringAsFixed(1),
+                  label: (_effectParams[param.name] ?? param.defaultValue).toStringAsFixed(1),
                   onChanged: (value) {
                     setState(() {
                       _effectParams[param.name] = value;
@@ -227,7 +286,7 @@ class _EffectsPanelState extends State<EffectsPanel> {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: GestureDetector(
-              onTap: () => _applyEffect(effect, effect.defaultParams),
+              onTap: () => _applyEffect(effect, Map.from(effect.defaultParams)),
               child: Column(
                 children: [
                   Container(
@@ -249,11 +308,22 @@ class _EffectsPanelState extends State<EffectsPanel> {
                             return Image.memory(
                               snapshot.data!,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => const Icon(
-                                Icons.error,
-                                color: Colors.red,
-                                size: 40,
-                              ),
+                              errorBuilder: (context, error, stackTrace) {
+                                debugPrint('Error loading preview for ${effect.name}: $error');
+                                return const Icon(
+                                  Icons.error,
+                                  color: Colors.red,
+                                  size: 40,
+                                );
+                              },
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            debugPrint('Preview error for ${effect.name}: ${snapshot.error}');
+                            return const Icon(
+                              Icons.error,
+                              color: Colors.red,
+                              size: 40,
                             );
                           }
                           return const Center(child: CircularProgressIndicator());
@@ -268,6 +338,7 @@ class _EffectsPanelState extends State<EffectsPanel> {
                       color: _selectedEffect == effect ? Colors.blue : Colors.white,
                       fontSize: 12,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
@@ -280,12 +351,15 @@ class _EffectsPanelState extends State<EffectsPanel> {
 
   Future<Uint8List> _generateEffectPreview(Effect effect) async {
     try {
-      final image.Image decodedImage = await decodeImage(widget.image);
-      final image.Image thumbnail = image.copyResize(decodedImage, width: 100);
-      final image.Image processedImage = await effect.apply(thumbnail, effect.defaultParams);
-      return await encodeImage(processedImage);
-    } catch (e) {
-      debugPrint('Error generating preview: $e');
+      debugPrint('Generating preview for effect: ${effect.name}');
+      final img.Image decodedImage = await decodeImage(widget.image);
+      final img.Image thumbnail = img.copyResize(decodedImage, width: 100);
+      final img.Image processedImage = await effect.apply(thumbnail, effect.defaultParams);
+      final Uint8List previewBytes = await encodeImage(processedImage);
+      debugPrint('Preview generated, bytes length: ${previewBytes.length}');
+      return previewBytes;
+    } catch (e, stackTrace) {
+      debugPrint('Error generating preview for ${effect.name}: $e\nStackTrace: $stackTrace');
       rethrow;
     }
   }

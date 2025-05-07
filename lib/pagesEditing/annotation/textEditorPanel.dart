@@ -8,11 +8,13 @@ class TextEmojiEditor extends StatefulWidget {
   final Uint8List image;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
+  final onUpdateImage;
 
   const TextEmojiEditor({
     required this.image,
     required this.onCancel,
     required this.onApply,
+    required this.onUpdateImage,
     super.key,
   });
 
@@ -27,7 +29,6 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   TextItem? _selectedTextItem;
   int _currentTabIndex = 0;
 
-  // Text styles
   Color _textColor = Colors.white;
   double _textSize = 24.0;
   String _fontFamily = 'Roboto';
@@ -36,7 +37,6 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   bool _hasShadow = true;
   TextAlign _textAlign = TextAlign.center;
 
-  // Emojis
   final List<String> _emojis = [
     '😀', '😂', '😍', '😎', '😜', '🤩', '🥳', '😇',
     '🐶', '🐱', '🦁', '🐯', '🦊', '🐻', '🐼', '🐨',
@@ -664,28 +664,47 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
+  Future<void> _updateImage(
+      Uint8List newImage, {
+        required String action,
+        required String operationType,
+        required Map<String, dynamic> parameters,
+      }) async {
+    if (widget.onUpdateImage != null) {
+      await widget.onUpdateImage!(newImage, action: action, operationType: operationType, parameters: parameters);
+    }
+  }
+
   Future<void> _saveChanges() async {
     try {
-      final RenderRepaintBoundary boundary =
-      _renderKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final RenderRepaintBoundary boundary = _renderKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw Exception('Failed to convert image to bytes');
-      }
+
+      if (byteData == null) throw Exception('Failed to convert image to bytes');
+
       final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      await _updateImage(
+        pngBytes,
+        action: 'Added text/emoji',
+        operationType: 'text_emoji',
+        parameters: {
+          'text_items_count': _textItems.length,
+          'text': _textController.text,
+        },
+      );
+
       widget.onApply(pngBytes);
     } catch (e) {
       debugPrint('Error saving image: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save changes')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to save changes')),
+      );
     }
   }
-}
 
+}
 class TextItem {
   String text;
   Offset position;

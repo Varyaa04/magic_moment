@@ -2,18 +2,19 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 
 class EraserPanel extends StatefulWidget {
   final Uint8List image;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
+  final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
 
   const EraserPanel({
     required this.image,
     required this.onCancel,
     required this.onApply,
+    required this.onUpdateImage,
     super.key,
   });
 
@@ -28,7 +29,7 @@ class _EraserPanelState extends State<EraserPanel> {
   bool _isInitialized = false;
   bool _isProcessing = false;
   double _currentStrokeWidth = 20.0;
-  final GlobalKey _paintingKey = GlobalKey();
+  Size _imageSize = Size.zero;
 
   @override
   void initState() {
@@ -38,17 +39,18 @@ class _EraserPanelState extends State<EraserPanel> {
 
   Future<void> _loadImage() async {
     try {
-      final codec = await ui.instantiateImageCodec(widget.image);
+      final codec = await ui.instantiateImageCodec(widget.image, targetWidth: 1024);
       final frame = await codec.getNextFrame();
       setState(() {
         _backgroundImage = frame.image;
+        _imageSize = Size(_backgroundImage.width.toDouble(), _backgroundImage.height.toDouble());
         _isInitialized = true;
       });
     } catch (e) {
       debugPrint('Error loading image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid image format')),
+          SnackBar(content: Text('Invalid image format: $e')),
         );
         widget.onCancel();
       }
@@ -62,9 +64,7 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 
   void _handlePanStart(DragStartDetails details) {
-    final renderBox = _paintingKey.currentContext!.findRenderObject() as RenderBox;
-    final localPosition = renderBox.globalToLocal(details.globalPosition);
-
+    final localPosition = _scalePosition(details.localPosition);
     setState(() {
       _drawingActions.add(DrawingAction(
         points: [localPosition],
@@ -74,9 +74,7 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
-    final renderBox = _paintingKey.currentContext!.findRenderObject() as RenderBox;
-    final localPosition = renderBox.globalToLocal(details.globalPosition);
-
+    final localPosition = _scalePosition(details.localPosition);
     setState(() {
       if (_drawingActions.isNotEmpty) {
         _drawingActions.last.points.add(localPosition);
@@ -109,25 +107,115 @@ class _EraserPanelState extends State<EraserPanel> {
     });
   }
 
+  Offset _scalePosition(Offset position) {
+    final screenSize = MediaQuery.of(context).size;
+    final imageAspect = _imageSize.width / _imageSize.height;
+    final screenAspect = screenSize.width / screenSize.height;
+
+    double scale;
+    double offsetX = 0;
+    double offsetY = 0;
+
+    if (imageAspect > screenAspect) {
+      scale = _imageSize.width / screenSize.width;
+      offsetY = (screenSize.height - _imageSize.height / scale) / 2;
+    } else {
+      scale = _imageSize.height / screenSize.height;
+      offsetX = (screenSize.width - _imageSize.width / scale) / 2;
+    }
+
+    final scaledX = (position.dx - offsetX) * scale;
+    final scaledY = (position.dy - offsetY) * scale;
+
+    return Offset(
+      scaledX.clamp(0.0, _imageSize.width),
+      scaledY.clamp(0.0, _imageSize.height),
+    );
+  }
+
+  Future<void> _updateImage(
+      Uint8List newImage, {
+        required String action,
+        required String operationType,
+        required Map<String, dynamic> parameters,
+      }) async {
+    try {
+      if (widget.onUpdateImage != null) {
+        await widget.onUpdateImage(newImage, action: action, operationType: operationType, parameters: parameters);
+      }
+    } catch (e) {
+      debugPrint('Error in onUpdateImage: $e');
+      rethrow;
+    }
+  }
+
   Future<void> _applyChanges() async {
-    if (_isProcessing) return;
+    if (_isProcessing || !_isInitialized) return;
 
     setState(() => _isProcessing = true);
     try {
-      final RenderRepaintBoundary boundary =
-      _paintingKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw Exception('Failed to convert image to bytes');
+      // Создаем новый PictureRecorder и Canvas
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, _imageSize.width, _imageSize.height));
+
+      // Рисуем фоновое изображение с поддержкой прозрачности
+      final backgroundPaint = Paint()..filterQuality = FilterQuality.high;
+      canvas.drawImage(_backgroundImage, Offset.zero, backgroundPaint);
+
+      // Рисуем действия ластика
+      for (final action in _drawingActions) {
+        final paint = Paint()
+          ..strokeWidth = action.strokeWidth
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..style = PaintingStyle.stroke
+          ..blendMode = BlendMode.clear;
+
+        if (action.points.length == 1) {
+          canvas.drawCircle(action.points.first, action.strokeWidth / 2, paint);
+        } else {
+          for (int i = 0; i < action.points.length - 1; i++) {
+            canvas.drawLine(action.points[i], action.points[i + 1], paint);
+          }
+        }
       }
-      final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      // Завершаем запись и преобразуем в изображение
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(_imageSize.width.toInt(), _imageSize.height.toInt());
+
+      // Освобождаем ресурсы picture
+      picture.dispose();
+
+      // Преобразуем изображение в PNG
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Failed to convert image to PNG bytes');
+      }
+
+      final pngBytes = byteData.buffer.asUint8List();
+
+      // Обновляем изображение через onUpdateImage
+      await _updateImage(
+        pngBytes,
+        action: 'Applied eraser',
+        operationType: 'eraser',
+        parameters: {
+          'stroke_width': _currentStrokeWidth,
+          'actions_count': _drawingActions.length,
+        },
+      );
+
+      // Применяем изменения через onApply
       widget.onApply(pngBytes);
-    } catch (e) {
-      debugPrint('Error capturing image: $e');
+
+      // Освобождаем ресурсы изображения
+      image.dispose();
+    } catch (e, stackTrace) {
+      debugPrint('Error applying eraser changes: $e\nStackTrace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save image')),
+          SnackBar(content: Text('Failed to apply eraser: $e')),
         );
       }
     } finally {
@@ -155,8 +243,7 @@ class _EraserPanelState extends State<EraserPanel> {
                     onPanUpdate: _handlePanUpdate,
                     onPanEnd: _handlePanEnd,
                     child: CustomPaint(
-                      key: _paintingKey,
-                      size: Size.infinite,
+                      size: _imageSize,
                       painter: EraserPainter(
                         backgroundImage: _backgroundImage,
                         drawingActions: _drawingActions,
@@ -327,7 +414,7 @@ class EraserPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw background image
+    // Рисуем фоновое изображение
     paintImage(
       canvas: canvas,
       rect: Rect.fromLTWH(0, 0, size.width, size.height),
@@ -336,7 +423,7 @@ class EraserPainter extends CustomPainter {
       filterQuality: FilterQuality.high,
     );
 
-    // Draw erasing actions
+    // Рисуем действия ластика
     for (final action in drawingActions) {
       final paint = Paint()
         ..strokeWidth = action.strokeWidth
@@ -346,14 +433,12 @@ class EraserPainter extends CustomPainter {
         ..blendMode = BlendMode.clear;
 
       if (action.points.length == 1) {
-        // Draw a single point
         canvas.drawCircle(
           action.points.first,
           action.strokeWidth / 2,
           paint,
         );
       } else {
-        // Draw lines between points
         for (int i = 0; i < action.points.length - 1; i++) {
           canvas.drawLine(action.points[i], action.points[i + 1], paint);
         }
