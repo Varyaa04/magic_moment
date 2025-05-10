@@ -1,17 +1,19 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:MagicMoment/database/magicMomentDatabase.dart';
+import 'package:MagicMoment/pagesEditing/image_utils.dart';
 
 class EraserPanel extends StatefulWidget {
   final Uint8List image;
+  final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
   final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
 
   const EraserPanel({
     required this.image,
+    required this.imageId,
     required this.onCancel,
     required this.onApply,
     required this.onUpdateImage,
@@ -19,17 +21,15 @@ class EraserPanel extends StatefulWidget {
   });
 
   @override
-  _EraserPanelState createState() => _EraserPanelState();
+  State<EraserPanel> createState() => _EraserPanelState();
 }
 
 class _EraserPanelState extends State<EraserPanel> {
   late ui.Image _backgroundImage;
-  final List<DrawingAction> _drawingActions = [];
-  final List<List<DrawingAction>> _undoStack = [];
+  final GlobalKey _paintKey = GlobalKey();
+  final List<List<Offset>> _eraserPaths = [];
+  double _strokeWidth = 20.0;
   bool _isInitialized = false;
-  bool _isProcessing = false;
-  double _currentStrokeWidth = 20.0;
-  Size _imageSize = Size.zero;
 
   @override
   void initState() {
@@ -38,410 +38,148 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 
   Future<void> _loadImage() async {
-    try {
-      final codec = await ui.instantiateImageCodec(widget.image, targetWidth: 1024);
-      final frame = await codec.getNextFrame();
-      setState(() {
-        _backgroundImage = frame.image;
-        _imageSize = Size(_backgroundImage.width.toDouble(), _backgroundImage.height.toDouble());
-        _isInitialized = true;
-      });
-    } catch (e) {
-      debugPrint('Error loading image: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid image format: $e')),
-        );
-        widget.onCancel();
-      }
-    }
+    final codec = await ui.instantiateImageCodec(widget.image);
+    final frame = await codec.getNextFrame();
+    _backgroundImage = frame.image;
+    setState(() => _isInitialized = true);
   }
 
-  void _changeStrokeWidth(double width) {
-    setState(() {
-      _currentStrokeWidth = width;
-    });
+  void _startPath(Offset offset) {
+    setState(() => _eraserPaths.add([offset]));
   }
 
-  void _handlePanStart(DragStartDetails details) {
-    final localPosition = _scalePosition(details.localPosition);
-    setState(() {
-      _drawingActions.add(DrawingAction(
-        points: [localPosition],
-        strokeWidth: _currentStrokeWidth,
-      ));
-    });
-  }
-
-  void _handlePanUpdate(DragUpdateDetails details) {
-    final localPosition = _scalePosition(details.localPosition);
-    setState(() {
-      if (_drawingActions.isNotEmpty) {
-        _drawingActions.last.points.add(localPosition);
-      }
-    });
-  }
-
-  void _handlePanEnd(DragEndDetails details) {
-    setState(() {
-      _undoStack.add(List.from(_drawingActions));
-    });
+  void _extendPath(Offset offset) {
+    setState(() => _eraserPaths.last.add(offset));
   }
 
   void _undo() {
-    if (_undoStack.isNotEmpty) {
-      setState(() {
-        _drawingActions.clear();
-        _undoStack.removeLast();
-        if (_undoStack.isNotEmpty) {
-          _drawingActions.addAll(_undoStack.last);
-        }
-      });
+    if (_eraserPaths.isNotEmpty) {
+      setState(() => _eraserPaths.removeLast());
     }
   }
 
-  void _clearAll() {
-    setState(() {
-      _drawingActions.clear();
-      _undoStack.clear();
-    });
-  }
+  Future<void> _apply() async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint();
+    canvas.drawImage(_backgroundImage, Offset.zero, paint);
 
-  Offset _scalePosition(Offset position) {
-    final screenSize = MediaQuery.of(context).size;
-    final imageAspect = _imageSize.width / _imageSize.height;
-    final screenAspect = screenSize.width / screenSize.height;
+    final clearPaint = Paint()
+      ..blendMode = BlendMode.clear
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth;
 
-    double scale;
-    double offsetX = 0;
-    double offsetY = 0;
-
-    if (imageAspect > screenAspect) {
-      scale = _imageSize.width / screenSize.width;
-      offsetY = (screenSize.height - _imageSize.height / scale) / 2;
-    } else {
-      scale = _imageSize.height / screenSize.height;
-      offsetX = (screenSize.width - _imageSize.width / scale) / 2;
+    for (final path in _eraserPaths) {
+      for (int i = 0; i < path.length - 1; i++) {
+        canvas.drawLine(path[i], path[i + 1], clearPaint);
+      }
     }
 
-    final scaledX = (position.dx - offsetX) * scale;
-    final scaledY = (position.dy - offsetY) * scale;
-
-    return Offset(
-      scaledX.clamp(0.0, _imageSize.width),
-      scaledY.clamp(0.0, _imageSize.height),
+    final img = await recorder.endRecording().toImage(
+      _backgroundImage.width,
+      _backgroundImage.height,
     );
-  }
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
 
-  Future<void> _updateImage(
-      Uint8List newImage, {
-        required String action,
-        required String operationType,
-        required Map<String, dynamic> parameters,
-      }) async {
-    try {
-      if (widget.onUpdateImage != null) {
-        await widget.onUpdateImage(newImage, action: action, operationType: operationType, parameters: parameters);
-      }
-    } catch (e) {
-      debugPrint('Error in onUpdateImage: $e');
-      rethrow;
-    }
-  }
+    await widget.onUpdateImage(
+      pngBytes,
+      action: 'Erased area',
+      operationType: 'eraser',
+      parameters: {
+        'strokes': _eraserPaths.length,
+        'width': _strokeWidth,
+      },
+    );
 
-  Future<void> _applyChanges() async {
-    if (_isProcessing || !_isInitialized) return;
-
-    setState(() => _isProcessing = true);
-    try {
-      // Создаем новый PictureRecorder и Canvas
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, _imageSize.width, _imageSize.height));
-
-      // Рисуем фоновое изображение с поддержкой прозрачности
-      final backgroundPaint = Paint()..filterQuality = FilterQuality.high;
-      canvas.drawImage(_backgroundImage, Offset.zero, backgroundPaint);
-
-      // Рисуем действия ластика
-      for (final action in _drawingActions) {
-        final paint = Paint()
-          ..strokeWidth = action.strokeWidth
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..style = PaintingStyle.stroke
-          ..blendMode = BlendMode.clear;
-
-        if (action.points.length == 1) {
-          canvas.drawCircle(action.points.first, action.strokeWidth / 2, paint);
-        } else {
-          for (int i = 0; i < action.points.length - 1; i++) {
-            canvas.drawLine(action.points[i], action.points[i + 1], paint);
-          }
-        }
-      }
-
-      // Завершаем запись и преобразуем в изображение
-      final picture = recorder.endRecording();
-      final image = await picture.toImage(_imageSize.width.toInt(), _imageSize.height.toInt());
-
-      // Освобождаем ресурсы picture
-      picture.dispose();
-
-      // Преобразуем изображение в PNG
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw Exception('Failed to convert image to PNG bytes');
-      }
-
-      final pngBytes = byteData.buffer.asUint8List();
-
-      // Обновляем изображение через onUpdateImage
-      await _updateImage(
-        pngBytes,
-        action: 'Applied eraser',
-        operationType: 'eraser',
-        parameters: {
-          'stroke_width': _currentStrokeWidth,
-          'actions_count': _drawingActions.length,
-        },
-      );
-
-      // Применяем изменения через onApply
-      widget.onApply(pngBytes);
-
-      // Освобождаем ресурсы изображения
-      image.dispose();
-    } catch (e, stackTrace) {
-      debugPrint('Error applying eraser changes: $e\nStackTrace: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to apply eraser: $e')),
-        );
-      }
-    } finally {
-      setState(() => _isProcessing = false);
-    }
+    widget.onApply(pngBytes);
   }
 
   @override
   Widget build(BuildContext context) {
-    final appLocalizations = AppLocalizations.of(context);
-    final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: Colors.black.withOpacity(0.8),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _buildAppBar(theme, appLocalizations),
-                Expanded(
-                  child: _isInitialized
-                      ? GestureDetector(
-                    onPanStart: _handlePanStart,
-                    onPanUpdate: _handlePanUpdate,
-                    onPanEnd: _handlePanEnd,
-                    child: CustomPaint(
-                      size: _imageSize,
-                      painter: EraserPainter(
-                        backgroundImage: _backgroundImage,
-                        drawingActions: _drawingActions,
-                      ),
-                    ),
-                  )
-                      : const Center(child: CircularProgressIndicator(color: Colors.white)),
-                ),
-                _buildToolbar(theme, appLocalizations),
-              ],
-            ),
-            if (_isProcessing)
-              Container(
-                color: Colors.black.withOpacity(0.5),
-                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAppBar(ThemeData theme, AppLocalizations? appLocalizations) {
-    return AppBar(
-      backgroundColor: Colors.black.withOpacity(0.7),
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.close, color: Colors.white),
-        onPressed: widget.onCancel,
-        tooltip: appLocalizations?.cancel ?? 'Cancel',
-      ),
-      title: Text(
-        appLocalizations?.eraser ?? 'Eraser',
-        style: const TextStyle(color: Colors.white),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.undo, color: Colors.white),
-          onPressed: _undoStack.isEmpty ? null : _undo,
-          tooltip: appLocalizations?.undo ?? 'Undo',
-        ),
-        IconButton(
-          icon: const Icon(Icons.check, color: Colors.white),
-          onPressed: _isProcessing ? null : _applyChanges,
-          tooltip: appLocalizations?.apply ?? 'Apply',
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToolbar(ThemeData theme, AppLocalizations? appLocalizations) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, spreadRadius: 1),
-        ],
-      ),
-      child: Column(
+      backgroundColor: Colors.black,
+      body: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildToolButton(
-                icon: FluentIcons.eraser_20_filled,
-                label: appLocalizations?.eraser ?? 'Eraser',
-                isActive: true,
-                onPressed: () {},
-              ),
-              _buildToolButton(
-                icon: Icons.delete_sweep,
-                label: appLocalizations?.clearAll ?? 'Clear All',
-                isActive: false,
-                onPressed: _drawingActions.isEmpty ? null : _clearAll,
-              ),
+          AppBar(
+            backgroundColor: Colors.black,
+            title: const Text('Eraser'),
+            leading: IconButton(icon: const Icon(Icons.close), onPressed: widget.onCancel),
+            actions: [
+              IconButton(icon: const Icon(Icons.undo), onPressed: _undo),
+              IconButton(icon: const Icon(Icons.check), onPressed: _apply),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                appLocalizations?.size ?? 'Size:',
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Slider(
-                  value: _currentStrokeWidth,
-                  min: 5,
-                  max: 50,
-                  divisions: 9,
-                  activeColor: theme.primaryColor,
-                  inactiveColor: theme.disabledColor,
-                  label: _currentStrokeWidth.round().toString(),
-                  onChanged: _changeStrokeWidth,
+          Expanded(
+            child: _isInitialized
+                ? GestureDetector(
+              onPanStart: (d) => _startPath(d.localPosition),
+              onPanUpdate: (d) => _extendPath(d.localPosition),
+              child: RepaintBoundary(
+                key: _paintKey,
+                child: CustomPaint(
+                  painter: _EraserPainter(
+                    backgroundImage: _backgroundImage,
+                    paths: _eraserPaths,
+                    strokeWidth: _strokeWidth,
+                  ),
+                  child: Container(),
                 ),
               ),
-            ],
+            )
+                : const Center(child: CircularProgressIndicator()),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToolButton({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback? onPressed,
-  }) {
-    final theme = Theme.of(context);
-
-    return SizedBox(
-      width: 80,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onPressed,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            color: Colors.grey[900],
+            height: 70,
+            child: Row(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isActive ? theme.primaryColor.withOpacity(0.2) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isActive ? theme.primaryColor : Colors.transparent,
-                    ),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      icon,
-                      color: isActive ? theme.primaryColor : theme.iconTheme.color,
-                      size: 24,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: isActive ? theme.primaryColor : theme.textTheme.labelSmall?.color,
+                const Text('Size', style: TextStyle(color: Colors.white)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Slider(
+                    value: _strokeWidth,
+                    min: 5,
+                    max: 50,
+                    onChanged: (val) => setState(() => _strokeWidth = val),
                   ),
                 ),
               ],
             ),
-          ),
-        ),
+          )
+        ],
       ),
     );
   }
 }
 
-class EraserPainter extends CustomPainter {
+class _EraserPainter extends CustomPainter {
   final ui.Image backgroundImage;
-  final List<DrawingAction> drawingActions;
+  final List<List<Offset>> paths;
+  final double strokeWidth;
 
-  EraserPainter({
+  _EraserPainter({
     required this.backgroundImage,
-    required this.drawingActions,
+    required this.paths,
+    required this.strokeWidth,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Рисуем фоновое изображение
-    paintImage(
-      canvas: canvas,
-      rect: Rect.fromLTWH(0, 0, size.width, size.height),
-      image: backgroundImage,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.high,
-    );
+    canvas.drawImage(backgroundImage, Offset.zero, Paint());
 
-    // Рисуем действия ластика
-    for (final action in drawingActions) {
-      final paint = Paint()
-        ..strokeWidth = action.strokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke
-        ..blendMode = BlendMode.clear;
+    final paint = Paint()
+      ..blendMode = BlendMode.clear
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
 
-      if (action.points.length == 1) {
-        canvas.drawCircle(
-          action.points.first,
-          action.strokeWidth / 2,
-          paint,
-        );
-      } else {
-        for (int i = 0; i < action.points.length - 1; i++) {
-          canvas.drawLine(action.points[i], action.points[i + 1], paint);
-        }
+    for (final path in paths) {
+      for (int i = 0; i < path.length - 1; i++) {
+        canvas.drawLine(path[i], path[i + 1], paint);
       }
     }
   }
@@ -450,12 +188,4 @@ class EraserPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-class DrawingAction {
-  final List<Offset> points;
-  final double strokeWidth;
 
-  DrawingAction({
-    required this.points,
-    required this.strokeWidth,
-  });
-}

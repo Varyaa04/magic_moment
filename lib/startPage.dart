@@ -1,14 +1,15 @@
 import 'package:MagicMoment/pagesCollage/collagePage.dart';
 import 'package:MagicMoment/pagesEditing/editPage.dart';
 import 'package:MagicMoment/pagesSettings/settingsPage.dart';
+import 'package:MagicMoment/themeWidjets/buildButtonIcon.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
-import 'themeWidjets/buildButtonIcon.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:image_picker_web/image_picker_web.dart' as web_picker;
+
 
 class StartPage extends StatefulWidget {
   const StartPage({super.key});
@@ -19,13 +20,14 @@ class StartPage extends StatefulWidget {
 
 class _StartPageState extends State<StartPage> {
   final ImagePicker picker = ImagePicker();
-  List<File> selectedImages = [];
+  List<Uint8List> selectedImages = [];
 
   // Функция выбора изображений для коллажа
   Future<void> getImages() async {
     final appLocalizations = AppLocalizations.of(context);
+    List<Uint8List> imageBytesList = [];
 
-    // Запрос разрешений
+    // Разрешения на мобилке
     if (!kIsWeb) {
       final permission = await Permission.photos.request();
       if (permission.isDenied || permission.isPermanentlyDenied) {
@@ -48,33 +50,23 @@ class _StartPageState extends State<StartPage> {
     }
 
     try {
-      final pickedFiles = await picker.pickMultiImage(
-        imageQuality: 100,
-        maxHeight: 1000,
-        maxWidth: 1000,
-      );
+      if (kIsWeb) {
+        final pickedImages = await web_picker.ImagePickerWeb.getMultiImagesAsBytes();
+        if (pickedImages != null && pickedImages.isNotEmpty) {
+          imageBytesList.addAll(pickedImages.take(6));
+        }
+      } else {
+        final picker = ImagePicker();
+        final pickedFiles = await picker.pickMultiImage(imageQuality: 100, maxWidth: 1000, maxHeight: 1000);
 
-      if (pickedFiles.isEmpty) {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(appLocalizations?.errorTitle ?? 'Error'),
-            content: Text(appLocalizations?.selectedNon ?? 'No images selected.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(appLocalizations?.ok ?? 'OK'),
-              ),
-            ],
-          ),
-        );
-        return;
+        if (pickedFiles.isNotEmpty) {
+          for (final file in pickedFiles.take(6)) {
+            imageBytesList.add(await file.readAsBytes());
+          }
+        }
       }
 
-      // Проверяем количество выбранных изображений
-      if (pickedFiles.length < 2) {
-        if (!mounted) return;
+      if (imageBytesList.length < 2) {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -91,56 +83,11 @@ class _StartPageState extends State<StartPage> {
         return;
       }
 
-      if (pickedFiles.length > 6) {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(appLocalizations?.errorTitle ?? 'Error'),
-            content: Text(
-              appLocalizations?.tooManyImages ?? 'You selected more than 6 images. Only the first 6 will be used.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(appLocalizations?.ok ?? 'OK'),
-              ),
-            ],
-          ),
-        );
-      }
-
-      // Очищаем предыдущий выбор
-      selectedImages.clear();
-
-      // Берем максимум 6 изображений
-      for (final file in pickedFiles.take(6)) {
-        final imageFile = File(file.path);
-        if (!kIsWeb && !await imageFile.exists()) {
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: Text(appLocalizations?.errorTitle ?? 'Error'),
-              content: Text('File ${file.path} not found.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(appLocalizations?.ok ?? 'OK'),
-                ),
-              ],
-            ),
-          );
-          return;
-        }
-        selectedImages.add(imageFile);
-      }
-
       if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => CollagePage(images: selectedImages),
+          builder: (context) => CollageEditorPage(images: imageBytesList),
         ),
       );
     } catch (e) {
@@ -161,83 +108,55 @@ class _StartPageState extends State<StartPage> {
     }
   }
 
-  // Функция для выбора фото из галереи или камеры
+// Функция для выбора фото из галереи или камеры
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final image = await picker.pickImage(source: source);
-      if (image == null) {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(AppLocalizations.of(context)?.errorTitle ?? 'Error'),
-            content: Text(AppLocalizations.of(context)?.selectedNon ?? 'No image selected.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(AppLocalizations.of(context)?.ok ?? 'OK'),
-              ),
-            ],
-          ),
-        );
-        return;
-      }
+      Uint8List? bytes;
 
       if (kIsWeb) {
-        final bytes = await image.readAsBytes();
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EditPage(imageBytes: bytes, imageId: DateTime.now().microsecondsSinceEpoch,),
-          ),
-        );
-      } else {
-        final file = File(image.path);
-        if (!await file.exists()) {
+        if (source == ImageSource.gallery) {
+          bytes = await web_picker.ImagePickerWeb.getImageAsBytes();
+        } else {
           if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: Text(AppLocalizations.of(context)?.errorTitle ?? 'Error'),
-              content: Text('File ${file.path} not found.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(AppLocalizations.of(context)?.ok ?? 'OK'),
-                ),
-              ],
-            ),
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Camera not supported on web')),
           );
           return;
         }
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EditPage(imageBytes: file,imageId: DateTime.now().microsecondsSinceEpoch,),
-          ),
+      } else {
+        final XFile? image = await picker.pickImage(
+          source: source,
+          imageQuality: 85,
+          maxWidth: 1024,
+          maxHeight: 1024,
         );
+
+        if (image == null) return;
+        bytes = await image.readAsBytes();
       }
+
+      if (bytes == null || bytes.isEmpty || !mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EditPage(
+            imageBytes: bytes,
+            imageId: DateTime.now().microsecondsSinceEpoch,
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(AppLocalizations.of(context)?.errorTitle ?? 'Error'),
-          content: Text('${AppLocalizations.of(context)?.error ?? 'An error occurred'}: $e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(AppLocalizations.of(context)?.ok ?? 'OK'),
-            ),
-          ],
-        ),
+      debugPrint('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
       );
     }
   }
 
-  // Диалог выбора источника изображения
+
+// Диалог выбора источника изображения
   void _showImageSourceDialog() {
     final appLocalizations = AppLocalizations.of(context);
     showDialog(
@@ -247,13 +166,14 @@ class _StartPageState extends State<StartPage> {
           title: Text(appLocalizations?.choose ?? 'Choose Image Source'),
           content: Text(appLocalizations?.from ?? 'Select an image from:'),
           actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-              child: Text(appLocalizations?.camera ?? 'Camera'),
-            ),
+            if (!kIsWeb) // Показываем кнопку камеры только не на вебе
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+                child: Text(appLocalizations?.camera ?? 'Camera'),
+              ),
             TextButton(
               onPressed: () {
                 Navigator.pop(context);

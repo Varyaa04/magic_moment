@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -32,10 +33,13 @@ class _EffectsPanelState extends State<EffectsPanel> {
   bool _isInitialized = false;
   bool _isProcessing = false;
   late Uint8List _currentImageBytes;
+  img.Image? _decodedImage;
   Effect? _selectedEffect;
   final GlobalKey _imageKey = GlobalKey();
   final Map<String, double> _effectParams = {};
-  DateTime _lastUpdate = DateTime.now();
+  Timer? _debounceTimer;
+  final Map<String, Uint8List> _previewCache = {};
+  final _thumbnailWidth = 80;
 
   @override
   void initState() {
@@ -44,20 +48,31 @@ class _EffectsPanelState extends State<EffectsPanel> {
     _initialize();
   }
 
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _previewCache.clear();
+    super.dispose();
+  }
+
   Future<void> _initialize() async {
     try {
-      debugPrint('Initializing EffectsPanel');
-      final img.Image decodedImage = await decodeImage(widget.image);
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-          _selectedEffect = effects.first;
+      _decodedImage = await decodeImage(widget.image);
+      if (_decodedImage == null) {
+        throw Exception('Failed to decode image');
+      }
+      setState(() {
+        _isInitialized = true;
+        _selectedEffect = effects.isNotEmpty ? effects.first : null;
+        if (_selectedEffect != null) {
           _effectParams.addAll(_selectedEffect!.defaultParams);
-        });
+        }
+      });
+      if (_selectedEffect != null) {
         await _applyEffect(_selectedEffect!, _effectParams, force: true);
       }
-    } catch (e, stackTrace) {
-      debugPrint('Error initializing image: $e\nStackTrace: $stackTrace');
+    } catch (e) {
+      debugPrint('Initialization error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Invalid image format: $e')),
@@ -67,39 +82,54 @@ class _EffectsPanelState extends State<EffectsPanel> {
     }
   }
 
+  Future<void> _generatePreview(Effect effect) async {
+    if (_previewCache.containsKey(effect.name) || _decodedImage == null) return;
+    try {
+      final thumbnail = img.copyResize(_decodedImage!, width: _thumbnailWidth);
+      final processedImage = await effect.apply(thumbnail, effect.defaultParams);
+      final previewBytes = await encodeImage(processedImage);
+      if (mounted) {
+        setState(() {
+          _previewCache[effect.name] = previewBytes;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error generating preview for ${effect.name}: $e');
+    }
+  }
+
   Future<void> _applyEffect(Effect effect, Map<String, double> params, {bool force = false}) async {
     if (_isProcessing && !force) return;
 
-    final now = DateTime.now();
-    if (!force && now.difference(_lastUpdate).inMilliseconds < 100) return;
-    _lastUpdate = now;
-
-    setState(() => _isProcessing = true);
-    try {
-      debugPrint('Applying effect: ${effect.name}');
-      final img.Image decodedImage = await decodeImage(widget.image);
-      final img.Image processedImage = await effect.apply(decodedImage, params);
-      final Uint8List processedBytes = await encodeImage(processedImage);
-      if (mounted) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 200), () async {
+      setState(() => _isProcessing = true);
+      try {
+        if (_decodedImage == null) {
+          throw Exception('Image not decoded');
+        }
+        final processedImage = await effect.apply(_decodedImage!, params);
+        final processedBytes = await encodeImage(processedImage);
+        if (!mounted) return;
         setState(() {
           _currentImageBytes = processedBytes;
           _selectedEffect = effect;
           _effectParams.clear();
           _effectParams.addAll(params);
         });
+      } catch (e) {
+        debugPrint('Error applying effect ${effect.name}: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to apply effect ${effect.name}: $e')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isProcessing = false);
+        }
       }
-    } catch (e, stackTrace) {
-      debugPrint('Error applying effect ${effect.name}: $e\nStackTrace: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to apply effect ${effect.name}: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
-    }
+    });
   }
 
   Future<void> _updateImage(
@@ -109,30 +139,24 @@ class _EffectsPanelState extends State<EffectsPanel> {
         required Map<String, dynamic> parameters,
       }) async {
     try {
-      debugPrint('Updating image with action: $action');
       if (widget.onUpdateImage != null) {
         await widget.onUpdateImage!(newImage, action: action, operationType: operationType, parameters: parameters);
       }
-    } catch (e, stackTrace) {
-      debugPrint('Error in onUpdateImage: $e\nStackTrace: $stackTrace');
+    } catch (e) {
+      debugPrint('Error in onUpdateImage: $e');
       rethrow;
     }
   }
 
   Future<void> _saveChanges() async {
-    if (_isProcessing || _selectedEffect == null) {
-      debugPrint('Save aborted: Processing=$_isProcessing, SelectedEffect=$_selectedEffect');
-      return;
-    }
+    if (_isProcessing || _selectedEffect == null || _decodedImage == null) return;
 
     setState(() => _isProcessing = true);
     try {
-      debugPrint('Saving changes with effect: ${_selectedEffect!.name}');
-      final img.Image decodedImage = await decodeImage(widget.image);
-      final img.Image processedImage = await _selectedEffect!.apply(decodedImage, _effectParams);
-      final Uint8List processedBytes = await encodeImage(processedImage);
+      final processedImage = await _selectedEffect!.apply(_decodedImage!, _effectParams);
+      final processedBytes = await encodeImage(processedImage);
+      if (!mounted) return;
 
-      debugPrint('Image encoded, bytes length: ${processedBytes.length}');
       await _updateImage(
         processedBytes,
         action: 'Applied effect: ${_selectedEffect!.name}',
@@ -143,13 +167,12 @@ class _EffectsPanelState extends State<EffectsPanel> {
         },
       );
 
-      debugPrint('Calling onApply');
       widget.onApply(processedBytes);
-    } catch (e, stackTrace) {
-      debugPrint('Error saving image: $e\nStackTrace: $stackTrace');
+    } catch (e) {
+      debugPrint('Error saving effect: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save image: $e')),
+          SnackBar(content: Text('Failed to save effect: $e')),
         );
       }
     } finally {
@@ -176,25 +199,23 @@ class _EffectsPanelState extends State<EffectsPanel> {
                   child: _isInitialized
                       ? RepaintBoundary(
                     key: _imageKey,
-                    child: Center(
-                      child: Image.memory(
-                        _currentImageBytes,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          debugPrint('Image display error: $error');
-                          return const Center(
-                            child: Text(
-                              'Failed to load image',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          );
-                        },
-                      ),
+                    child: Image.memory(
+                      _currentImageBytes,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint('Image display error: $error');
+                        return const Center(
+                          child: Text(
+                            'Failed to load image',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        );
+                      },
                     ),
                   )
                       : const Center(child: CircularProgressIndicator(color: Colors.white)),
                 ),
-                _buildEffectControls(appLocalizations, theme),
+                if (_selectedEffect != null) _buildEffectControls(appLocalizations, theme),
                 _buildEffectList(theme),
               ],
             ),
@@ -234,21 +255,21 @@ class _EffectsPanelState extends State<EffectsPanel> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       color: Colors.black.withOpacity(0.7),
       child: Column(
         children: _selectedEffect!.params.map((param) {
           return Row(
             children: [
               SizedBox(
-                width: 100,
+                width: 80,
                 child: Text(
                   param.name,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Slider(
                   value: _effectParams[param.name] ?? param.defaultValue,
@@ -275,92 +296,69 @@ class _EffectsPanelState extends State<EffectsPanel> {
 
   Widget _buildEffectList(ThemeData theme) {
     return Container(
-      height: 120,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      height: 100,
+      padding: const EdgeInsets.symmetric(vertical: 6),
       color: Colors.black.withOpacity(0.7),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: effects.length,
         itemBuilder: (context, index) {
           final effect = effects[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: GestureDetector(
-              onTap: () => _applyEffect(effect, Map.from(effect.defaultParams)),
-              child: Column(
-                children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _selectedEffect == effect ? Colors.blue : Colors.transparent,
-                        width: 2,
+          return FutureBuilder<void>(
+            future: _generatePreview(effect),
+            builder: (context, snapshot) {
+              final previewBytes = _previewCache[effect.name];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: GestureDetector(
+                  onTap: () {
+                    if (!_isProcessing) {
+                      _applyEffect(effect, Map.from(effect.defaultParams));
+                    }
+                  },
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: _selectedEffect == effect ? Colors.blue : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: previewBytes != null
+                              ? Image.memory(
+                            previewBytes,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              debugPrint('Preview load error for ${effect.name}: $error');
+                              return const Icon(Icons.error, color: Colors.red, size: 30);
+                            },
+                          )
+                              : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        ),
                       ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: FutureBuilder<Uint8List>(
-                        future: _generateEffectPreview(effect),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasData) {
-                            return Image.memory(
-                              snapshot.data!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                debugPrint('Error loading preview for ${effect.name}: $error');
-                                return const Icon(
-                                  Icons.error,
-                                  color: Colors.red,
-                                  size: 40,
-                                );
-                              },
-                            );
-                          }
-                          if (snapshot.hasError) {
-                            debugPrint('Preview error for ${effect.name}: ${snapshot.error}');
-                            return const Icon(
-                              Icons.error,
-                              color: Colors.red,
-                              size: 40,
-                            );
-                          }
-                          return const Center(child: CircularProgressIndicator());
-                        },
+                      const SizedBox(height: 4),
+                      Text(
+                        effect.name,
+                        style: TextStyle(
+                          color: _selectedEffect == effect ? Colors.blue : Colors.white,
+                          fontSize: 10,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    effect.name,
-                    style: TextStyle(
-                      color: _selectedEffect == effect ? Colors.blue : Colors.white,
-                      fontSize: 12,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
         },
       ),
     );
-  }
-
-  Future<Uint8List> _generateEffectPreview(Effect effect) async {
-    try {
-      debugPrint('Generating preview for effect: ${effect.name}');
-      final img.Image decodedImage = await decodeImage(widget.image);
-      final img.Image thumbnail = img.copyResize(decodedImage, width: 100);
-      final img.Image processedImage = await effect.apply(thumbnail, effect.defaultParams);
-      final Uint8List previewBytes = await encodeImage(processedImage);
-      debugPrint('Preview generated, bytes length: ${previewBytes.length}');
-      return previewBytes;
-    } catch (e, stackTrace) {
-      debugPrint('Error generating preview for ${effect.name}: $e\nStackTrace: $stackTrace');
-      rethrow;
-    }
   }
 }

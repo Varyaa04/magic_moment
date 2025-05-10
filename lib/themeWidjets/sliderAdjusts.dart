@@ -5,55 +5,41 @@ class SliderRow extends StatelessWidget {
   final double value;
   final double min;
   final double max;
-  final int divisions;
+  final int? divisions;
   final String label;
-  final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChanged;
   final bool isProcessing;
 
   const SliderRow({
-    Key? key,
     required this.icon,
     required this.value,
     required this.min,
     required this.max,
-    required this.divisions,
+    this.divisions,
     required this.label,
-    required this.onChanged,
+    this.onChanged,
     required this.isProcessing,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 100),
-      opacity: isProcessing ? 0.6 : 1.0,
-      child: IgnorePointer(
-        ignoring: isProcessing,
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.black, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Slider(
-                value: value,
-                min: min,
-                max: max,
-                divisions: divisions,
-                label: label,
-                onChanged: onChanged,
-              ),
-            ),
-            SizedBox(
-              width: 40,
-              child: Text(
-                label,
-                style: const TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white),
+        Expanded(
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            label: label,
+            onChanged: isProcessing ? null : onChanged,
+            activeColor: Colors.blue,
+            inactiveColor: Colors.grey,
+          ),
         ),
-      ),
+      ],
     );
   }
 }

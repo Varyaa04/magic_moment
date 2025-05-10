@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesEditing/annotation/eraserPanel.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -16,10 +17,11 @@ import 'effects/effectsPanel.dart';
 import 'toolsPanel.dart';
 import 'cropPanel.dart';
 import 'filters/filtersPanel.dart';
-import 'adjust/adjustsButtonsPanel.dart';
+import 'adjustsButtonsPanel.dart';
 import 'annotation/drawPanel.dart';
 import 'annotation/textEditorPanel.dart';
 import 'annotation/emojiPanel.dart';
+
 class EditPage extends StatefulWidget {
   final dynamic imageBytes;
   final int imageId;
@@ -46,7 +48,7 @@ class _EditPageState extends State<EditPage> {
   late Uint8List _currentImage;
   late Uint8List _originalImage;
   late EditHistoryManager _historyManager;
-  Uint8List? _currentImageBytes;
+  Size _imageSize = Size.zero;
   bool _isInitialized = false;
   bool _showToolsPanel = false;
   String? _activeTool;
@@ -66,11 +68,11 @@ class _EditPageState extends State<EditPage> {
         ? Uint8List(0)
         : widget.imageBytes as Uint8List;
     _originalImage = Uint8List.fromList(_currentImage);
-    _initializeImage();
     _historyManager = EditHistoryManager(
       db: magicMomentDatabase.instance,
       imageId: widget.imageId,
     );
+    _initializeImage();
     _loadHistory();
   }
 
@@ -85,6 +87,77 @@ class _EditPageState extends State<EditPage> {
       _isRedoAvailable = _historyManager.canRedo;
     });
   }
+
+  void _showEditHistory() async {
+    final history = await _historyManager.db.getAllHistoryForImage(widget.imageId);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SizedBox(
+          height: 180,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(12),
+            itemCount: history.length,
+            itemBuilder: (context, index) {
+              final item = history[index];
+              return FutureBuilder<Uint8List>(
+                future: File(item.snapshotPath!).readAsBytes(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const SizedBox(
+                      width: 100,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  return GestureDetector(
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final imageBytes = snapshot.data!;
+                      _updateImage(imageBytes);
+                    },
+                    child: Column(
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white, width: 2),
+                            image: DecorationImage(
+                              image: MemoryImage(snapshot.data!),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          width: 100,
+                          child: Text(
+                            item.operationType,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
 
   Future<Uint8List> _compressImage(Uint8List bytes) async {
     try {
@@ -114,10 +187,19 @@ class _EditPageState extends State<EditPage> {
         throw Exception('Unsupported image type');
       }
 
-      // Всегда сжимаем большие изображения
-      if (bytes.length > 2 * 1024 * 1024) { // Если больше 2MB
+      // Compress large images
+      if (bytes.length > 2 * 1024 * 1024) {
         bytes = await _compressImage(bytes);
       }
+
+      // Load image dimensions
+      final completer = Completer<ui.Image>();
+      ui.decodeImageFromList(bytes, (ui.Image img) {
+        completer.complete(img);
+      });
+      final ui.Image image = await completer.future;
+      _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+      image.dispose();
 
       if (mounted) {
         setState(() {
@@ -128,6 +210,7 @@ class _EditPageState extends State<EditPage> {
       }
 
       _resetHistory();
+      debugPrint('Initialized image: ${_imageSize.width}x${_imageSize.height}');
     } catch (e) {
       debugPrint('Error initializing image: $e');
       if (mounted) {
@@ -147,12 +230,10 @@ class _EditPageState extends State<EditPage> {
   void _addHistoryState(String description) {
     if (!_isHistoryEnabled) return;
 
-    // Удаляем все состояния после текущего индекса (если делаем новое изменение после отмены)
     if (_currentHistoryIndex < _history.length - 1) {
       _history.removeRange(_currentHistoryIndex + 1, _history.length);
     }
 
-    // Ограничиваем размер истории
     if (_history.length >= _maxHistorySteps) {
       _history.removeAt(0);
       _currentHistoryIndex--;
@@ -163,7 +244,6 @@ class _EditPageState extends State<EditPage> {
     _updateUndoRedoState();
   }
 
-
   void _undo() async {
     if (!_isUndoAvailable) return;
 
@@ -172,7 +252,19 @@ class _EditPageState extends State<EditPage> {
       final file = File(entry.snapshotPath!);
       if (await file.exists()) {
         final bytes = await file.readAsBytes();
-        setState(() => _currentImage = bytes);
+        // Update image size for undo
+        final completer = Completer<ui.Image>();
+        ui.decodeImageFromList(bytes, (ui.Image img) {
+          completer.complete(img);
+        });
+        final ui.Image image = await completer.future;
+        final newSize = Size(image.width.toDouble(), image.height.toDouble());
+        image.dispose();
+
+        setState(() {
+          _currentImage = bytes;
+          _imageSize = newSize;
+        });
       }
     }
 
@@ -187,7 +279,19 @@ class _EditPageState extends State<EditPage> {
       final file = File(entry.snapshotPath!);
       if (await file.exists()) {
         final bytes = await file.readAsBytes();
-        setState(() => _currentImage = bytes);
+        // Update image size for redo
+        final completer = Completer<ui.Image>();
+        ui.decodeImageFromList(bytes, (ui.Image img) {
+          completer.complete(img);
+        });
+        final ui.Image image = await completer.future;
+        final newSize = Size(image.width.toDouble(), image.height.toDouble());
+        image.dispose();
+
+        setState(() {
+          _currentImage = bytes;
+          _imageSize = newSize;
+        });
       }
     }
 
@@ -195,46 +299,29 @@ class _EditPageState extends State<EditPage> {
   }
 
 
-  void _applyHistoryState() {
-    _isHistoryEnabled = false; // Временно отключаем историю
-
-    setState(() {
-      _currentImage = Uint8List.fromList(_history[_currentHistoryIndex].image);
-    });
-
-    _updateUndoRedoState();
-
-    _isHistoryEnabled = true;
-  }
-
-
-  // Обработка нехватки памяти
-  // Проверка памяти
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-  }
-
-  @override
-  void dispose() {
-    _currentImage = Uint8List(0);
-    _originalImage = Uint8List(0);
-    super.dispose();
-  }
-
   void _updateImage(Uint8List newImage, {String? action, String? operationType, Map<String, dynamic>? parameters}) async {
     if (!mounted || listEquals(_currentImage, newImage)) return;
 
-    setState(() => _currentImage = newImage);
+    //обновляем размер фото
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromList(newImage, (ui.Image img) {
+      completer.complete(img);
+    });
+    final ui.Image image = await completer.future;
+    final newSize = Size(image.width.toDouble(), image.height.toDouble());
+    image.dispose();
+
+    setState(() {
+      _currentImage = newImage;
+      _imageSize = newSize;
+    });
 
     if (action != null && operationType != null && parameters != null) {
-      // Сохраняем снимок во временный файл
       final tempDir = await getTemporaryDirectory();
       final snapshotPath = '${tempDir.path}/snapshot_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File(snapshotPath);
       await file.writeAsBytes(newImage);
 
-      // Добавляем операцию в историю
       await _historyManager.addOperation(
         operationType: operationType,
         parameters: parameters,
@@ -244,7 +331,6 @@ class _EditPageState extends State<EditPage> {
       _updateUndoRedoState();
     }
   }
-
 
   void _handleToolSelected(String tool) {
     setState(() {
@@ -296,18 +382,17 @@ class _EditPageState extends State<EditPage> {
       final imagePath = '${directory.path}/image_${DateTime.now().millisecondsSinceEpoch}.$extension';
       final file = File(imagePath);
 
-      // Конвертируем в нужный формат перед сохранением
-      Uint8List formattedBytes;
       if (format == 'JPEG') {
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        final byteData = await frame.image.toByteData(format: ui.ImageByteFormat.jpeg);
-        formattedBytes = byteData!.buffer.asUint8List();
+        final img.Image? decodedImage = img.decodeImage(bytes);
+        if (decodedImage != null) {
+          final jpegBytes = img.encodeJpg(decodedImage, quality: 90);
+          await file.writeAsBytes(jpegBytes);
+        } else {
+          throw Exception('Failed to decode image for JPEG conversion');
+        }
       } else {
-        formattedBytes = bytes;
+        await file.writeAsBytes(bytes);
       }
-
-      await file.writeAsBytes(formattedBytes);
 
       const channel = MethodChannel('gallery_saver');
       await channel.invokeMethod('saveImage', imagePath);
@@ -323,10 +408,11 @@ class _EditPageState extends State<EditPage> {
       String mimeType;
 
       if (format == 'JPEG') {
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        final byteData = await frame.image.toByteData(format: ui.ImageByteFormat.jpeg);
-        formattedBytes = byteData!.buffer.asUint8List();
+        final img.Image? decodedImage = img.decodeImage(bytes);
+        if (decodedImage == null) {
+          throw Exception('Failed to decode image for JPEG conversion');
+        }
+        formattedBytes = img.encodeJpg(decodedImage, quality: 90);
         mimeType = 'image/jpeg';
       } else {
         formattedBytes = bytes;
@@ -350,60 +436,73 @@ class _EditPageState extends State<EditPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Основной интерфейс
           Container(
             color: Colors.black,
             child: Column(
               children: [
-                // Верхняя панель
                 SafeArea(
                   bottom: false,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back),
-                      color: Colors.white,
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back),
+                        color: Colors.white,
                       ),
                       IconButton(
-                        icon: const Icon(Icons.undo),
-                        onPressed: _isUndoAvailable ? _undo : null,
+                        icon: const Icon(Icons.history),
+                        color: Colors.white,
+                        onPressed: _showEditHistory,
                       ),
                       IconButton(
-                        icon: const Icon(Icons.redo),
-                        onPressed: _isRedoAvailable ? _redo : null,
+                        onPressed: _saveImage,
+                        icon: const Icon(Icons.save_alt),
+                        color: Colors.white,
                       ),
-                      IconButton(
-                      onPressed: _saveImage,
-                      icon: const Icon(Icons.save_alt),
-                      color: Colors.white,
-                      ),
-                ]
-                  )
+                    ],
+                  ),
                 ),
-                // Область изображения
                 Expanded(
                   child: _isInitialized && _currentImage.isNotEmpty
                       ? InteractiveViewer(
                     minScale: 0.5,
                     maxScale: 3.0,
                     child: Center(
-                      child: Image.memory(
-                        _currentImage,
-                        fit: BoxFit.contain,
-                        gaplessPlayback: true,
+                      child: SizedBox(
+                        width: _imageSize.width,
+                        height: _imageSize.height,
+                        child: Image.memory(
+                          _currentImage,
+                          gaplessPlayback: true,
+                        ),
                       ),
                     ),
                   )
                       : const Center(child: CircularProgressIndicator()),
                 ),
-
-                // Панель инструментов
+                // Кнопки истории в нижней панели
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.undo),
+                        color: _isUndoAvailable ? Colors.white : Colors.grey,
+                        onPressed: _isUndoAvailable ? _undo : null,
+                      ),
+                      const SizedBox(width: 20),
+                      IconButton(
+                        icon: const Icon(Icons.redo),
+                        color: _isRedoAvailable ? Colors.white : Colors.grey,
+                        onPressed: _isRedoAvailable ? _redo : null,
+                      ),
+                    ],
+                  ),
+                ),
                 if (_showToolsPanel)
                   ToolsPanel(onToolSelected: _handleToolSelected),
-
-                // Кнопка вызова панели инструментов
                 IconButton(
                   icon: Icon(
                     _showToolsPanel ? Icons.close : Icons.edit,
@@ -414,24 +513,9 @@ class _EditPageState extends State<EditPage> {
                     setState(() => _showToolsPanel = !_showToolsPanel);
                   },
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.undo),
-                      color: _isUndoAvailable ? Colors.white : Colors.grey,
-                      onPressed: _isUndoAvailable ? _undo : null,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.redo),
-                      color: _isRedoAvailable ? Colors.white : Colors.grey,
-                      onPressed: _isRedoAvailable ? _redo : null,
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
-          // Панели инструментов
           if (_activeTool == 'crop')
             CropPanel(
               image: _currentImage,
@@ -442,7 +526,6 @@ class _EditPageState extends State<EditPage> {
               },
               onUpdateImage: _updateImage,
             ),
-
           if (_activeTool == 'filters')
             FiltersPanel(
               imageBytes: _currentImage,
@@ -453,20 +536,16 @@ class _EditPageState extends State<EditPage> {
               },
               onUpdateImage: _updateImage,
             ),
-
           if (_activeTool == 'adjust')
             AdjustPanel(
               originalImage: _originalImage,
               onImageChanged: (Uint8List value) {
                 _updateImage(value);
-                 _closeToolPanel();
-              },
-              onClose: () {
                 _closeToolPanel();
               },
+              onClose: _closeToolPanel,
               onUpdateImage: _updateImage,
             ),
-
           if (_activeTool == 'draw')
             DrawPanel(
               image: _currentImage,
@@ -476,11 +555,12 @@ class _EditPageState extends State<EditPage> {
                 _closeToolPanel();
               },
               onUpdateImage: _updateImage,
+              imageId: widget.imageId,
             ),
-
           if (_activeTool == 'text')
-            TextEmojiEditor(
+            TextEditorPanel(
               image: _currentImage,
+              imageId: widget.imageId,
               onCancel: _closeToolPanel,
               onApply: (textImage) {
                 _updateImage(textImage);
@@ -488,10 +568,10 @@ class _EditPageState extends State<EditPage> {
               },
               onUpdateImage: _updateImage,
             ),
-
           if (_activeTool == 'emoji')
             EmojiPanel(
               image: _currentImage,
+              imageId: widget.imageId,
               onCancel: _closeToolPanel,
               onApply: (emojiImage) {
                 _updateImage(emojiImage);
@@ -507,11 +587,11 @@ class _EditPageState extends State<EditPage> {
                 _updateImage(effectsImage);
                 _closeToolPanel();
               },
-              //onUpdateImage: _updateImage,
             ),
           if (_activeTool == 'eraser')
             EraserPanel(
               image: _currentImage,
+              imageId: widget.imageId,
               onCancel: _closeToolPanel,
               onApply: (eraserImage) {
                 _updateImage(eraserImage);
@@ -520,7 +600,7 @@ class _EditPageState extends State<EditPage> {
               onUpdateImage: _updateImage,
             ),
         ],
-      )
-      );
+      ),
+    );
   }
 }

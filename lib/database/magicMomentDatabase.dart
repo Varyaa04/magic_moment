@@ -3,6 +3,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'dart:convert';
 
+import '../pagesEditing/annotation/emojiPanel.dart';
+import '../pagesEditing/annotation/textEditorPanel.dart';
+
 class magicMomentDatabase {
   static Database? _database;
 
@@ -209,6 +212,35 @@ class magicMomentDatabase {
       )
     ''');
 
+    //Таблица для эмодзи
+    await db.execute('''
+    CREATE TABLE stickers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      image_id INTEGER NOT NULL,
+      path TEXT NOT NULL,
+      bytes BLOB,
+      x REAL NOT NULL,
+      y REAL NOT NULL,
+      size REAL NOT NULL,
+      is_asset INTEGER NOT NULL,
+      FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
+    )
+  ''');
+
+    //Таблица для текста
+    await db.execute('''
+    CREATE TABLE texts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      image_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      x REAL NOT NULL,
+      y REAL NOT NULL,
+      size REAL NOT NULL,
+      color INTEGER NOT NULL,
+      font_family TEXT NOT NULL,
+      FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
+    )
+  ''');
     // Заполняем справочник форматов
     await _populateImageFormats(db);
   }
@@ -356,7 +388,6 @@ class magicMomentDatabase {
   }
 
  //  CRUD операции для таблицы с историей
-
   Future<List<EditHistory>> getAllHistory() async {
     final db = await instance.database;
     final maps = await db.query('history');
@@ -392,7 +423,126 @@ class magicMomentDatabase {
       whereArgs: [id],
     );
   }
+
+//  CRUD операции для таблицы с эмодзи
+  Future<int> insertSticker(StickerData sticker, int imageId) async {
+    final db = await database;
+    return await db.insert('stickers', sticker.toMap(imageId));
+  }
+
+  Future<List<StickerData>> getStickersForImage(int imageId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'stickers',
+      where: 'image_id = ?',
+      whereArgs: [imageId],
+    );
+    return List.generate(maps.length, (i) => StickerData.fromMap(maps[i]));
+  }
+
+  Future<void> updateSticker(StickerData sticker) async {
+    final db = await database;
+    await db.update(
+      'stickers',
+      {
+        'x': sticker.position.dx,
+        'y': sticker.position.dy,
+        'size': sticker.size,
+      },
+      where: 'id = ?',
+      whereArgs: [sticker.id],
+    );
+  }
+
+  Future<void> deleteSticker(int id) async {
+    final db = await database;
+    await db.delete(
+      'stickers',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> insertTextItem(TextItem item, int imageId) async {
+    final db = await database;
+    return await db.insert('texts', item.toMap(imageId));
+  }
+
+  Future<List<TextItem>> getTextItemsForImage(int imageId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'texts',
+      where: 'image_id = ?',
+      whereArgs: [imageId],
+    );
+    return List.generate(maps.length, (i) => TextItem.fromMap(maps[i]));
+  }
+
+  Future<void> updateTextItem(TextItem item) async {
+    final db = await database;
+    await db.update(
+      'texts',
+      {
+        'x': item.position.dx,
+        'y': item.position.dy,
+        'size': item.size,
+        'color': item.color.value,
+      },
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
+  }
+
+  Future<void> deleteTextItem(int id) async {
+    final db = await database;
+    await db.delete(
+      'texts',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
 }
+
+Future<int> insertHistory(EditHistory history) async {
+  var database;
+  final db = await database;
+  return await db.insert('edit_history', history.toMap());
+}
+Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
+  var database;
+  final db = await database;
+  final List<Map<String, dynamic>> maps = await db.query(
+    'edit_history',
+    where: 'image_id = ?',
+    whereArgs: [imageId],
+    orderBy: 'operation_date ASC',
+  );
+  return List.generate(maps.length, (i) => EditHistory.fromMap(maps[i]));
+}
+Future<void> updateCurrentState(int imageId, int historyId, String? snapshotPath) async {
+  var database;
+  final db = await database;
+  await db.update(
+    'images',
+    {
+      'current_history_id': historyId,
+      'current_snapshot_path': snapshotPath,
+    },
+    where: 'image_id = ?',
+    whereArgs: [imageId],
+  );
+}
+Future<void> deleteHistory(int historyId) async {
+  var database;
+  final db = await database;
+  await db.delete(
+    'edit_history',
+    where: 'history_id = ?',
+    whereArgs: [historyId],
+  );
+}
+
+
 // Модели данных
 class ImageData {
   final int? imageId;
@@ -584,46 +734,4 @@ class EditHistory {
       previousStateId: map['previous_state_id'],
     );
   }
-}
-
-Future<int> insertHistory(EditHistory history) async {
-  var database;
-  final db = await database;
-  return await db.insert('edit_history', history.toMap());
-}
-
-Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
-  var database;
-  final db = await database;
-  final List<Map<String, dynamic>> maps = await db.query(
-    'edit_history',
-    where: 'image_id = ?',
-    whereArgs: [imageId],
-    orderBy: 'operation_date ASC',
-  );
-  return List.generate(maps.length, (i) => EditHistory.fromMap(maps[i]));
-}
-
-Future<void> updateCurrentState(int imageId, int historyId, String? snapshotPath) async {
-  var database;
-  final db = await database;
-  await db.update(
-    'images',
-    {
-      'current_history_id': historyId,
-      'current_snapshot_path': snapshotPath,
-    },
-    where: 'image_id = ?',
-    whereArgs: [imageId],
-  );
-}
-
-Future<void> deleteHistory(int historyId) async {
-  var database;
-  final db = await database;
-  await db.delete(
-    'edit_history',
-    where: 'history_id = ?',
-    whereArgs: [historyId],
-  );
 }

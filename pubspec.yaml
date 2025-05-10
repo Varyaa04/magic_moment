@@ -23,10 +23,13 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   image: ^4.5.4
-  path_provider: ^2.0.11
+  path_provider: ^2.1.5
   image_picker: ^1.1.2
   universal_html: ^2.2.4
   image_cropper:  ^9.1.0
+  background_remover: ^0.0.3
+  object_remover: ^0.0.2
+  image_picker_web: ^4.0.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3

@@ -97,6 +97,8 @@ class AppLocalizations {
       "borderRadius": "Border Radius",
       "borderColor": "Border Color",
       "selectFormat": "Select format",
+      "removeBackground": "Remove background",
+      "removeObject": "Remove object",
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -181,6 +183,8 @@ class AppLocalizations {
       "borderRadius": "Радиус углов",
       "borderColor": "Цвет границы",
       "selectFormat": "Выберите формат",
+      "removeBackground": "Удалить фон",
+      "removeObject": "Удалить объект",
     },
   };
 
@@ -275,6 +279,8 @@ class AppLocalizations {
   String get borderRadius => _localizedValues[locale.languageCode]!['borderRadius']!;
   String get borderColor => _localizedValues[locale.languageCode]!['borderColor']!;
   String get selectFormat => _localizedValues[locale.languageCode]!['selectFormat']!;
+  String get removeBackground => _localizedValues[locale.languageCode]!['removeBackground']!;
+  String get removeObject => _localizedValues[locale.languageCode]!['removeObject']!;
 }
 
 class _AppLocalizationsDelegate

@@ -1,4 +1,6 @@
-import 'package:MagicMoment/database/magicMomentDatabase.dart';
+
+import 'magicMomentDatabase.dart';
+
 class EditHistoryManager {
   final magicMomentDatabase db;
   final int imageId;
