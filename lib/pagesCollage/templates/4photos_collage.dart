@@ -8,7 +8,6 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
       padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
@@ -135,7 +134,7 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
               height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
@@ -158,7 +157,7 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
               height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
@@ -181,7 +180,7 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
               height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all(width: 3),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
@@ -369,7 +368,6 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
                       height: 240,
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: [
                           BoxShadow(
@@ -393,7 +391,6 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
                       height: 240,
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: [
                           BoxShadow(
@@ -417,7 +414,6 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
                       height: 240,
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: [
                           BoxShadow(
@@ -441,7 +437,6 @@ List<Widget> getFourPhotosCollages(List<ImageProvider> images) {
                       height: 240,
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: [
                           BoxShadow(

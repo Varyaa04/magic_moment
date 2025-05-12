@@ -95,7 +95,6 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
                   margin: EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    color: Colors.grey[200],
                   ),
                 ),
               ],
@@ -126,7 +125,7 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[0],
                   fit: BoxFit.cover,
@@ -148,7 +147,7 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all(width: 3),
                 image: DecorationImage(
                   image: images[1],
                   fit: BoxFit.cover,
@@ -170,7 +169,7 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
               height: 150,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 4),
+                border: Border.all(width: 4),
                 image: DecorationImage(
                   image: images[2],
                   fit: BoxFit.cover,
@@ -192,7 +191,7 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[3],
                   fit: BoxFit.cover,
@@ -214,7 +213,7 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[4],
                   fit: BoxFit.cover,
@@ -236,7 +235,7 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
               height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[5],
                   fit: BoxFit.cover,
@@ -346,7 +345,6 @@ List<Widget> getSixPhotosCollages(List<ImageProvider> images) {
     Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:MagicMoment/themeWidjets/formatButtonIcon.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 

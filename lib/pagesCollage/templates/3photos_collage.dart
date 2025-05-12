@@ -39,7 +39,6 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
               mainAxisCellCount: 1,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
                   image: DecorationImage(
                     image: images[1],
                     fit: BoxFit.cover,
@@ -75,7 +74,6 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
             height: 250,
             padding: EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white,
               borderRadius: BorderRadius.circular(4),
               boxShadow: [
                 BoxShadow(
@@ -96,7 +94,6 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
             height: 230,
             padding: EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white,
               borderRadius: BorderRadius.circular(4),
               boxShadow: [
                 BoxShadow(
@@ -117,7 +114,6 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
             height: 210,
             padding: EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white,
               borderRadius: BorderRadius.circular(4),
               boxShadow: [
                 BoxShadow(
@@ -137,7 +133,6 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
     Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -278,7 +273,6 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
     Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
         borderRadius: BorderRadius.circular(20),
       ),
       child: Stack(
@@ -290,7 +284,7 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
               height: 220,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 6),
+                border: Border.all( width: 6),
                 image: DecorationImage(
                   image: images[0],
                   fit: BoxFit.cover,
@@ -313,7 +307,7 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
               height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[1],
                   fit: BoxFit.cover,
@@ -336,7 +330,7 @@ List<Widget> getThreePhotosCollages(List<ImageProvider> images) {
               height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[2],
                   fit: BoxFit.cover,

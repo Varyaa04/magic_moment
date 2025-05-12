@@ -11,7 +11,7 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
           BoxShadow(
             color: Colors.black.withOpacity(0.2),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -30,7 +30,7 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
                 ),
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Expanded(
               flex: 2,
               child: Container(
@@ -52,12 +52,11 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
       padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -110,7 +109,7 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
               BoxShadow(
                 color: Colors.black.withOpacity(0.2),
                 blurRadius: 10,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -137,12 +136,11 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
             height: 120,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white, width: 4),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.3),
                   blurRadius: 8,
-                  offset: Offset(0, 4),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -169,15 +167,14 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
             child: Container(
               width: 180,
               height: 240,
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
                 borderRadius: BorderRadius.circular(4),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
                     blurRadius: 10,
-                    offset: Offset(0, 4),
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -199,15 +196,14 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
             child: Container(
               width: 180,
               height: 240,
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
                 borderRadius: BorderRadius.circular(4),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
                     blurRadius: 10,
-                    offset: Offset(0, 4),
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -261,7 +257,6 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
           mainAxisCellCount: 2,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.grey[200],
               borderRadius: BorderRadius.circular(12),
             ),
           ),
@@ -273,7 +268,6 @@ List<Widget> getTwoPhotosCollages(List<ImageProvider> images) {
     Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(

@@ -88,6 +88,16 @@ class _EditPageState extends State<EditPage> {
     });
   }
 
+  Future<void> _loadImageFromHistory() async {
+    final path = await _historyManager.getCurrentSnapshotPath();
+    if (path != null) {
+      setState(() {
+        _currentImage = File(path) as Uint8List;
+      });
+    }
+  }
+
+
   void _showEditHistory() async {
     final history = await _historyManager.db.getAllHistoryForImage(widget.imageId);
     showModalBottomSheet(
@@ -538,7 +548,7 @@ class _EditPageState extends State<EditPage> {
             ),
           if (_activeTool == 'adjust')
             AdjustPanel(
-              originalImage: _originalImage,
+              originalImage: _currentImage,
               onImageChanged: (Uint8List value) {
                 _updateImage(value);
                 _closeToolPanel();
@@ -558,7 +568,7 @@ class _EditPageState extends State<EditPage> {
               imageId: widget.imageId,
             ),
           if (_activeTool == 'text')
-            TextEditorPanel(
+            TextEmojiEditor(
               image: _currentImage,
               imageId: widget.imageId,
               onCancel: _closeToolPanel,

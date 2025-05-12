@@ -22,7 +22,7 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
             height: 220,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 6),
+              border: Border.all( width: 6),
               image: DecorationImage(
                 image: images[0],
                 fit: BoxFit.cover,
@@ -44,7 +44,7 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
               height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[1],
                   fit: BoxFit.cover,
@@ -67,7 +67,7 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
               height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[2],
                   fit: BoxFit.cover,
@@ -90,7 +90,7 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
               height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all( width: 3),
                 image: DecorationImage(
                   image: images[3],
                   fit: BoxFit.cover,
@@ -113,7 +113,7 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
               height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all(width: 3),
                 image: DecorationImage(
                   image: images[4],
                   fit: BoxFit.cover,
@@ -430,7 +430,6 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
                 height: 210,
                 padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   boxShadow: [
                     BoxShadow(
@@ -454,7 +453,6 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
                 height: 210,
                 padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   boxShadow: [
                     BoxShadow(
@@ -478,7 +476,6 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
                 height: 210,
                 padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   boxShadow: [
                     BoxShadow(
@@ -502,7 +499,6 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
                 height: 210,
                 padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   boxShadow: [
                     BoxShadow(
@@ -526,7 +522,6 @@ List<Widget> getFivePhotosCollages(List<ImageProvider> images) {
                 height: 210,
                 padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   boxShadow: [
                     BoxShadow(

@@ -1,15 +1,15 @@
 import 'dart:developer';
+import 'dart:io' show Platform;
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'dart:convert';
-
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../pagesEditing/annotation/emojiPanel.dart';
 import '../pagesEditing/annotation/textEditorPanel.dart';
 
 class magicMomentDatabase {
   static Database? _database;
-
-  // Экземпляр синглтона
   static final magicMomentDatabase instance = magicMomentDatabase._init();
 
   magicMomentDatabase._init();
@@ -20,8 +20,13 @@ class magicMomentDatabase {
     return _database!;
   }
 
-
   Future<Database> _initDatabase() async {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
     final path = join(await getDatabasesPath(), 'magic_moment.db');
     return await openDatabase(
       path,
@@ -30,8 +35,7 @@ class magicMomentDatabase {
     );
   }
 
-
-  Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
+Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     try {
       final db = await database;
 
@@ -427,18 +431,10 @@ class magicMomentDatabase {
 //  CRUD операции для таблицы с эмодзи
   Future<int> insertSticker(StickerData sticker, int imageId) async {
     final db = await database;
-    return await db.insert('stickers', sticker.toMap(imageId));
+    return await db.insert('stickers', sticker.isAsset as Map<String, Object?>);
   }
 
-  Future<List<StickerData>> getStickersForImage(int imageId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'stickers',
-      where: 'image_id = ?',
-      whereArgs: [imageId],
-    );
-    return List.generate(maps.length, (i) => StickerData.fromMap(maps[i]));
-  }
+
 
   Future<void> updateSticker(StickerData sticker) async {
     final db = await database;
@@ -450,7 +446,7 @@ class magicMomentDatabase {
         'size': sticker.size,
       },
       where: 'id = ?',
-      whereArgs: [sticker.id],
+      whereArgs: [sticker.isAsset],
     );
   }
 

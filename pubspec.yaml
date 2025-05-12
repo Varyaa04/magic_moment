@@ -14,8 +14,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
   sqflite: ^2.4.1
+  path: ^1.8.3
+  http: ^1.3.0
   flutter_image_compress: ^1.1.0
   device_info_plus: ^10.1.2
+  sqflite_common_ffi: ^2.3.0
   permission_handler: ^11.4.0
   shared_preferences: ^2.5.2
   flutter_staggered_grid_view: ^0.7.0
@@ -103,3 +106,25 @@ flutter:
     - family: Comfortaa
       fonts:
         - asset: lib/assets/google_fonts/Comfortaa-VariableFont_wght.ttf
+    - family: Roboto
+      fonts:
+        - asset: lib/assets/google_fonts/Roboto-Italic-VariableFont_wdth,wght.ttf
+    - family: Arial
+      fonts:
+        - asset: lib/assets/google_fonts/Arial.ttf
+    - family: Courier
+      fonts:
+        - asset: lib/assets/google_fonts/CourierPrime-Regular.ttf
+    - family: Times New Roman
+      fonts:
+        - asset: lib/assets/google_fonts/times.ttf
+    - family: Impact
+      fonts:
+        - asset: lib/assets/google_fonts/impact.ttf
+    - family: Comic Sans MS
+      fonts:
+        - asset: lib/assets/google_fonts/Comic Sans MS.ttf
+    - family: Verdana
+      fonts:
+        - asset: lib/assets/google_fonts/VERDANAI.ttf
+
