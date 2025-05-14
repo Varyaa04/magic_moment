@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
 class ColorPicker extends StatefulWidget {
   final Color pickerColor;
@@ -59,109 +60,113 @@ class _ColorPickerState extends State<ColorPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery
-        .of(context)
-        .size
-        .height;
+    final screenHeight = MediaQuery.of(context).size.height;
     final double areaHeight = screenHeight * widget.pickerAreaHeightPercent;
-    final double clampedHeight = areaHeight.clamp(150.0, 250.0);
+    final double clampedHeight = areaHeight.clamp(150.0, 300.0);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          height: clampedHeight,
-          width: double.infinity,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return GestureDetector(
-                onPanDown: (details) =>
-                    _onSaturationValueChanged(
-                        details.localPosition, constraints.biggest),
-                onPanUpdate: (details) =>
-                    _onSaturationValueChanged(
-                        details.localPosition, constraints.biggest),
-                child: CustomPaint(
-                  painter: SaturationValuePainter(hue: _hsvColor.hue),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        left: _hsvColor.saturation * constraints.maxWidth - 6,
-                        top: (1 - _hsvColor.value) * constraints.maxHeight - 6,
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Color area
+          SizedBox(
+            height: clampedHeight,
+            width: double.infinity,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return GestureDetector(
+                  onPanDown: (details) => _onSaturationValueChanged(
+                      details.localPosition, constraints.biggest),
+                  onPanUpdate: (details) => _onSaturationValueChanged(
+                      details.localPosition, constraints.biggest),
+                  child: CustomPaint(
+                    painter: SaturationValuePainter(hue: _hsvColor.hue),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: _hsvColor.saturation * constraints.maxWidth - 6,
+                          top:
+                          (1 - _hsvColor.value) * constraints.maxHeight - 6,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          height: 24,
-          constraints: const BoxConstraints(maxWidth: 360),
-          margin: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFFFF0000),
-                Color(0xFFFFFF00),
-                Color(0xFF00FF00),
-                Color(0xFF00FFFF),
-                Color(0xFF0000FF),
-                Color(0xFFFF00FF),
-                Color(0xFFFF0000),
-              ],
+                );
+              },
             ),
           ),
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 0,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-              overlayShape: SliderComponentShape.noOverlay,
-            ),
-            child: Slider(
-              min: 0,
-              max: 360,
-              value: _hsvColor.hue,
-              onChanged: _onHueChanged,
-              activeColor: Colors.transparent,
-              inactiveColor: Colors.transparent,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Opacity'),
-              Slider(
-                min: 0.0,
-                max: 1.0,
-                divisions: 100,
-                value: _alpha,
-                onChanged: _onAlphaChanged,
+          const SizedBox(height: 16),
+
+          // Hue slider
+          Container(
+            height: 24,
+            constraints: const BoxConstraints(maxWidth: 360),
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFFFF0000),
+                  Color(0xFFFFFF00),
+                  Color(0xFF00FF00),
+                  Color(0xFF00FFFF),
+                  Color(0xFF0000FF),
+                  Color(0xFFFF00FF),
+                  Color(0xFFFF0000),
+                ],
               ),
-            ],
+            ),
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 0,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                overlayShape: SliderComponentShape.noOverlay,
+              ),
+              child: Slider(
+                min: 0,
+                max: 360,
+                value: _hsvColor.hue,
+                onChanged: _onHueChanged,
+                activeColor: Colors.transparent,
+                inactiveColor: Colors.transparent,
+              ),
+            ),
           ),
-        ),
-      ],
+
+          if (widget.enableAlpha) ...[
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Opacity'),
+                  Slider(
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: 100,
+                    value: _alpha,
+                    onChanged: _onAlphaChanged,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
-
-  class SaturationValuePainter extends CustomPainter {
+class SaturationValuePainter extends CustomPainter {
   final double hue;
 
   SaturationValuePainter({required this.hue});

@@ -1,8 +1,8 @@
-
 import 'magicMomentDatabase.dart';
+import 'objectsModels.dart';
 
 class EditHistoryManager {
-  final magicMomentDatabase db;
+  final MagicMomentDatabase db;
   final int imageId;
 
   List<EditHistory> _history = [];

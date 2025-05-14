@@ -4,6 +4,10 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:MagicMoment/themeWidjets/colorPicker.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import '../../database/objectDao.dart' as dao;
+import '../../database/objectsModels.dart';
+import '../../database/magicMomentDatabase.dart';
 
 class TextEmojiEditor extends StatefulWidget {
   final Uint8List image;
@@ -11,7 +15,6 @@ class TextEmojiEditor extends StatefulWidget {
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
   final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
-
 
   const TextEmojiEditor({
     required this.image,
@@ -30,6 +33,8 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   final GlobalKey _renderKey = GlobalKey();
   final TextEditingController _textController = TextEditingController();
   final List<TextItem> _textItems = [];
+  final List<Map<String, dynamic>> _history = [];
+  int _historyIndex = -1;
   TextItem? _selectedTextItem;
   int _currentTabIndex = 0;
   Color _textBackgroundColor = Colors.transparent;
@@ -40,7 +45,6 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   bool _isItalic = false;
   bool _hasShadow = true;
   TextAlign _textAlign = TextAlign.center;
-
   final List<String> _emojis = [
     '😀', '😂', '😍', '😎', '😜', '🤩', '🥳', '😇',
     '🐶', '🐱', '🦁', '🐯', '🦊', '🐻', '🐼', '🐨',
@@ -60,6 +64,75 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
         });
       }
     });
+    _loadTextsFromDb();
+    _history.add({
+      'image': widget.image,
+      'action': 'Initial image',
+      'operationType': 'init',
+      'parameters': {},
+    });
+    _historyIndex = 0;
+  }
+
+  Future<void> _loadTextsFromDb() async {
+    try {
+      final objectDao = dao.ObjectDao();
+      final saved = await objectDao.getTexts(widget.imageId);
+      debugPrint('Loaded ${saved.length} texts from DB for imageId: ${widget.imageId}');
+
+      setState(() {
+        _textItems.addAll(saved.map((t) => TextItem(
+          id: t.id,
+          text: t.text,
+          position: Offset(t.positionX, t.positionY),
+          color: Color(int.parse(t.color.replaceFirst('#', '0xff'))),
+          size: t.fontSize,
+          fontFamily: t.fontFamily,
+          isBold: t.fontWeight == 'bold',
+          isItalic: t.fontStyle == 'italic',
+          hasShadow: true,
+          textAlign: TextAlign.values.byName(t.alignment),
+          backgroundColor: Colors.transparent,
+        )));
+      });
+    } catch (e) {
+      debugPrint('Error loading texts from DB: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load texts: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _undo() async {
+    if (_historyIndex <= 0) return;
+
+    try {
+      setState(() {
+        _historyIndex--;
+        _textItems.clear();
+        _selectedTextItem = null;
+        _textController.clear();
+      });
+
+      await widget.onUpdateImage(
+        _history[_historyIndex]['image'],
+        action: 'Undo text/emoji',
+        operationType: 'undo',
+        parameters: {
+          'previous_action': _history[_historyIndex + 1]['action'],
+        },
+      );
+      debugPrint('Undo performed, history index: $_historyIndex');
+    } catch (e) {
+      debugPrint('Error undoing text/emoji: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to undo: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -70,12 +143,14 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(0.8),
       body: SafeArea(
         child: Column(
           children: [
-            _buildTopBar(),
+            _buildTopBar(localizations),
             Expanded(
               child: GestureDetector(
                 onTap: () => setState(() => _selectedTextItem = null),
@@ -90,14 +165,14 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                 ),
               ),
             ),
-            _buildBottomPanel(),
+            _buildBottomPanel(localizations),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(AppLocalizations? localizations) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       height: 56,
@@ -112,19 +187,24 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
           IconButton(
             icon: const Icon(Icons.close, color: Colors.white),
             onPressed: widget.onCancel,
-            tooltip: 'Cancel',
+            tooltip: localizations?.cancel ?? 'Cancel',
           ),
           const Spacer(),
           if (_selectedTextItem != null)
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
               onPressed: _deleteSelectedItem,
-              tooltip: 'Delete selected item',
+              tooltip: localizations?.remove ?? 'Remove',
             ),
+          IconButton(
+            icon: Icon(Icons.undo, color: _historyIndex > 0 ? Colors.white : Colors.grey),
+            onPressed: _historyIndex > 0 ? _undo : null,
+            tooltip: localizations?.undo ?? 'Undo',
+          ),
           IconButton(
             icon: const Icon(Icons.check, color: Colors.white),
             onPressed: _saveChanges,
-            tooltip: 'Apply changes',
+            tooltip: localizations?.apply ?? 'Apply',
           ),
         ],
       ),
@@ -140,14 +220,13 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
         onPanUpdate: (details) {
           setState(() {
             item.position += details.delta;
+            debugPrint('Text moved to: ${item.position}');
           });
         },
         child: Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            border: _selectedTextItem == item
-                ? Border.all(color: Colors.blue, width: 2)
-                : null,
+            border: _selectedTextItem == item ? Border.all(color: Colors.blue, width: 2) : null,
             color: item.backgroundColor,
             borderRadius: BorderRadius.circular(4),
           ),
@@ -184,7 +263,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Widget _buildBottomPanel() {
+  Widget _buildBottomPanel(AppLocalizations? localizations) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
@@ -195,23 +274,23 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildTabBar(),
+          _buildTabBar(localizations),
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
-            child: _currentTabIndex == 0 ? _buildTextTab() : _buildEmojiTab(),
+            child: _currentTabIndex == 0 ? _buildTextTab(localizations) : _buildEmojiTab(localizations),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildTabBar(AppLocalizations? localizations) {
     return Container(
       height: 48,
       child: Row(
         children: [
-          _buildTabButton('Text', 0),
-          _buildTabButton('Emoji', 1),
+          _buildTabButton(localizations?.text ?? 'Text', 0),
+          _buildTabButton(localizations?.emoji ?? 'Emoji', 1),
         ],
       ),
     );
@@ -244,7 +323,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Widget _buildTextTab() {
+  Widget _buildTextTab(AppLocalizations? localizations) {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -252,7 +331,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
           TextField(
             controller: _textController,
             decoration: InputDecoration(
-              hintText: 'Enter text or emoji',
+              hintText: localizations?.enterText ?? 'Enter text or emoji',
               hintStyle: TextStyle(color: Colors.grey[500]),
               filled: true,
               fillColor: Colors.grey[900],
@@ -263,7 +342,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
               suffixIcon: IconButton(
                 icon: const Icon(Icons.add, color: Colors.blue),
                 onPressed: _addText,
-                tooltip: 'Add text',
+                tooltip: localizations?.add ?? 'Add',
               ),
             ),
             style: const TextStyle(color: Colors.white),
@@ -276,44 +355,44 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
               children: [
                 _buildStyleButton(
                   Icons.format_size,
-                  'Size',
-                      () => _showSizeDialog(),
+                  localizations?.size ?? 'Size',
+                      () => _showSizeDialog(localizations),
                 ),
                 _buildStyleButton(
                   Icons.color_lens,
-                  'Color',
-                      () => _showColorDialog(),
+                  localizations?.textColor ?? 'Color',
+                      () => _showColorDialog(localizations),
                 ),
                 _buildStyleButton(
                   Icons.format_color_fill,
-                  'Background',
-                      () => _showBackgroundColorDialog(),
+                  localizations?.background ?? 'Background',
+                      () => _showBackgroundColorDialog(localizations),
                 ),
                 _buildStyleButton(
                   Icons.font_download,
-                  'Font',
-                      () => _showFontDialog(),
+                  localizations?.font ?? 'Font',
+                      () => _showFontDialog(localizations),
                 ),
                 _buildStyleButton(
                   Icons.format_align_center,
-                  'Align',
-                      () => _showAlignDialog(),
+                  localizations?.align ?? 'Align',
+                      () => _showAlignDialog(localizations),
                 ),
                 _buildStyleButton(
                   Icons.format_bold,
-                  'Bold',
+                  localizations?.bold ?? 'Bold',
                       () => _toggleStyle(() => _isBold = !_isBold),
                   isActive: _isBold,
                 ),
                 _buildStyleButton(
                   Icons.format_italic,
-                  'Italic',
+                  localizations?.italic ?? 'Italic',
                       () => _toggleStyle(() => _isItalic = !_isItalic),
                   isActive: _isItalic,
                 ),
                 _buildStyleButton(
                   FluentIcons.image_shadow_20_filled,
-                  'Shadow',
+                  localizations?.shadow ?? 'Shadow',
                       () => _toggleStyle(() => _hasShadow = !_hasShadow),
                   isActive: _hasShadow,
                 ),
@@ -325,7 +404,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Widget _buildEmojiTab() {
+  Widget _buildEmojiTab(AppLocalizations? localizations) {
     return Container(
       height: 200,
       padding: const EdgeInsets.all(8),
@@ -337,17 +416,20 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
         ),
         itemCount: _emojis.length,
         itemBuilder: (context, index) {
-          return GestureDetector(
-            onTap: () => _addEmoji(_emojis[index]),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  _emojis[index],
-                  style: const TextStyle(fontSize: 24),
+          return Tooltip(
+            message: localizations?.tapToPlaceEmoji ?? 'Tap to place emoji',
+            child: GestureDetector(
+              onTap: () => _addEmoji(_emojis[index]),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[900],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    _emojis[index],
+                    style: const TextStyle(fontSize: 24),
+                  ),
                 ),
               ),
             ),
@@ -380,7 +462,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Future<void> _showBackgroundColorDialog() async {
+  Future<void> _showBackgroundColorDialog(AppLocalizations? localizations) async {
     Color tempColor = _textBackgroundColor;
 
     await showModalBottomSheet(
@@ -398,21 +480,15 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Text Background',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold
-                  ),
+                Text(
+                  localizations?.textBackground ?? 'Text Background',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
                   child: ColorPicker(
                     pickerColor: tempColor,
-                    onColorChanged: (color) {
-                      tempColor = color;
-                    },
+                    onColorChanged: (color) => tempColor = color,
                     pickerAreaHeightPercent: 0.7,
                   ),
                 ),
@@ -422,7 +498,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                      child: Text(localizations?.cancel ?? 'Cancel', style: const TextStyle(color: Colors.white)),
                     ),
                     TextButton(
                       onPressed: () {
@@ -434,7 +510,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                         });
                         Navigator.pop(context);
                       },
-                      child: const Text('Apply', style: TextStyle(color: Colors.blue)),
+                      child: Text(localizations?.apply ?? 'Apply', style: const TextStyle(color: Colors.blue)),
                     ),
                   ],
                 ),
@@ -446,47 +522,136 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  void _addText() {
-    if (_textController.text.isEmpty) return;
+  Future<void> _addText() async {
+    if (_textController.text.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)?.enterText ?? 'Please enter text')),
+        );
+      }
+      return;
+    }
 
-    final newItem = TextItem(
-      text: _textController.text,
-      position: const Offset(100, 100),
-      color: _textColor,
-      size: _textSize,
-      fontFamily: _fontFamily,
-      isBold: _isBold,
-      isItalic: _isItalic,
-      hasShadow: _hasShadow,
-      textAlign: _textAlign,
-      backgroundColor: _textBackgroundColor,
-    );
+    try {
+      final newItem = TextItem(
+        text: _textController.text,
+        position: const Offset(100, 100),
+        color: _textColor,
+        size: _textSize,
+        fontFamily: _fontFamily,
+        isBold: _isBold,
+        isItalic: _isItalic,
+        hasShadow: _hasShadow,
+        textAlign: _textAlign,
+        backgroundColor: _textBackgroundColor,
+      );
 
-    setState(() {
-      _textItems.add(newItem);
-      _selectedTextItem = newItem;
-      _textController.clear();
-    });
+      final history = EditHistory(
+        imageId: widget.imageId,
+        operationType: 'text_emoji',
+        operationParameters: {
+          'text': newItem.text,
+          'font_size': newItem.size,
+        },
+        operationDate: DateTime.now(),
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
+      debugPrint('History inserted with ID: $historyId');
+
+      final objectDao = dao.ObjectDao();
+      final textId = await objectDao.insertText(TextObject(
+        imageId: widget.imageId,
+        text: newItem.text,
+        positionX: newItem.position.dx,
+        positionY: newItem.position.dy,
+        fontSize: newItem.size,
+        fontWeight: newItem.isBold ? 'bold' : 'normal',
+        fontStyle: newItem.isItalic ? 'italic' : 'normal',
+        alignment: newItem.textAlign.name,
+        color: '#${newItem.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+        fontFamily: newItem.fontFamily,
+        scale: 1.0,
+        rotation: 0.0,
+        historyId: historyId,
+      ));
+
+      setState(() {
+        newItem.id = textId;
+        _textItems.add(newItem);
+        _selectedTextItem = newItem;
+        _textController.clear();
+        debugPrint('Text added: ${newItem.text}, ID: $textId');
+      });
+    } catch (e) {
+      debugPrint('Error adding text: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add text: $e')),
+        );
+      }
+    }
   }
 
-  void _addEmoji(String emoji) {
-    final newItem = TextItem(
-      text: emoji,
-      position: const Offset(100, 100),
-      color: _textColor,
-      size: _textSize,
-      fontFamily: _fontFamily,
-      isBold: _isBold,
-      isItalic: _isItalic,
-      hasShadow: _hasShadow,
-      textAlign: _textAlign,
-      backgroundColor: _textBackgroundColor,
-    );
+  Future<void> _addEmoji(String emoji) async {
+    try {
+      final newItem = TextItem(
+        text: emoji,
+        position: const Offset(100, 100),
+        color: _textColor,
+        size: _textSize,
+        fontFamily: _fontFamily,
+        isBold: _isBold,
+        isItalic: _isItalic,
+        hasShadow: _hasShadow,
+        textAlign: _textAlign,
+        backgroundColor: _textBackgroundColor,
+      );
 
-    setState(() {
-      _textItems.add(newItem);
-      _selectedTextItem = newItem;
-    });
+      final history = EditHistory(
+        imageId: widget.imageId,
+        operationType: 'text_emoji',
+        operationParameters: {
+          'emoji': newItem.text,
+          'font_size': newItem.size,
+        },
+        operationDate: DateTime.now(),
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
+      debugPrint('History inserted with ID: $historyId');
+
+      final objectDao = dao.ObjectDao();
+      final textId = await objectDao.insertText(TextObject(
+        imageId: widget.imageId,
+        text: newItem.text,
+        positionX: newItem.position.dx,
+        positionY: newItem.position.dy,
+        fontSize: newItem.size,
+        fontWeight: newItem.isBold ? 'bold' : 'normal',
+        fontStyle: newItem.isItalic ? 'italic' : 'normal',
+        alignment: newItem.textAlign.name,
+        color: '#${newItem.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+        fontFamily: newItem.fontFamily,
+        scale: 1.0,
+        rotation: 0.0,
+        historyId: historyId,
+      ));
+
+      setState(() {
+        newItem.id = textId;
+        _textItems.add(newItem);
+        _selectedTextItem = newItem;
+        debugPrint('Emoji added: ${newItem.text}, ID: $textId');
+      });
+    } catch (e) {
+      debugPrint('Error adding emoji: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add emoji: $e')),
+        );
+      }
+    }
   }
 
   void _selectTextItem(TextItem item) {
@@ -505,6 +670,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
         baseOffset: 0,
         extentOffset: item.text.length,
       );
+      debugPrint('Text selected: ${item.text}');
     });
   }
 
@@ -519,7 +685,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     });
   }
 
-  Future<void> _showSizeDialog() async {
+  Future<void> _showSizeDialog(AppLocalizations? localizations) async {
     double tempSize = _textSize;
 
     await showModalBottomSheet(
@@ -536,9 +702,9 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    'Text Size',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    localizations?.textSize ?? 'Text Size',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
                   Slider(
@@ -557,7 +723,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                        child: Text(localizations?.cancel ?? 'Cancel', style: const TextStyle(color: Colors.white)),
                       ),
                       TextButton(
                         onPressed: () {
@@ -569,7 +735,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                           });
                           Navigator.pop(context);
                         },
-                        child: const Text('Apply', style: TextStyle(color: Colors.blue)),
+                        child: Text(localizations?.apply ?? 'Apply', style: const TextStyle(color: Colors.blue)),
                       ),
                     ],
                   ),
@@ -582,7 +748,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Future<void> _showColorDialog() async {
+  Future<void> _showColorDialog(AppLocalizations? localizations) async {
     Color tempColor = _textColor;
 
     await showModalBottomSheet(
@@ -600,21 +766,15 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Text Color',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold
-                  ),
+                Text(
+                  localizations?.textColor ?? 'Text Color',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
                   child: ColorPicker(
                     pickerColor: tempColor,
-                    onColorChanged: (color) {
-                      tempColor = color;
-                    },
+                    onColorChanged: (color) => tempColor = color,
                     pickerAreaHeightPercent: 0.7,
                   ),
                 ),
@@ -623,8 +783,8 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel', style: TextStyle(color: Colors.white))
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(localizations?.cancel ?? 'Cancel', style: const TextStyle(color: Colors.white)),
                     ),
                     TextButton(
                       onPressed: () {
@@ -636,7 +796,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                         });
                         Navigator.pop(context);
                       },
-                      child: const Text('Apply', style: TextStyle(color: Colors.blue)),
+                      child: Text(localizations?.apply ?? 'Apply', style: const TextStyle(color: Colors.blue)),
                     ),
                   ],
                 ),
@@ -648,7 +808,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Future<void> _showFontDialog() async {
+  Future<void> _showFontDialog(AppLocalizations? localizations) async {
     final fonts = [
       'Roboto',
       'Arial',
@@ -675,9 +835,9 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Font Family',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                localizations?.fontFamily ?? 'Font Family',
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               Expanded(
@@ -692,9 +852,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
                           fontSize: 18,
                         ),
                       ),
-                      trailing: _fontFamily == font
-                          ? const Icon(Icons.check, color: Colors.blue)
-                          : null,
+                      trailing: _fontFamily == font ? const Icon(Icons.check, color: Colors.blue) : null,
                       onTap: () {
                         setState(() {
                           _fontFamily = font;
@@ -711,7 +869,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Close', style: TextStyle(color: Colors.white)),
+                child: Text(localizations?.close ?? 'Close', style: const TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -720,8 +878,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-
-  Future<void> _showAlignDialog() async {
+  Future<void> _showAlignDialog(AppLocalizations? localizations) async {
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
@@ -734,23 +891,23 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Text Alignment',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                localizations?.textAlignment ?? 'Text Alignment',
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildAlignOption(Icons.format_align_left, TextAlign.left),
-                  _buildAlignOption(Icons.format_align_center, TextAlign.center),
-                  _buildAlignOption(Icons.format_align_right, TextAlign.right),
+                  _buildAlignOption(Icons.format_align_left, TextAlign.left, localizations?.left ?? 'Left'),
+                  _buildAlignOption(Icons.format_align_center, TextAlign.center, localizations?.center ?? 'Center'),
+                  _buildAlignOption(Icons.format_align_right, TextAlign.right, localizations?.right ?? 'Right'),
                 ],
               ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Close', style: TextStyle(color: Colors.white)),
+                child: Text(localizations?.close ?? 'Close', style: const TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -759,7 +916,7 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
     );
   }
 
-  Widget _buildAlignOption(IconData icon, TextAlign align) {
+  Widget _buildAlignOption(IconData icon, TextAlign align, String tooltip) {
     return IconButton(
       icon: Icon(icon, size: 32, color: _textAlign == align ? Colors.blue : Colors.white),
       onPressed: () {
@@ -771,28 +928,31 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
         });
         Navigator.pop(context);
       },
-      tooltip: align.toString().split('.').last,
+      tooltip: tooltip,
     );
   }
 
-  Future<void> _updateImage(
-      Uint8List newImage, {
-        required String action,
-        required String operationType,
-        required Map<String, dynamic> parameters,
-      }) async {
-    if (widget.onUpdateImage != null) {
-      await widget.onUpdateImage!(newImage, action: action, operationType: operationType, parameters: parameters);
-    }
-  }
-
-  void _deleteSelectedItem() {
+  Future<void> _deleteSelectedItem() async {
     if (_selectedTextItem != null) {
-      setState(() {
-        _textItems.remove(_selectedTextItem);
-        _selectedTextItem = null;
-        _textController.clear();
-      });
+      try {
+        if (_selectedTextItem!.id != null) {
+          final objectDao = dao.ObjectDao();
+          await objectDao.softDeleteText(_selectedTextItem!.id!);
+          debugPrint('Text deleted: ${_selectedTextItem!.text}');
+        }
+        setState(() {
+          _textItems.remove(_selectedTextItem);
+          _selectedTextItem = null;
+          _textController.clear();
+        });
+      } catch (e) {
+        debugPrint('Error deleting text: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete text: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -802,34 +962,69 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
         _selectedTextItem = null;
       });
 
-      // Делаем паузу 1 кадр, чтобы UI успел обновиться
       await Future.delayed(const Duration(milliseconds: 16));
       final boundary = _renderKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) throw Exception('Render boundary not found');
+      if (boundary == null) {
+        throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
+      }
 
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) throw Exception('Byte data is null');
+      if (byteData == null) {
+        throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
+      }
 
       final pngBytes = byteData.buffer.asUint8List();
+      debugPrint('Changes applied with ${_textItems.length} text items');
 
-      await _updateImage(
+      final history = EditHistory(
+        imageId: widget.imageId,
+        operationType: 'text_emoji',
+        operationParameters: {
+          'text_items_count': _textItems.length,
+        },
+        operationDate: DateTime.now(),
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
+      debugPrint('History inserted with ID: $historyId');
+
+      setState(() {
+        if (_historyIndex < _history.length - 1) {
+          _history.removeRange(_historyIndex + 1, _history.length);
+        }
+        _history.add({
+          'image': pngBytes,
+          'action': AppLocalizations.of(context)?.text ?? 'Text',
+          'operationType': 'text_emoji',
+          'parameters': {
+            'text_items_count': _textItems.length,
+          },
+        });
+        _historyIndex++;
+      });
+
+      await widget.onUpdateImage(
         pngBytes,
-        action: 'Added text/emoji',
+        action: AppLocalizations.of(context)?.text ?? 'Text',
         operationType: 'text_emoji',
         parameters: {
           'text_items_count': _textItems.length,
-          'text': _textController.text,
-        }
+        },
       );
 
       widget.onApply(pngBytes);
-      widget.onCancel;
     } catch (e) {
-      widget.onCancel;
+      debugPrint('Error saving text/emoji: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving text/emoji: $e')),
+        );
+      }
+    } finally {
+      widget.onCancel();
     }
   }
-
 }
 
 class TextItem {
@@ -858,28 +1053,4 @@ class TextItem {
     required this.textAlign,
     required this.backgroundColor,
   });
-
-  Map<String, dynamic> toMap(int imageId) => {
-    'image_id': imageId,
-    'text': text,
-    'x': position.dx,
-    'y': position.dy,
-    'size': size,
-    'color': color.value,
-    'background_color': backgroundColor.value,
-  };
-
-  factory TextItem.fromMap(Map<String, dynamic> map) => TextItem(
-    id: map['id'],
-    text: map['text'],
-    position: Offset(map['x'], map['y']),
-    size: map['size'],
-    color: Color(map['color']),
-    fontFamily: map['font_family'] ?? 'Roboto',
-    isBold: map['is_bold'] ?? false,
-    isItalic: map['is_italic'] ?? false,
-    hasShadow: map['has_shadow'] ?? false,
-    textAlign: TextAlign.values[map['text_align'] ?? 0],
-    backgroundColor: Color(map['background_color'] ?? Colors.transparent.value),
-  );
 }

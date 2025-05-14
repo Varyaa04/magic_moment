@@ -239,9 +239,9 @@ class _CropPanelState extends State<CropPanel> {
       );
 
       widget.onApply(bytes);
-      widget.onCancel;
+      widget.onCancel();
     } catch (e) {
-      widget.onCancel;
+      widget.onCancel();
     } finally {
       setState(() => _isProcessing = false);
     }

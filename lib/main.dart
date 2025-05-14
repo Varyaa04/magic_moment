@@ -3,29 +3,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
+import 'database/magicMomentDatabase.dart';
 import 'startPage.dart';
 import 'pagesSettings/classesSettings/app_localizations.dart';
 import 'pagesSettings/classesSettings/language_provider.dart';
 import 'pagesSettings/classesSettings/theme_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.macOS)) {
-    // Для десктопа
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
+  // // Инициализация базы данных
+  // try {
+  //   await MagicMomentDatabase.instance.database;
+  // } catch (e) {
+  //   debugPrint('Error initializing database: $e');
+  // }
+
   runApp(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => LanguageProvider()),
-          ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ],
-        child: const MyApp(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: const MyApp(),
     ),
   );
 }

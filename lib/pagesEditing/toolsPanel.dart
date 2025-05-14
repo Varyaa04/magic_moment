@@ -37,7 +37,7 @@ class ToolsPanel extends StatelessWidget {
             tool: 'filters',
           ),
           _buildToolButton(
-            icon: FluentIcons.text_effects_20_regular,
+            icon: FluentIcons.sparkle_24_filled,
             label: appLocalizations?.effects ?? 'Effects',
             tool: 'effects',
           ),
@@ -45,6 +45,11 @@ class ToolsPanel extends StatelessWidget {
             icon: FluentIcons.eraser_20_filled,
             label: appLocalizations?.eraser ?? 'Eraser',
             tool: 'eraser',
+          ),
+          _buildToolButton(
+            icon: FluentIcons.color_background_20_regular,
+            label: appLocalizations?.background ?? 'Background',
+            tool: 'background',
           ),
           _buildToolButton(
             icon: FluentIcons.ink_stroke_24_regular,

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'effects_utils.dart';
+import 'effectsUtils.dart';
 
 class EffectsPanel extends StatefulWidget {
   final Uint8List image;
@@ -40,6 +40,8 @@ class _EffectsPanelState extends State<EffectsPanel> {
   Timer? _debounceTimer;
   final Map<String, Uint8List> _previewCache = {};
   final _thumbnailWidth = 80;
+  final List<Map<String, dynamic>> _history = [];
+  int _historyIndex = -1;
 
   @override
   void initState() {
@@ -71,6 +73,14 @@ class _EffectsPanelState extends State<EffectsPanel> {
       if (_selectedEffect != null) {
         await _applyEffect(_selectedEffect!, _effectParams, force: true);
       }
+      // Initialize history with the original image
+      _history.add({
+        'image': widget.image,
+        'action': 'Initial image',
+        'operationType': 'init',
+        'parameters': {},
+      });
+      _historyIndex = 0;
     } catch (e) {
       debugPrint('Initialization error: $e');
       if (mounted) {
@@ -157,6 +167,24 @@ class _EffectsPanelState extends State<EffectsPanel> {
       final processedBytes = await encodeImage(processedImage);
       if (!mounted) return;
 
+      // Add to history
+      setState(() {
+        // Remove future history entries if any
+        if (_historyIndex < _history.length - 1) {
+          _history.removeRange(_historyIndex + 1, _history.length);
+        }
+        _history.add({
+          'image': processedBytes,
+          'action': 'Applied effect: ${_selectedEffect!.name}',
+          'operationType': 'effect',
+          'parameters': {
+            'effect_name': _selectedEffect!.name,
+            ..._effectParams,
+          },
+        });
+        _historyIndex++;
+      });
+
       await _updateImage(
         processedBytes,
         action: 'Applied effect: ${_selectedEffect!.name}',
@@ -173,6 +201,43 @@ class _EffectsPanelState extends State<EffectsPanel> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to save effect: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _undo() async {
+    if (_isProcessing || _historyIndex <= 0) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      setState(() {
+        _historyIndex--;
+        _currentImageBytes = _history[_historyIndex]['image'];
+        _selectedEffect = null;
+        _effectParams.clear();
+      });
+
+      await _updateImage(
+        _currentImageBytes,
+        action: 'Undo effect',
+        operationType: 'undo',
+        parameters: {
+          'previous_action': _history[_historyIndex + 1]['action'],
+        },
+      );
+    } catch (e) {
+      debugPrint('Error undoing effect: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to undo: $e')),
         );
       }
     } finally {
@@ -240,6 +305,11 @@ class _EffectsPanelState extends State<EffectsPanel> {
         tooltip: 'Cancel',
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.undo, color: Colors.white),
+          onPressed: _historyIndex > 0 && !_isProcessing ? _undo : null,
+          tooltip: 'Undo',
+        ),
         IconButton(
           icon: const Icon(Icons.check, color: Colors.white),
           onPressed: _isProcessing || _selectedEffect == null ? null : _saveChanges,

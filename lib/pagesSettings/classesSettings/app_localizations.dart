@@ -10,7 +10,7 @@ class AppLocalizations {
   }
 
   static const LocalizationsDelegate<AppLocalizations> delegate =
-      _AppLocalizationsDelegate();
+  _AppLocalizationsDelegate();
 
   // Локализованные строки
   static final Map<String, Map<String, String>> _localizedValues = {
@@ -25,7 +25,7 @@ class AppLocalizations {
       'create': 'Create',
       'collage': 'Collage',
       'challenge_text':
-          'Can you apply a filter, crop a photo to the golden ratio, or add text with a "neon glow" effect in a minute?',
+      'Can you apply a filter, crop a photo to the golden ratio, or add text with a "neon glow" effect in a minute?',
       'light_theme': 'Light theme',
       'dark_theme': 'Dark theme',
       'image_format': 'Image format',
@@ -60,10 +60,10 @@ class AppLocalizations {
       'rotateCrop': 'Rotate',
       'reset': 'Reset',
       'apply': 'Apply',
-      'parametrs': 'Parametrs',
+      'parametrs': 'Parameters',
       'noise': 'Noise',
       'exposure': 'Exposure',
-      'warmth': 'Теплота',
+      'warmth': 'Warmth',
       'saturation': 'Saturation',
       'smooth': 'Smooth',
       'emoji': 'Emoji',
@@ -76,29 +76,75 @@ class AppLocalizations {
       'warning': 'Warning',
       'exit': 'Exit',
       'areYouSure':
-          'Are you sure you want to exit? All unsaved changes will be deleted.',
-      'remove' : 'Remove',
-      'tapToPlaceEmoji' : 'Tap to place emoji',
-      'eraser' : 'Eraser',
-      'brush' : 'Brush',
-      'error' : 'Error',
-      'permissionDenied' : 'Permission denied',
-      'clearAll' : 'Clear all',
-      'undo' : 'Undo',
-      'noImages' : 'No valid images provided',
-      'noTemplates' : 'No templates',
-      'previous' : 'Previous',
-      "errorTitle": "Error",
-      "tooFewImages": "Please select at least 2 images for a collage.",
-      "tooManyImages": "You selected more than 6 images. Only the first 6 will be used.",
-      "permissionDeniedTitle": "Permission Denied",
-      "ok": "OK",
-      "borderWidth": "Border Width",
-      "borderRadius": "Border Radius",
-      "borderColor": "Border Color",
-      "selectFormat": "Select format",
-      "removeBackground": "Remove background",
-      "removeObject": "Remove object",
+      'Are you sure you want to exit? All unsaved changes will be deleted.',
+      'remove': 'Remove',
+      'tapToPlaceEmoji': 'Tap to place emoji',
+      'eraser': 'Eraser',
+      'brush': 'Brush',
+      'error': 'Error',
+      'permissionDenied': 'Permission denied',
+      'clearAll': 'Clear all',
+      'undo': 'Undo',
+      'redo': 'Redo',
+      'noImages': 'No valid images provided',
+      'noTemplates': 'No templates',
+      'previous': 'Previous',
+      'errorTitle': 'Error',
+      'tooFewImages': 'Please select at least 2 images for a collage.',
+      'tooManyImages': 'You selected more than 6 images. Only the first 6 will be used.',
+      'permissionDeniedTitle': 'Permission Denied',
+      'ok': 'OK',
+      'borderWidth': 'Border Width',
+      'borderRadius': 'Border Radius',
+      'borderColor': 'Border Color',
+      'selectFormat': 'Select format',
+      'removeBackground': 'Remove background',
+      'removeObject': 'Remove object',
+      'notEnoughPhotos': 'Not enough photos',
+      'edit': 'Edit',
+      'loading': 'Loading',
+      'errorRemovBack': 'Error removing background:',
+      'fun': 'Fun',
+      'animals': 'Animals',
+      'birthday': 'Birthday',
+      'nature': 'Nature',
+      'christmas': 'Christmas',
+      'custom': 'Custom',
+      'addPhoto': 'Add photo',
+      'background': 'Background',
+      'font': 'Font',
+      'align': 'Align',
+      'bold': 'Bold',
+      'italic': 'Italic',
+      'shadow': 'Shadow',
+      'add': 'Add',
+      'textBackground': 'Text Background',
+      'fontFamily': 'Font Family',
+      'textAlignment': 'Text Alignment',
+      'left': 'Left',
+      'center': 'Center',
+      'right': 'Right',
+      'close': 'Close',
+      'history': 'History',
+      'selectColor': 'Select Color',
+      'blurIntensity': 'Blur Intensity',
+      'processingError': 'Image processing failed',
+      'backgroundEditing': 'Background Editing',
+      'blurBackground': 'Blur Background',
+      'changeBackground': 'Change Background',
+      'backgroundOptions': 'Background Options',
+      'selectImage': 'Select Image',
+      'removingBackground': 'Removing Background...',
+      'blurringBackground': 'Blurring Background...',
+      'changingBackground': 'Changing Background...',
+      'processingImage': 'Processing Image...',
+      'chooseFormat': 'Choose format',
+      'pngTr': 'PNG (transparency)',
+      'unsavedChangesWarning': 'Are you sure you want to go back? All unsaved changes will be lost.',
+      'yes': 'Yes',
+      'selectedImage': 'Selected image',
+      'currentColor': 'Current color',
+      'delete': 'Delete',
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -111,7 +157,7 @@ class AppLocalizations {
       'collage': 'Коллаж',
       'lang': 'Язык',
       'challenge_text':
-          'Сможете ли вы за минуту применить фильтр, обрезать фото по золотому сечению или добавить текст с эффектом "неоновое свечение"?',
+      'Сможете ли вы за минуту применить фильтр, обрезать фото по золотому сечению или добавить текст с эффектом "неоновое свечение"?',
       'light_theme': 'Светлая тема',
       'dark_theme': 'Темная тема',
       'theme': 'Тема',
@@ -162,29 +208,75 @@ class AppLocalizations {
       'warning': 'Предупреждение',
       'exit': 'Выход',
       'areYouSure':
-          'Вы точно хотите выйти? Все несохраненные изменения будут удалены.',
-      'remove' : 'Удалить',
-      'tapToPlaceEmoji' : 'Нажмите, чтобы разместить эмодзи',
-      'eraser' : 'Ластик',
-      'brush' : 'Кисть',
-      'error' : 'Ошибка',
-      'clearAll' : 'Убрать все',
-      'permissionDenied' : 'Доступ запрещен',
-      'undo' : 'Назад',
-      'noImages' : 'Не предоставлено ни одного допустимого изображения.',
-      'noTemplates' : 'Нет шаблонов',
-      'previous' : 'Предыдущий',
-      "errorTitle": "Ошибка",
-      "tooFewImages": "Выберите как минимум 2 изображения для коллажа.",
-      "tooManyImages": "Вы выбрали более 6 изображений. Будут использованы только первые 6.",
-      "permissionDeniedTitle": "Доступ запрещен",
-      "ok": "ОК",
-      "borderWidth": "Толщина границы",
-      "borderRadius": "Радиус углов",
-      "borderColor": "Цвет границы",
-      "selectFormat": "Выберите формат",
-      "removeBackground": "Удалить фон",
-      "removeObject": "Удалить объект",
+      'Вы точно хотите выйти? Все несохраненные изменения будут удалены.',
+      'remove': 'Удалить',
+      'tapToPlaceEmoji': 'Нажмите, чтобы разместить эмодзи',
+      'eraser': 'Ластик',
+      'brush': 'Кисть',
+      'error': 'Ошибка',
+      'clearAll': 'Убрать все',
+      'permissionDenied': 'Доступ запрещен',
+      'undo': 'Назад',
+      'redo': 'Вперед',
+      'noImages': 'Не предоставлено ни одного допустимого изображения.',
+      'noTemplates': 'Нет шаблонов',
+      'previous': 'Предыдущий',
+      'errorTitle': 'Ошибка',
+      'tooFewImages': 'Выберите как минимум 2 изображения для коллажа.',
+      'tooManyImages': 'Вы выбрали более 6 изображений. Будут использованы только первые 6.',
+      'permissionDeniedTitle': 'Доступ запрещен',
+      'ok': 'ОК',
+      'borderWidth': 'Толщина границы',
+      'borderRadius': 'Радиус углов',
+      'borderColor': 'Цвет границы',
+      'selectFormat': 'Выберите формат',
+      'removeBackground': 'Удалить фон',
+      'removeObject': 'Удалить объект',
+      'notEnoughPhotos': 'Недостаточно фото',
+      'edit': 'Изменить',
+      'loading': 'Загрузка',
+      'errorRemovBack': 'Ошибка удаления фона:',
+      'fun': 'Веселье',
+      'animals': 'Животные',
+      'birthday': 'День рождения',
+      'nature': 'Природа',
+      'christmas': 'Рождество',
+      'custom': 'Пользовательский',
+      'addPhoto': 'Добавить фото',
+      'background': 'Фон',
+      'font': 'Шрифт',
+      'align': 'Выровнять',
+      'bold': 'Жирный',
+      'italic': 'Курсив',
+      'shadow': 'Тень',
+      'add': 'Добавить',
+      'textBackground': 'Фон текста',
+      'fontFamily': 'Семейство шрифтов',
+      'textAlignment': 'Выравнивание текста',
+      'left': 'По левому краю',
+      'center': 'По центру',
+      'right': 'Вправо',
+      'close': 'Закрыть',
+      'history': 'История',
+      'selectColor': 'Выбрать цвет',
+      'blurIntensity': 'Интенсивность размытия',
+      'processingError': 'Ошибка обработки изображения',
+      'backgroundEditing': 'Редактирование фона',
+      'blurBackground': 'Размыть фон',
+      'changeBackground': 'Изменить фон',
+      'backgroundOptions': 'Опции фона',
+      'selectImage': 'Выбрать изображение',
+      'removingBackground': 'Удаление фона...',
+      'blurringBackground': 'Размытие фона...',
+      'changingBackground': 'Изменение фона...',
+      'processingImage': 'Обработка изображения...',
+      'chooseFormat': 'Выберите формат',
+      'pngTr': 'PNG (поддерживает прозрачность)',
+      'unsavedChangesWarning': 'Вы уверены, что хотите вернуться? Все несохраненные изменения будут потеряны.',
+      'yes': 'Да',
+      'selectedImage': 'Выбранное изображение',
+      'currentColor': 'Текущий цвет',
+      'delete': 'Удалить',
     },
   };
 
@@ -266,6 +358,8 @@ class AppLocalizations {
       _localizedValues[locale.languageCode]!['areYouSure']!;
   String get error => _localizedValues[locale.languageCode]!['error']!;
   String get undo => _localizedValues[locale.languageCode]!['undo']!;
+  String get redo => _localizedValues[locale.languageCode]!['redo']!;
+  String get loading => _localizedValues[locale.languageCode]!['loading']!;
   String get permissionDenied => _localizedValues[locale.languageCode]!['permissionDenied']!;
   String get noImages => _localizedValues[locale.languageCode]!['noImages']!;
   String get noTemplates => _localizedValues[locale.languageCode]!['noTemplates']!;
@@ -281,6 +375,50 @@ class AppLocalizations {
   String get selectFormat => _localizedValues[locale.languageCode]!['selectFormat']!;
   String get removeBackground => _localizedValues[locale.languageCode]!['removeBackground']!;
   String get removeObject => _localizedValues[locale.languageCode]!['removeObject']!;
+  String get notEnoughPhotos => _localizedValues[locale.languageCode]!['notEnoughPhotos']!;
+  String get edit => _localizedValues[locale.languageCode]!['edit']!;
+  String get errorRemovBack => _localizedValues[locale.languageCode]!['errorRemovBack']!;
+  String get fun => _localizedValues[locale.languageCode]!['fun']!;
+  String get animals => _localizedValues[locale.languageCode]!['animals']!;
+  String get birthday => _localizedValues[locale.languageCode]!['birthday']!;
+  String get nature => _localizedValues[locale.languageCode]!['nature']!;
+  String get christmas => _localizedValues[locale.languageCode]!['christmas']!;
+  String get custom => _localizedValues[locale.languageCode]!['custom']!;
+  String get addPhoto => _localizedValues[locale.languageCode]!['addPhoto']!;
+  String get background => _localizedValues[locale.languageCode]!['background']!;
+  String get font => _localizedValues[locale.languageCode]!['font']!;
+  String get align => _localizedValues[locale.languageCode]!['align']!;
+  String get bold => _localizedValues[locale.languageCode]!['bold']!;
+  String get italic => _localizedValues[locale.languageCode]!['italic']!;
+  String get shadow => _localizedValues[locale.languageCode]!['shadow']!;
+  String get add => _localizedValues[locale.languageCode]!['add']!;
+  String get textBackground => _localizedValues[locale.languageCode]!['textBackground']!;
+  String get fontFamily => _localizedValues[locale.languageCode]!['fontFamily']!;
+  String get textAlignment => _localizedValues[locale.languageCode]!['textAlignment']!;
+  String get left => _localizedValues[locale.languageCode]!['left']!;
+  String get center => _localizedValues[locale.languageCode]!['center']!;
+  String get right => _localizedValues[locale.languageCode]!['right']!;
+  String get close => _localizedValues[locale.languageCode]!['close']!;
+  String get history => _localizedValues[locale.languageCode]!['history']!;
+  String get selectColor => _localizedValues[locale.languageCode]!['selectColor']!;
+  String get blurIntensity => _localizedValues[locale.languageCode]!['blurIntensity']!;
+  String get processingError => _localizedValues[locale.languageCode]!['processingError']!;
+  String get backgroundEditing => _localizedValues[locale.languageCode]!['backgroundEditing']!;
+  String get blurBackground => _localizedValues[locale.languageCode]!['blurBackground']!;
+  String get changeBackground => _localizedValues[locale.languageCode]!['changeBackground']!;
+  String get backgroundOptions => _localizedValues[locale.languageCode]!['backgroundOptions']!;
+  String get selectImage => _localizedValues[locale.languageCode]!['selectImage']!;
+  String get removingBackground => _localizedValues[locale.languageCode]!['removingBackground']!;
+  String get blurringBackground => _localizedValues[locale.languageCode]!['blurringBackground']!;
+  String get changingBackground => _localizedValues[locale.languageCode]!['changingBackground']!;
+  String get processingImage => _localizedValues[locale.languageCode]!['processingImage']!;
+  String get chooseFormat => _localizedValues[locale.languageCode]!['chooseFormat']!;
+  String get pngTr => _localizedValues[locale.languageCode]!['pngTr']!;
+  String get unsavedChangesWarning => _localizedValues[locale.languageCode]!['unsavedChangesWarning']!;
+  String get yes => _localizedValues[locale.languageCode]!['yes']!;
+  String get selectedImage => _localizedValues[locale.languageCode]!['selectedImage']!;
+  String get currentColor => _localizedValues[locale.languageCode]!['currentColor']!;
+  String get delete => _localizedValues[locale.languageCode]!['delete']!;
 }
 
 class _AppLocalizationsDelegate

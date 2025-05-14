@@ -5,37 +5,75 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+
 import '../pagesEditing/annotation/emojiPanel.dart';
 import '../pagesEditing/annotation/textEditorPanel.dart';
+import 'objectsModels.dart';
 
-class magicMomentDatabase {
+class MagicMomentDatabase {
+  static final MagicMomentDatabase instance = MagicMomentDatabase._init();
   static Database? _database;
-  static final magicMomentDatabase instance = magicMomentDatabase._init();
+  static bool _isInitialized = false;
 
-  magicMomentDatabase._init();
+  MagicMomentDatabase._init();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
+    _database = await _initDB('magic_moment.db');
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
-    if (!kIsWeb &&
-        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+  Future<Database> _initDB(String filePath) async {
+    try {
+      if (!_isInitialized) {
+        await _initializeDatabaseFactory();
+        _isInitialized = true;
+      }
+
+      if (kIsWeb) {
+        // Web: Use in-memory database or WebAssembly
+        return await databaseFactory.openDatabase(inMemoryDatabasePath,
+            options: OpenDatabaseOptions(
+              version: 1,
+              onCreate: _onCreate,
+            ));
+      } else {
+        // Mobile: Use file-based database
+        final dbPath = await getDatabasesPath();
+        final path = join(dbPath, filePath);
+        return await databaseFactory.openDatabase(
+          path,
+          options: OpenDatabaseOptions(
+            version: 1,
+            onCreate: _onCreate,
+          ),
+        );
+      }
+    } catch (e) {
+      log('Error initializing database: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _initializeDatabaseFactory() async {
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
-
-    final path = join(await getDatabasesPath(), 'magic_moment.db');
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _onCreate,
-    );
   }
 
-Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
+
+  Future<void> close() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+  }
+
+  Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     try {
       final db = await database;
 
@@ -82,6 +120,20 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     }
   }
 
+  Future<int> deleteHistory(int id) async {
+    try {
+      final db = await database;
+      return await db.delete(
+        'edit_history',
+        where: 'history_id = ?',
+        whereArgs: [id],
+      );
+    } catch (e) {
+      log('Error deleting history: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>?> getCurrentState(int imageId) async {
     try {
       final db = await database;
@@ -90,7 +142,7 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
         'current_state',
         where: 'image_id = ?',
         whereArgs: [imageId],
-        limit: 1, // Явно ограничиваем одну запись
+        limit: 1,
       );
       return maps.isNotEmpty ? maps.first : null;
     } catch (e) {
@@ -99,35 +151,9 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     }
   }
 
-  Future<void> setImageFormat(String format) async {
-    final db = await database;
-    await db.insert(
-      'image_format',
-      {'format': format},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<String?> getImageFormat() async {
-    final db = await database;
-    final result = await db.query('image_format', limit: 1);
-    return result.isNotEmpty ? result.first['format'] as String? : null;
-  }
-
   Future<void> _onCreate(Database db, int version) async {
-    // Таблица форматов изображений
-    await db.execute('''
-      CREATE TABLE image_format (
-        format_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        format_name TEXT NOT NULL,
-        extension TEXT NOT NULL,
-        can_compress INTEGER NOT NULL,
-        is_lossless INTEGER NOT NULL
-      )
-    ''');
-
-    // Таблица изображений
-    await db.execute('''
+    try{
+      await db.execute('''
       CREATE TABLE image (
         image_id INTEGER PRIMARY KEY AUTOINCREMENT,
         file_path TEXT NOT NULL,
@@ -135,17 +161,14 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
         file_size INTEGER NOT NULL,
         width INTEGER NOT NULL,
         height INTEGER NOT NULL,
-        format_id INTEGER NOT NULL,
         creation_date TEXT NOT NULL,
         last_modified TEXT NOT NULL,
         original_image_id INTEGER,
-        FOREIGN KEY (format_id) REFERENCES image_format (format_id),
         FOREIGN KEY (original_image_id) REFERENCES image (image_id)
       )
     ''');
 
-    // Таблица фильтров
-    await db.execute('''
+      await db.execute('''
       CREATE TABLE filter (
         filter_id INTEGER PRIMARY KEY AUTOINCREMENT,
         filter_name TEXT NOT NULL,
@@ -157,23 +180,19 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
       )
     ''');
 
-    // Таблица коллажей
-    await db.execute('''
+      await db.execute('''
       CREATE TABLE collage (
         collage_id INTEGER PRIMARY KEY AUTOINCREMENT,
         template_name TEXT NOT NULL,
         width INTEGER NOT NULL,
         height INTEGER NOT NULL,
-        format_id INTEGER NOT NULL,
         file_size INTEGER NOT NULL,
         preview_path TEXT NOT NULL,
-        creation_date TEXT NOT NULL,
-        FOREIGN KEY (format_id) REFERENCES image_format (format_id)
+        creation_date TEXT NOT NULL
       )
     ''');
 
-    // Таблица изображений в коллажах
-    await db.execute('''
+      await db.execute('''
       CREATE TABLE collage_images (
         collage_id INTEGER NOT NULL,
         image_id INTEGER NOT NULL,
@@ -188,8 +207,7 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
       )
     ''');
 
-    // Таблица истории редактирования
-    await db.execute('''
+      await db.execute('''
       CREATE TABLE edit_history (
         history_id INTEGER PRIMARY KEY AUTOINCREMENT,
         image_id INTEGER NOT NULL,
@@ -205,8 +223,7 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
       )
     ''');
 
-    // Таблица текущего состояния
-    await db.execute('''
+      await db.execute('''
       CREATE TABLE current_state (
         image_id INTEGER PRIMARY KEY,
         last_history_id INTEGER NOT NULL,
@@ -216,56 +233,63 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
       )
     ''');
 
-    //Таблица для эмодзи
-    await db.execute('''
-    CREATE TABLE stickers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      image_id INTEGER NOT NULL,
-      path TEXT NOT NULL,
-      bytes BLOB,
-      x REAL NOT NULL,
-      y REAL NOT NULL,
-      size REAL NOT NULL,
-      is_asset INTEGER NOT NULL,
-      FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
-    )
-  ''');
+      await db.execute('''
+      CREATE TABLE IF NOT EXISTS stickers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT NOT NULL,
+        positionX REAL NOT NULL,
+        positionY REAL NOT NULL,
+        scale REAL NOT NULL,
+        rotation REAL NOT NULL,
+        isDeleted INTEGER DEFAULT 0,
+        historyId INTEGER NOT NULL,
+        FOREIGN KEY (historyId) REFERENCES edit_history(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_stickers_historyId ON stickers(historyId);
+    ''');
 
-    //Таблица для текста
-    await db.execute('''
-    CREATE TABLE texts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      image_id INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      x REAL NOT NULL,
-      y REAL NOT NULL,
-      size REAL NOT NULL,
-      color INTEGER NOT NULL,
-      font_family TEXT NOT NULL,
-      FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
-    )
-  ''');
-    // Заполняем справочник форматов
-    await _populateImageFormats(db);
+      await db.execute('''
+      CREATE TABLE IF NOT EXISTS texts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL,
+        positionX REAL NOT NULL,
+        positionY REAL NOT NULL,
+        fontSize REAL,
+        fontWeight TEXT,
+        fontStyle TEXT,
+        alignment TEXT,
+        color TEXT NOT NULL,
+        fontFamily TEXT,
+        scale REAL NOT NULL,
+        rotation REAL NOT NULL,
+        isDeleted INTEGER DEFAULT 0,
+        historyId INTEGER NOT NULL,
+        FOREIGN KEY (historyId) REFERENCES edit_history(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_texts_historyId ON texts(historyId);
+    ''');
+
+      await db.execute('''
+      CREATE TABLE IF NOT EXISTS drawings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        drawingPath TEXT NOT NULL, 
+        color TEXT NOT NULL,
+        strokeWidth REAL NOT NULL,
+        isDeleted INTEGER DEFAULT 0,
+        historyId INTEGER NOT NULL,
+        FOREIGN KEY (historyId) REFERENCES edit_history(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_drawings_historyId ON drawings(historyId);
+    ''');
+    }
+    catch (e, stack) {
+      log('Ошибка при создании базы: $e\n$stack');
+      rethrow;
+    }
+
   }
 
-  Future<void> _populateImageFormats(Database db) async {
-    await db.insert('image_format', {
-      'format_name': 'JPEG',
-      'extension': '.jpg',
-      'can_compress': 1,
-      'is_lossless': 0
-    });
 
-    await db.insert('image_format', {
-      'format_name': 'PNG',
-      'extension': '.png',
-      'can_compress': 1,
-      'is_lossless': 1
-    });
-  }
-
-  //  CRUD операции для таблицы изображений
   Future<int> insertImage(ImageData image) async {
     final db = await instance.database;
     return await db.insert('image', image.toMap());
@@ -307,7 +331,6 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     );
   }
 
-  //  CRUD операции для таблицы фильтров
   Future<int> insertFilter(FilterData filter) async {
     final db = await instance.database;
     return await db.insert('filter', filter.toMap());
@@ -349,7 +372,6 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     );
   }
 
-  //  CRUD операции для таблицы с коллажами
   Future<int> insertCollage(CollageData collage) async {
     final db = await instance.database;
     return await db.insert('collage', collage.toMap());
@@ -391,17 +413,16 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     );
   }
 
- //  CRUD операции для таблицы с историей
   Future<List<EditHistory>> getAllHistory() async {
     final db = await instance.database;
-    final maps = await db.query('history');
+    final maps = await db.query('edit_history');
     return List.generate(maps.length, (i) => EditHistory.fromMap(maps[i]));
   }
 
   Future<EditHistory?> getHistory(int id) async {
     final db = await instance.database;
     final maps = await db.query(
-      'history',
+      'edit_history',
       where: 'history_id = ?',
       whereArgs: [id],
     );
@@ -412,29 +433,17 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
   Future<int> updateHistory(EditHistory history) async {
     final db = await instance.database;
     return await db.update(
-      'history',
+      'edit_history',
       history.toMap(),
       where: 'history_id = ?',
       whereArgs: [history.historyId],
     );
   }
 
-  Future<int> deleteHistory(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'history',
-      where: 'history_id = ?',
-      whereArgs: [id],
-    );
-  }
-
-//  CRUD операции для таблицы с эмодзи
   Future<int> insertSticker(StickerData sticker, int imageId) async {
     final db = await database;
     return await db.insert('stickers', sticker.isAsset as Map<String, Object?>);
   }
-
-
 
   Future<void> updateSticker(StickerData sticker) async {
     final db = await database;
@@ -459,19 +468,19 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     );
   }
 
-  Future<int> insertTextItem(TextItem item, int imageId) async {
+  Future<int> insertText(TextObject text) async {
     final db = await database;
-    return await db.insert('texts', item.toMap(imageId));
+    return await db.insert('texts', text.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<TextItem>> getTextItemsForImage(int imageId) async {
+  Future<List<TextObject>> getTexts(int imageId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'texts',
-      where: 'image_id = ?',
-      whereArgs: [imageId],
+      where: 'imageId = ? AND isDeleted = ?',
+      whereArgs: [imageId, 0],
     );
-    return List.generate(maps.length, (i) => TextItem.fromMap(maps[i]));
+    return List.generate(maps.length, (i) => TextObject.fromMap(maps[i]));
   }
 
   Future<void> updateTextItem(TextItem item) async {
@@ -499,47 +508,8 @@ Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
   }
 }
 
-Future<int> insertHistory(EditHistory history) async {
-  var database;
-  final db = await database;
-  return await db.insert('edit_history', history.toMap());
-}
-Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
-  var database;
-  final db = await database;
-  final List<Map<String, dynamic>> maps = await db.query(
-    'edit_history',
-    where: 'image_id = ?',
-    whereArgs: [imageId],
-    orderBy: 'operation_date ASC',
-  );
-  return List.generate(maps.length, (i) => EditHistory.fromMap(maps[i]));
-}
-Future<void> updateCurrentState(int imageId, int historyId, String? snapshotPath) async {
-  var database;
-  final db = await database;
-  await db.update(
-    'images',
-    {
-      'current_history_id': historyId,
-      'current_snapshot_path': snapshotPath,
-    },
-    where: 'image_id = ?',
-    whereArgs: [imageId],
-  );
-}
-Future<void> deleteHistory(int historyId) async {
-  var database;
-  final db = await database;
-  await db.delete(
-    'edit_history',
-    where: 'history_id = ?',
-    whereArgs: [historyId],
-  );
-}
 
 
-// Модели данных
 class ImageData {
   final int? imageId;
   final String filePath;
@@ -547,7 +517,6 @@ class ImageData {
   final int fileSize;
   final int width;
   final int height;
-  final int formatId;
   final DateTime creationDate;
   final DateTime lastModified;
   final int? originalImageId;
@@ -559,7 +528,6 @@ class ImageData {
     required this.fileSize,
     required this.width,
     required this.height,
-    required this.formatId,
     required this.creationDate,
     required this.lastModified,
     this.originalImageId,
@@ -573,7 +541,6 @@ class ImageData {
       'file_size': fileSize,
       'width': width,
       'height': height,
-      'format_id': formatId,
       'creation_date': creationDate.toIso8601String(),
       'last_modified': lastModified.toIso8601String(),
       'original_image_id': originalImageId,
@@ -588,7 +555,6 @@ class ImageData {
       fileSize: map['file_size'],
       width: map['width'],
       height: map['height'],
-      formatId: map['format_id'],
       creationDate: DateTime.parse(map['creation_date']),
       lastModified: DateTime.parse(map['last_modified']),
       originalImageId: map['original_image_id'],
@@ -645,7 +611,6 @@ class CollageData {
   final String templateName;
   final int width;
   final int height;
-  final int formatId;
   final int fileSize;
   final String previewPath;
   final DateTime creationDate;
@@ -655,7 +620,6 @@ class CollageData {
     required this.templateName,
     required this.width,
     required this.height,
-    required this.formatId,
     required this.fileSize,
     required this.previewPath,
     required this.creationDate,
@@ -667,7 +631,6 @@ class CollageData {
       'template_name': templateName,
       'width': width,
       'height': height,
-      'format_id': formatId,
       'file_size': fileSize,
       'preview_path': previewPath,
       'creation_date': creationDate.toIso8601String(),
@@ -680,7 +643,6 @@ class CollageData {
       templateName: map['template_name'],
       width: map['width'],
       height: map['height'],
-      formatId: map['format_id'],
       fileSize: map['file_size'],
       previewPath: map['preview_path'],
       creationDate: DateTime.parse(map['creation_date']),

@@ -30,6 +30,8 @@ class _FiltersPanelState extends State<FiltersPanel> {
   List<double>? _pendingFilter;
   final Map<String, Uint8List> _previewCache = {};
   final ScrollController _scrollController = ScrollController();
+  final List<Map<String, dynamic>> _history = [];
+  int _historyIndex = -1;
 
   // Organized filters into categories for better UX
   final Map<String, List<MapEntry<String, List<double>>>> _filterCategories = {
@@ -81,6 +83,14 @@ class _FiltersPanelState extends State<FiltersPanel> {
     _originalImageBytes = widget.imageBytes;
     _previewImageBytes = widget.imageBytes;
     _verifyImage(widget.imageBytes);
+    // Initialize history with the original image
+    _history.add({
+      'image': widget.imageBytes,
+      'action': 'Initial image',
+      'operationType': 'init',
+      'parameters': {},
+    });
+    _historyIndex = 0;
   }
 
   Future<void> _verifyImage(Uint8List bytes) async {
@@ -105,6 +115,41 @@ class _FiltersPanelState extends State<FiltersPanel> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _undo() async {
+    if (_isProcessing || _historyIndex <= 0) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      setState(() {
+        _historyIndex--;
+        _previewImageBytes = _history[_historyIndex]['image'];
+        _pendingFilter = null;
+        _currentFilterName = null;
+      });
+
+      await widget.onUpdateImage(
+        _previewImageBytes,
+        action: 'Undo filter',
+        operationType: 'undo',
+        parameters: {
+          'previous_action': _history[_historyIndex + 1]['action'],
+        },
+      );
+    } catch (e) {
+      debugPrint('Error undoing filter: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to undo: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isProcessing = false);
+    }
   }
 
   @override
@@ -164,7 +209,11 @@ class _FiltersPanelState extends State<FiltersPanel> {
         style: const TextStyle(color: Colors.white),
       ),
       actions: [
-        // Кнопка "Назад" для отмены предварительного просмотра фильтра
+        IconButton(
+          icon: const Icon(Icons.undo, color: Colors.white),
+          onPressed: _historyIndex > 0 && !_isProcessing ? _undo : null,
+          tooltip: 'Undo',
+        ),
         if (_pendingFilter != null)
           IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -173,9 +222,7 @@ class _FiltersPanelState extends State<FiltersPanel> {
           ),
         IconButton(
           icon: const Icon(Icons.check, color: Colors.white),
-          onPressed: _pendingFilter != null && !_isProcessing
-              ? _applyCurrentFilter
-              : null,
+          onPressed: _pendingFilter != null && !_isProcessing ? _applyCurrentFilter : null,
           tooltip: 'Apply',
         ),
       ],
@@ -349,13 +396,29 @@ class _FiltersPanelState extends State<FiltersPanel> {
 
     try {
       final filteredBytes = await _applyFilterToImage(_originalImageBytes, _pendingFilter!);
-      widget.onApply(filteredBytes);
-      widget.onUpdateImage(
+      // Add to history
+      setState(() {
+        // Remove future history entries if any
+        if (_historyIndex < _history.length - 1) {
+          _history.removeRange(_historyIndex + 1, _history.length);
+        }
+        _history.add({
+          'image': filteredBytes,
+          'action': 'Applied $_currentFilterName filter',
+          'operationType': 'filter',
+          'parameters': {'filter_name': _currentFilterName},
+        });
+        _historyIndex++;
+      });
+
+      await widget.onUpdateImage(
         filteredBytes,
         action: 'Applied $_currentFilterName filter',
         operationType: 'filter',
         parameters: {'filter_name': _currentFilterName},
       );
+
+      widget.onApply(filteredBytes);
     } catch (e) {
       debugPrint('Error applying filter: $e');
       if (mounted) {
@@ -370,7 +433,7 @@ class _FiltersPanelState extends State<FiltersPanel> {
 
   void _resetPreview() {
     setState(() {
-      _previewImageBytes = _originalImageBytes;
+      _previewImageBytes = _history[_historyIndex]['image'];
       _pendingFilter = null;
       _currentFilterName = null;
     });

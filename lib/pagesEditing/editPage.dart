@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:MagicMoment/pagesEditing/background/backgroundPanel.dart';
 import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesEditing/annotation/eraserPanel.dart';
 import 'package:flutter/material.dart';
@@ -69,7 +70,7 @@ class _EditPageState extends State<EditPage> {
         : widget.imageBytes as Uint8List;
     _originalImage = Uint8List.fromList(_currentImage);
     _historyManager = EditHistoryManager(
-      db: magicMomentDatabase.instance,
+      db: MagicMomentDatabase.instance,
       imageId: widget.imageId,
     );
     _initializeImage();
@@ -91,15 +92,16 @@ class _EditPageState extends State<EditPage> {
   Future<void> _loadImageFromHistory() async {
     final path = await _historyManager.getCurrentSnapshotPath();
     if (path != null) {
-      setState(() {
-        _currentImage = File(path) as Uint8List;
+      setState(() async {
+        _currentImage = await File(path).readAsBytes();
       });
     }
   }
 
-
   void _showEditHistory() async {
     final history = await _historyManager.db.getAllHistoryForImage(widget.imageId);
+    final localizations = AppLocalizations.of(context);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
@@ -109,65 +111,77 @@ class _EditPageState extends State<EditPage> {
       builder: (context) {
         return SizedBox(
           height: 180,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(12),
-            itemCount: history.length,
-            itemBuilder: (context, index) {
-              final item = history[index];
-              return FutureBuilder<Uint8List>(
-                future: File(item.snapshotPath!).readAsBytes(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const SizedBox(
-                      width: 100,
-                      child: Center(child: CircularProgressIndicator()),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  localizations?.appTitle ?? 'Edit History',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: history.length,
+                  itemBuilder: (context, index) {
+                    final item = history[index];
+                    return FutureBuilder<Uint8List>(
+                      future: File(item.snapshotPath!).readAsBytes(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const SizedBox(
+                            width: 100,
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        return GestureDetector(
+                          onTap: () async {
+                            Navigator.pop(context);
+                            final imageBytes = snapshot.data!;
+                            _updateImage(imageBytes);
+                          },
+                          child: Column(
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 8),
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.white, width: 2),
+                                  image: DecorationImage(
+                                    image: MemoryImage(snapshot.data!),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  item.operationType,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     );
-                  }
-                  return GestureDetector(
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final imageBytes = snapshot.data!;
-                      _updateImage(imageBytes);
-                    },
-                    child: Column(
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white, width: 2),
-                            image: DecorationImage(
-                              image: MemoryImage(snapshot.data!),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          width: 100,
-                          child: Text(
-                            item.operationType,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
-
 
   Future<Uint8List> _compressImage(Uint8List bytes) async {
     try {
@@ -192,48 +206,39 @@ class _EditPageState extends State<EditPage> {
         final file = widget.imageBytes as File;
         bytes = await file.readAsBytes();
       } else if (widget.imageBytes is Uint8List) {
-        bytes = widget.imageBytes as Uint8List;
+        bytes = widget.imageBytes;
       } else {
         throw Exception('Unsupported image type');
       }
 
-      // Compress large images
-      if (bytes.length > 2 * 1024 * 1024) {
-        bytes = await _compressImage(bytes);
+      if (bytes.isEmpty) {
+        throw Exception('Empty image bytes');
       }
 
-      // Load image dimensions
-      final completer = Completer<ui.Image>();
-      ui.decodeImageFromList(bytes, (ui.Image img) {
-        completer.complete(img);
+      final image = await decodeImageFromList(bytes);
+
+      setState(() {
+        _currentImage = bytes;
+        _originalImage = Uint8List.fromList(bytes);
+        _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+        _isInitialized = true;
       });
-      final ui.Image image = await completer.future;
-      _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      image.dispose();
-
-      if (mounted) {
-        setState(() {
-          _currentImage = bytes;
-          _originalImage = Uint8List.fromList(bytes);
-          _isInitialized = true;
-        });
-      }
 
       _resetHistory();
-      debugPrint('Initialized image: ${_imageSize.width}x${_imageSize.height}');
     } catch (e) {
-      debugPrint('Error initializing image: $e');
+      debugPrint('Ошибка инициализации изображения: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load image: ${e.toString()}')),
+          SnackBar(content: Text('Ошибка загрузки изображения')),
         );
       }
     }
   }
 
   void _resetHistory() {
+    final localizations = AppLocalizations.of(context);
     _history.clear();
-    _addHistoryState('Initial image');
+    _addHistoryState(localizations?.create ?? 'Initial image');
     _currentHistoryIndex = 0;
   }
 
@@ -262,7 +267,6 @@ class _EditPageState extends State<EditPage> {
       final file = File(entry.snapshotPath!);
       if (await file.exists()) {
         final bytes = await file.readAsBytes();
-        // Update image size for undo
         final completer = Completer<ui.Image>();
         ui.decodeImageFromList(bytes, (ui.Image img) {
           completer.complete(img);
@@ -275,6 +279,10 @@ class _EditPageState extends State<EditPage> {
           _currentImage = bytes;
           _imageSize = newSize;
         });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: файл истории не найден')),
+        );
       }
     }
 
@@ -289,7 +297,6 @@ class _EditPageState extends State<EditPage> {
       final file = File(entry.snapshotPath!);
       if (await file.exists()) {
         final bytes = await file.readAsBytes();
-        // Update image size for redo
         final completer = Completer<ui.Image>();
         ui.decodeImageFromList(bytes, (ui.Image img) {
           completer.complete(img);
@@ -302,17 +309,19 @@ class _EditPageState extends State<EditPage> {
           _currentImage = bytes;
           _imageSize = newSize;
         });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: файл истории не найден')),
+        );
       }
     }
 
     _updateUndoRedoState();
   }
 
-
   void _updateImage(Uint8List newImage, {String? action, String? operationType, Map<String, dynamic>? parameters}) async {
     if (!mounted || listEquals(_currentImage, newImage)) return;
 
-    //обновляем размер фото
     final completer = Completer<ui.Image>();
     ui.decodeImageFromList(newImage, (ui.Image img) {
       completer.complete(img);
@@ -358,34 +367,61 @@ class _EditPageState extends State<EditPage> {
   }
 
   Future<void> _saveImage() async {
+    final localizations = AppLocalizations.of(context);
+
     if (!_isInitialized || !mounted) return;
 
-    try {
-      final db = magicMomentDatabase.instance;
-      final format = await db.getImageFormat() ?? 'PNG';
+    final selectedFormat = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(localizations?.save ?? 'Save Image'),
+          content: Text(localizations?.chooseFormat ?? 'Choose image format:'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('PNG'),
+              child:  Text(localizations?.pngTr ?? 'PNG (transparency)'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('JPEG'),
+              child: const Text('JPEG'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: Text(localizations?.cancel ?? 'Cancel'),
+            ),
+          ],
+        );
+      },
+    );
 
+    if (selectedFormat == null) return;
+
+    try {
       if (kIsWeb) {
-        await _downloadImageWeb(_currentImage, format: format);
+        await _downloadImageWeb(_currentImage, format: selectedFormat);
       } else {
-        await _saveImageToGallery(_currentImage, format: format);
+        await _saveImageToGallery(_currentImage, format: selectedFormat);
       }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppLocalizations.of(context)?.save ?? 'Image saved'),
+          content: Text(localizations?.save ?? 'Image saved'),
           duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(content: Text('${localizations?.error ?? 'Error'}: ${e.toString()}')),
       );
     }
   }
 
   Future<void> _saveImageToGallery(Uint8List bytes, {required String format}) async {
+    final localizations = AppLocalizations.of(context);
+
     try {
       final directory = await getTemporaryDirectory();
       final extension = format.toLowerCase();
@@ -398,7 +434,7 @@ class _EditPageState extends State<EditPage> {
           final jpegBytes = img.encodeJpg(decodedImage, quality: 90);
           await file.writeAsBytes(jpegBytes);
         } else {
-          throw Exception('Failed to decode image for JPEG conversion');
+          throw Exception(localizations?.error ?? 'Failed to decode image for JPEG conversion');
         }
       } else {
         await file.writeAsBytes(bytes);
@@ -407,12 +443,14 @@ class _EditPageState extends State<EditPage> {
       const channel = MethodChannel('gallery_saver');
       await channel.invokeMethod('saveImage', imagePath);
     } on PlatformException catch (e) {
-      debugPrint('Failed to save image: ${e.message}');
+      debugPrint('${localizations?.error ?? 'Failed to save image'}: ${e.message}');
       rethrow;
     }
   }
 
   Future<void> _downloadImageWeb(Uint8List bytes, {required String format}) async {
+    final localizations = AppLocalizations.of(context);
+
     try {
       Uint8List formattedBytes;
       String mimeType;
@@ -420,7 +458,7 @@ class _EditPageState extends State<EditPage> {
       if (format == 'JPEG') {
         final img.Image? decodedImage = img.decodeImage(bytes);
         if (decodedImage == null) {
-          throw Exception('Failed to decode image for JPEG conversion');
+          throw Exception(localizations?.error ?? 'Failed to decode image for JPEG conversion');
         }
         formattedBytes = img.encodeJpg(decodedImage, quality: 90);
         mimeType = 'image/jpeg';
@@ -436,13 +474,43 @@ class _EditPageState extends State<EditPage> {
         ..click();
       html.Url.revokeObjectUrl(url);
     } catch (e) {
-      debugPrint('Web download error: $e');
-      throw Exception('Failed to download image: $e');
+      debugPrint('${localizations?.error ?? 'Web download error'}: $e');
+      throw Exception('${localizations?.error ?? 'Failed to download image'}: $e');
+    }
+  }
+  Future<void> _confirmBackNavigation() async {
+    final localizations = AppLocalizations.of(context);
+
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(localizations?.back ?? 'Go Back'),
+          content: Text(localizations?.unsavedChangesWarning ??
+              'Are you sure you want to go back? All unsaved changes will be lost.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(localizations?.cancel ?? 'Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(localizations?.yes ?? 'Yes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLeave == true && mounted) {
+      Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
       body: Stack(
         children: [
@@ -456,19 +524,23 @@ class _EditPageState extends State<EditPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       IconButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: _confirmBackNavigation,
                         icon: const Icon(Icons.arrow_back),
                         color: Colors.white,
+                        tooltip: localizations?.back ?? 'Back',
                       ),
+
                       IconButton(
                         icon: const Icon(Icons.history),
                         color: Colors.white,
                         onPressed: _showEditHistory,
+                        tooltip: localizations?.history ?? 'History',
                       ),
                       IconButton(
                         onPressed: _saveImage,
                         icon: const Icon(Icons.save_alt),
                         color: Colors.white,
+                        tooltip: localizations?.save ?? 'Save',
                       ),
                     ],
                   ),
@@ -489,9 +561,20 @@ class _EditPageState extends State<EditPage> {
                       ),
                     ),
                   )
-                      : const Center(child: CircularProgressIndicator()),
+                      : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(
+                          localizations?.loading ?? 'Loading image...',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                // Кнопки истории в нижней панели
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: Row(
@@ -501,12 +584,14 @@ class _EditPageState extends State<EditPage> {
                         icon: const Icon(Icons.undo),
                         color: _isUndoAvailable ? Colors.white : Colors.grey,
                         onPressed: _isUndoAvailable ? _undo : null,
+                        tooltip: localizations?.undo ?? 'Undo',
                       ),
                       const SizedBox(width: 20),
                       IconButton(
                         icon: const Icon(Icons.redo),
                         color: _isRedoAvailable ? Colors.white : Colors.grey,
                         onPressed: _isRedoAvailable ? _redo : null,
+                        tooltip: localizations?.redo ?? 'Redo',
                       ),
                     ],
                   ),
@@ -522,6 +607,9 @@ class _EditPageState extends State<EditPage> {
                   onPressed: () {
                     setState(() => _showToolsPanel = !_showToolsPanel);
                   },
+                  tooltip: _showToolsPanel
+                      ? localizations?.cancel ?? 'Close'
+                      : localizations?.edit ?? 'Edit',
                 ),
               ],
             ),
@@ -600,6 +688,17 @@ class _EditPageState extends State<EditPage> {
             ),
           if (_activeTool == 'eraser')
             EraserPanel(
+              image: _currentImage,
+              imageId: widget.imageId,
+              onCancel: _closeToolPanel,
+              onApply: (eraserImage) {
+                _updateImage(eraserImage);
+                _closeToolPanel();
+              },
+              onUpdateImage: _updateImage,
+            ),
+          if (_activeTool == 'background')
+            BackgroundRemovalPanel(
               image: _currentImage,
               imageId: widget.imageId,
               onCancel: _closeToolPanel,

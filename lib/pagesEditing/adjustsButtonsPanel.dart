@@ -82,6 +82,19 @@ class _AdjustPanelState extends State<AdjustPanel> {
     final cacheKey = '$_brightness|$_contrast|$_saturation|$_exposure|$_noise|$_smooth';
     if (_adjustmentCache.containsKey(cacheKey)) {
       widget.onImageChanged(_adjustmentCache[cacheKey]!);
+      widget.onUpdateImage?.call(
+        _adjustmentCache[cacheKey]!,
+        action: 'Промежуточная настройка',
+        operationType: 'adjustments',
+        parameters: {
+          'brightness': _brightness,
+          'contrast': _contrast,
+          'saturation': _saturation,
+          'exposure': _exposure,
+          'noise': _noise,
+          'smooth': _smooth,
+        },
+      );
       return;
     }
 
@@ -101,6 +114,19 @@ class _AdjustPanelState extends State<AdjustPanel> {
       _adjustmentCache[cacheKey] = result;
       _cachedImage = image;
       widget.onImageChanged(result);
+      widget.onUpdateImage?.call(
+        result,
+        action: 'Промежуточная настройка',
+        operationType: 'adjustments',
+        parameters: {
+          'brightness': _brightness,
+          'contrast': _contrast,
+          'saturation': _saturation,
+          'exposure': _exposure,
+          'noise': _noise,
+          'smooth': _smooth,
+        },
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -128,7 +154,8 @@ class _AdjustPanelState extends State<AdjustPanel> {
         'seed': DateTime.now().millisecondsSinceEpoch,
       });
       final result = img.encodePng(image);
-      await widget.onUpdateImage?.call(result,
+      await widget.onUpdateImage?.call(
+        result,
         action: 'Автокоррекция или ручная настройка',
         operationType: 'adjustments',
         parameters: {

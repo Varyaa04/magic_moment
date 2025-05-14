@@ -121,6 +121,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  dev_build:
+    dependency: transitive
+    description:
+      name: dev_build
+      sha256: de3c7b99d47f90c053dc331b8a950041426ecbe58dea21f961bb1f751ea98bb8
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.2+9"
   device_info_plus:
     dependency: "direct main"
     description:
@@ -243,14 +251,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.26"
-  flutter_staggered_grid_view:
-    dependency: "direct main"
-    description:
-      name: flutter_staggered_grid_view
-      sha256: "19e7abb550c96fbfeb546b23f3ff356ee7c59a019a651f8f102a4ba9b7349395"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -621,6 +621,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
+  pool:
+    dependency: transitive
+    description:
+      name: pool
+      sha256: "20fe868b6314b322ea036ba325e6fc0711a22948856475e2c2b6306e8ab39c2a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.1"
   posix:
     dependency: transitive
     description:
@@ -629,6 +637,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.2"
+  process_run:
+    dependency: transitive
+    description:
+      name: process_run
+      sha256: "6ec839cdd3e6de4685318e7686cd4abb523c3d3a55af0e8d32a12ae19bc66622"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.4"
   provider:
     dependency: "direct main"
     description:
@@ -637,6 +653,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.4"
+  pub_semver:
+    dependency: transitive
+    description:
+      name: pub_semver
+      sha256: "5bfcf68ca79ef689f8990d1160781b4bad40a3bd5e5218ad4076ddb7f4081585"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   shared_preferences:
     dependency: "direct main"
     description:
@@ -738,6 +762,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.5"
+  sqflite_common_ffi_web:
+    dependency: "direct main"
+    description:
+      name: sqflite_common_ffi_web
+      sha256: "983cf7b33b16e6bc086c8e09f6a1fae69d34cdb167d7acaf64cbd3515942d4e6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   sqflite_darwin:
     dependency: transitive
     description:

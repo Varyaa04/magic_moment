@@ -1,4 +1,3 @@
-import 'package:MagicMoment/pagesSettings/formatSetPage.dart';
 import 'package:MagicMoment/pagesSettings/langSetPage.dart';
 import 'package:MagicMoment/pagesSettings/themeSetPage.dart';
 import 'package:MagicMoment/themeWidjets/settingsButtonIcon.dart';
@@ -82,18 +81,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       icon: FluentIcons.color_20_filled
                   ),
                   const SizedBox(height: 20),
-                  SettingsButton(
-                      onPressed: (){
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const FormatSetPage()),
-                        ).then((_) {
-                          setState(() {});
-                        });
-                      },
-                      text: appLocalizations.format,
-                      icon: FluentIcons.document_image_20_filled
-                  ),
                 ],
               ),
             )
