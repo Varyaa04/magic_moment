@@ -1,22 +1,26 @@
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:MagicMoment/themeWidjets/colorPicker.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import '../../database/editHistory.dart';
 import '../../database/objectDao.dart' as dao;
 import '../../database/objectsModels.dart';
 import '../../database/magicMomentDatabase.dart';
+import '../../themeWidjets/colorPicker.dart';
 
-class TextEmojiEditor extends StatefulWidget {
+class TextEditorPanel extends StatefulWidget {
   final Uint8List image;
   final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
   final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
 
-  const TextEmojiEditor({
+  const TextEditorPanel({
     required this.image,
     required this.imageId,
     required this.onCancel,
@@ -26,17 +30,29 @@ class TextEmojiEditor extends StatefulWidget {
   });
 
   @override
-  _TextEmojiEditorState createState() => _TextEmojiEditorState();
+  _TextEditorPanelState createState() => _TextEditorPanelState();
 }
 
-class _TextEmojiEditorState extends State<TextEmojiEditor> {
-  final GlobalKey _renderKey = GlobalKey();
-  final TextEditingController _textController = TextEditingController();
+class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProviderStateMixin {
   final List<TextItem> _textItems = [];
+  TextItem? _selectedText;
   final List<Map<String, dynamic>> _history = [];
   int _historyIndex = -1;
+  final GlobalKey _imageKey = GlobalKey();
+  bool _isProcessing = false;
+  bool _isInitialized = false;
+  String _currentText = '';
+  Color _currentColor = Colors.black;
+  double _currentFontSize = 20.0;
+  String _currentFontFamily = 'Roboto';
+  FontWeight _currentFontWeight = FontWeight.normal;
+  FontStyle _currentFontStyle = FontStyle.normal;
+  TextAlign _currentAlignment = TextAlign.left;
+  double _currentScale = 1.0;
+  double _currentRotation = 0.0;
+  final GlobalKey _renderKey = GlobalKey();
+  final TextEditingController _textController = TextEditingController();
   TextItem? _selectedTextItem;
-  int _currentTabIndex = 0;
   Color _textBackgroundColor = Colors.transparent;
   Color _textColor = Colors.white;
   double _textSize = 24.0;
@@ -45,949 +61,166 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
   bool _isItalic = false;
   bool _hasShadow = true;
   TextAlign _textAlign = TextAlign.center;
-  final List<String> _emojis = [
-    '😀', '😂', '😍', '😎', '😜', '🤩', '🥳', '😇',
-    '🐶', '🐱', '🦁', '🐯', '🦊', '🐻', '🐼', '🐨',
-    '🍎', '🍕', '🍔', '🍟', '🍦', '🍩', '🍪', '🍫',
-    '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🎱', '🏓',
-    '🚗', '✈️', '🚀', '🛳️', '🚲', '🏍️', '🚂', '🚁',
-    '❤️', '✨', '🌟', '💎', '🔥', '🌈', '☀️', '⭐',
-  ];
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _textController.addListener(() {
-      if (_selectedTextItem != null) {
-        setState(() {
-          _selectedTextItem!.text = _textController.text;
-        });
-      }
-    });
-    _loadTextsFromDb();
-    _history.add({
-      'image': widget.image,
-      'action': 'Initial image',
-      'operationType': 'init',
-      'parameters': {},
-    });
-    _historyIndex = 0;
+    _tabController = TabController(length: 2, vsync: this);
+    _initialize();
   }
-
-  Future<void> _loadTextsFromDb() async {
-    try {
-      final objectDao = dao.ObjectDao();
-      final saved = await objectDao.getTexts(widget.imageId);
-      debugPrint('Loaded ${saved.length} texts from DB for imageId: ${widget.imageId}');
-
-      setState(() {
-        _textItems.addAll(saved.map((t) => TextItem(
-          id: t.id,
-          text: t.text,
-          position: Offset(t.positionX, t.positionY),
-          color: Color(int.parse(t.color.replaceFirst('#', '0xff'))),
-          size: t.fontSize,
-          fontFamily: t.fontFamily,
-          isBold: t.fontWeight == 'bold',
-          isItalic: t.fontStyle == 'italic',
-          hasShadow: true,
-          textAlign: TextAlign.values.byName(t.alignment),
-          backgroundColor: Colors.transparent,
-        )));
-      });
-    } catch (e) {
-      debugPrint('Error loading texts from DB: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load texts: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _undo() async {
-    if (_historyIndex <= 0) return;
-
-    try {
-      setState(() {
-        _historyIndex--;
-        _textItems.clear();
-        _selectedTextItem = null;
-        _textController.clear();
-      });
-
-      await widget.onUpdateImage(
-        _history[_historyIndex]['image'],
-        action: 'Undo text/emoji',
-        operationType: 'undo',
-        parameters: {
-          'previous_action': _history[_historyIndex + 1]['action'],
-        },
-      );
-      debugPrint('Undo performed, history index: $_historyIndex');
-    } catch (e) {
-      debugPrint('Error undoing text/emoji: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to undo: $e')),
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
+    _tabController.dispose();
     _textController.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context);
 
-    return Scaffold(
-      backgroundColor: Colors.black.withOpacity(0.8),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(localizations),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedTextItem = null),
-                child: RepaintBoundary(
-                  key: _renderKey,
-                  child: Stack(
-                    children: [
-                      Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
-                      ..._textItems.map(_buildTextItemWidget),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            _buildBottomPanel(localizations),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(AppLocalizations? localizations) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      height: 56,
-      decoration: BoxDecoration(
-        color: Colors.black,
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, spreadRadius: 1),
-        ],
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: widget.onCancel,
-            tooltip: localizations?.cancel ?? 'Cancel',
-          ),
-          const Spacer(),
-          if (_selectedTextItem != null)
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: _deleteSelectedItem,
-              tooltip: localizations?.remove ?? 'Remove',
-            ),
-          IconButton(
-            icon: Icon(Icons.undo, color: _historyIndex > 0 ? Colors.white : Colors.grey),
-            onPressed: _historyIndex > 0 ? _undo : null,
-            tooltip: localizations?.undo ?? 'Undo',
-          ),
-          IconButton(
-            icon: const Icon(Icons.check, color: Colors.white),
-            onPressed: _saveChanges,
-            tooltip: localizations?.apply ?? 'Apply',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTextItemWidget(TextItem item) {
-    return Positioned(
-      left: item.position.dx,
-      top: item.position.dy,
-      child: GestureDetector(
-        onTap: () => _selectTextItem(item),
-        onPanUpdate: (details) {
-          setState(() {
-            item.position += details.delta;
-            debugPrint('Text moved to: ${item.position}');
-          });
-        },
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            border: _selectedTextItem == item ? Border.all(color: Colors.blue, width: 2) : null,
-            color: item.backgroundColor,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Container(
-            decoration: _selectedTextItem == item
-                ? BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(4),
-            )
-                : null,
-            child: Text(
-              item.text,
-              style: TextStyle(
-                color: item.color,
-                fontSize: item.size,
-                fontFamily: item.fontFamily,
-                fontWeight: item.isBold ? FontWeight.bold : FontWeight.normal,
-                fontStyle: item.isItalic ? FontStyle.italic : FontStyle.normal,
-                shadows: item.hasShadow
-                    ? [
-                  Shadow(
-                    blurRadius: 5,
-                    color: Colors.black.withOpacity(0.8),
-                    offset: const Offset(1, 1),
-                  ),
-                ]
-                    : null,
-              ),
-              textAlign: item.textAlign,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomPanel(AppLocalizations? localizations) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, spreadRadius: 1),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildTabBar(localizations),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            child: _currentTabIndex == 0 ? _buildTextTab(localizations) : _buildEmojiTab(localizations),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBar(AppLocalizations? localizations) {
-    return Container(
-      height: 48,
-      child: Row(
-        children: [
-          _buildTabButton(localizations?.text ?? 'Text', 0),
-          _buildTabButton(localizations?.emoji ?? 'Emoji', 1),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabButton(String title, int index) {
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _currentTabIndex = index),
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: _currentTabIndex == index ? Colors.blue : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: Text(
-            title,
-            style: TextStyle(
-              color: _currentTabIndex == index ? Colors.blue : Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextTab(AppLocalizations? localizations) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          TextField(
-            controller: _textController,
-            decoration: InputDecoration(
-              hintText: localizations?.enterText ?? 'Enter text or emoji',
-              hintStyle: TextStyle(color: Colors.grey[500]),
-              filled: true,
-              fillColor: Colors.grey[900],
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.add, color: Colors.blue),
-                onPressed: _addText,
-                tooltip: localizations?.add ?? 'Add',
-              ),
-            ),
-            style: const TextStyle(color: Colors.white),
-            onSubmitted: (_) => _addText(),
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildStyleButton(
-                  Icons.format_size,
-                  localizations?.size ?? 'Size',
-                      () => _showSizeDialog(localizations),
-                ),
-                _buildStyleButton(
-                  Icons.color_lens,
-                  localizations?.textColor ?? 'Color',
-                      () => _showColorDialog(localizations),
-                ),
-                _buildStyleButton(
-                  Icons.format_color_fill,
-                  localizations?.background ?? 'Background',
-                      () => _showBackgroundColorDialog(localizations),
-                ),
-                _buildStyleButton(
-                  Icons.font_download,
-                  localizations?.font ?? 'Font',
-                      () => _showFontDialog(localizations),
-                ),
-                _buildStyleButton(
-                  Icons.format_align_center,
-                  localizations?.align ?? 'Align',
-                      () => _showAlignDialog(localizations),
-                ),
-                _buildStyleButton(
-                  Icons.format_bold,
-                  localizations?.bold ?? 'Bold',
-                      () => _toggleStyle(() => _isBold = !_isBold),
-                  isActive: _isBold,
-                ),
-                _buildStyleButton(
-                  Icons.format_italic,
-                  localizations?.italic ?? 'Italic',
-                      () => _toggleStyle(() => _isItalic = !_isItalic),
-                  isActive: _isItalic,
-                ),
-                _buildStyleButton(
-                  FluentIcons.image_shadow_20_filled,
-                  localizations?.shadow ?? 'Shadow',
-                      () => _toggleStyle(() => _hasShadow = !_hasShadow),
-                  isActive: _hasShadow,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmojiTab(AppLocalizations? localizations) {
-    return Container(
-      height: 200,
-      padding: const EdgeInsets.all(8),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 8,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-        ),
-        itemCount: _emojis.length,
-        itemBuilder: (context, index) {
-          return Tooltip(
-            message: localizations?.tapToPlaceEmoji ?? 'Tap to place emoji',
-            child: GestureDetector(
-              onTap: () => _addEmoji(_emojis[index]),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    _emojis[index],
-                    style: const TextStyle(fontSize: 24),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildStyleButton(IconData icon, String label, VoidCallback onTap, {bool isActive = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: Icon(icon, color: isActive ? Colors.blue : Colors.white, size: 24),
-            onPressed: onTap,
-            tooltip: label,
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? Colors.blue : Colors.white,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showBackgroundColorDialog(AppLocalizations? localizations) async {
-    Color tempColor = _textBackgroundColor;
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SizedBox(
-          height: MediaQuery.of(context).size.height * 0.7,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  localizations?.textBackground ?? 'Text Background',
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ColorPicker(
-                    pickerColor: tempColor,
-                    onColorChanged: (color) => tempColor = color,
-                    pickerAreaHeightPercent: 0.7,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(localizations?.cancel ?? 'Cancel', style: const TextStyle(color: Colors.white)),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _textBackgroundColor = tempColor;
-                          if (_selectedTextItem != null) {
-                            _selectedTextItem!.backgroundColor = tempColor;
-                          }
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: Text(localizations?.apply ?? 'Apply', style: const TextStyle(color: Colors.blue)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  Future<void> _initialize() async {
+    try {
+      await _loadTextFromDb();
+      _history.add({
+        'image': widget.image,
+        'action': 'Initial image',
+        'operationType': 'init',
+        'parameters': {},
+      });
+      _historyIndex = 0;
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
+    } catch (e) {
+      _handleError('Initialization failed: $e');
+    }
   }
 
   Future<void> _addText() async {
-    if (_textController.text.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)?.enterText ?? 'Please enter text')),
-        );
-      }
-      return;
-    }
+    if (_currentText.isEmpty || _isProcessing || !_isInitialized) return;
+    setState(() => _isProcessing = true);
 
     try {
-      final newItem = TextItem(
-        text: _textController.text,
+      final newTextItem = TextItem(
+        text: _currentText,
         position: const Offset(100, 100),
-        color: _textColor,
-        size: _textSize,
-        fontFamily: _fontFamily,
-        isBold: _isBold,
-        isItalic: _isItalic,
-        hasShadow: _hasShadow,
-        textAlign: _textAlign,
+        color: _currentColor,
+        fontSize: _currentFontSize,
+        fontFamily: _currentFontFamily,
+        fontWeight: _currentFontWeight,
+        fontStyle: _currentFontStyle,
+        alignment: _currentAlignment,
+        scale: _currentScale,
+        rotation: _currentRotation,
         backgroundColor: _textBackgroundColor,
+        hasShadow: _hasShadow,
       );
 
       final history = EditHistory(
         imageId: widget.imageId,
-        operationType: 'text_emoji',
+        operationType: 'text',
         operationParameters: {
-          'text': newItem.text,
-          'font_size': newItem.size,
+          'text': newTextItem.text,
+          'fontSize': newTextItem.fontSize,
         },
         operationDate: DateTime.now(),
       );
       final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
-      debugPrint('History inserted with ID: $historyId');
 
       final objectDao = dao.ObjectDao();
       final textId = await objectDao.insertText(TextObject(
         imageId: widget.imageId,
-        text: newItem.text,
-        positionX: newItem.position.dx,
-        positionY: newItem.position.dy,
-        fontSize: newItem.size,
-        fontWeight: newItem.isBold ? 'bold' : 'normal',
-        fontStyle: newItem.isItalic ? 'italic' : 'normal',
-        alignment: newItem.textAlign.name,
-        color: '#${newItem.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
-        fontFamily: newItem.fontFamily,
-        scale: 1.0,
-        rotation: 0.0,
+        text: newTextItem.text,
+        positionX: newTextItem.position.dx,
+        positionY: newTextItem.position.dy,
+        fontSize: newTextItem.fontSize,
+        fontWeight: newTextItem.fontWeight == FontWeight.bold ? 'bold' : 'normal',
+        fontStyle: newTextItem.fontStyle == FontStyle.italic ? 'italic' : 'normal',
+        alignment: newTextItem.alignment == TextAlign.center
+            ? 'center'
+            : newTextItem.alignment == TextAlign.right
+            ? 'right'
+            : 'left',
+        color: '#${newTextItem.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+        fontFamily: newTextItem.fontFamily,
+        scale: newTextItem.scale,
+        rotation: newTextItem.rotation,
         historyId: historyId,
       ));
 
       setState(() {
-        newItem.id = textId;
-        _textItems.add(newItem);
-        _selectedTextItem = newItem;
+        newTextItem.id = textId;
+        _textItems.add(newTextItem);
+        _selectedText = newTextItem;
         _textController.clear();
-        debugPrint('Text added: ${newItem.text}, ID: $textId');
+        _currentText = '';
+        debugPrint('Text added: ${newTextItem.text}, ID: $textId');
       });
     } catch (e) {
-      debugPrint('Error adding text: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add text: $e')),
-        );
-      }
+      _handleError('Failed to add text: $e');
+    } finally {
+      setState(() => _isProcessing = false);
     }
   }
 
-  Future<void> _addEmoji(String emoji) async {
-    try {
-      final newItem = TextItem(
-        text: emoji,
-        position: const Offset(100, 100),
-        color: _textColor,
-        size: _textSize,
-        fontFamily: _fontFamily,
-        isBold: _isBold,
-        isItalic: _isItalic,
-        hasShadow: _hasShadow,
-        textAlign: _textAlign,
-        backgroundColor: _textBackgroundColor,
-      );
-
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'text_emoji',
-        operationParameters: {
-          'emoji': newItem.text,
-          'font_size': newItem.size,
-        },
-        operationDate: DateTime.now(),
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-      debugPrint('History inserted with ID: $historyId');
-
-      final objectDao = dao.ObjectDao();
-      final textId = await objectDao.insertText(TextObject(
-        imageId: widget.imageId,
-        text: newItem.text,
-        positionX: newItem.position.dx,
-        positionY: newItem.position.dy,
-        fontSize: newItem.size,
-        fontWeight: newItem.isBold ? 'bold' : 'normal',
-        fontStyle: newItem.isItalic ? 'italic' : 'normal',
-        alignment: newItem.textAlign.name,
-        color: '#${newItem.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
-        fontFamily: newItem.fontFamily,
-        scale: 1.0,
-        rotation: 0.0,
-        historyId: historyId,
-      ));
-
-      setState(() {
-        newItem.id = textId;
-        _textItems.add(newItem);
-        _selectedTextItem = newItem;
-        debugPrint('Emoji added: ${newItem.text}, ID: $textId');
-      });
-    } catch (e) {
-      debugPrint('Error adding emoji: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add emoji: $e')),
-        );
-      }
-    }
-  }
-
-  void _selectTextItem(TextItem item) {
+  Future<void> _applyChanges() async {
+    if (_isProcessing || !_isInitialized) return;
     setState(() {
-      _selectedTextItem = item;
-      _textColor = item.color;
-      _textSize = item.size;
-      _fontFamily = item.fontFamily;
-      _isBold = item.isBold;
-      _isItalic = item.isItalic;
-      _hasShadow = item.hasShadow;
-      _textAlign = item.textAlign;
-      _textBackgroundColor = item.backgroundColor;
-      _textController.text = item.text;
-      _textController.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: item.text.length,
-      );
-      debugPrint('Text selected: ${item.text}');
+      _isProcessing = true;
+      _selectedText = null;
     });
-  }
 
-  void _toggleStyle(VoidCallback toggle) {
-    setState(() {
-      toggle();
-      if (_selectedTextItem != null) {
-        _selectedTextItem!.isBold = _isBold;
-        _selectedTextItem!.isItalic = _isItalic;
-        _selectedTextItem!.hasShadow = _hasShadow;
-      }
-    });
-  }
-
-  Future<void> _showSizeDialog(AppLocalizations? localizations) async {
-    double tempSize = _textSize;
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    localizations?.textSize ?? 'Text Size',
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  Slider(
-                    value: tempSize,
-                    min: 10,
-                    max: 72,
-                    divisions: 62,
-                    activeColor: Colors.blue,
-                    inactiveColor: Colors.grey[700],
-                    label: tempSize.round().toString(),
-                    onChanged: (value) => setState(() => tempSize = value),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(localizations?.cancel ?? 'Cancel', style: const TextStyle(color: Colors.white)),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _textSize = tempSize;
-                            if (_selectedTextItem != null) {
-                              _selectedTextItem!.size = tempSize;
-                            }
-                          });
-                          Navigator.pop(context);
-                        },
-                        child: Text(localizations?.apply ?? 'Apply', style: const TextStyle(color: Colors.blue)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _showColorDialog(AppLocalizations? localizations) async {
-    Color tempColor = _textColor;
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SizedBox(
-          height: MediaQuery.of(context).size.height * 0.7,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  localizations?.textColor ?? 'Text Color',
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ColorPicker(
-                    pickerColor: tempColor,
-                    onColorChanged: (color) => tempColor = color,
-                    pickerAreaHeightPercent: 0.7,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(localizations?.cancel ?? 'Cancel', style: const TextStyle(color: Colors.white)),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _textColor = tempColor;
-                          if (_selectedTextItem != null) {
-                            _selectedTextItem!.color = tempColor;
-                          }
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: Text(localizations?.apply ?? 'Apply', style: const TextStyle(color: Colors.blue)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _showFontDialog(AppLocalizations? localizations) async {
-    final fonts = [
-      'Roboto',
-      'Arial',
-      'Oi-Regular',
-      'LilitaOne-Regular',
-      'Comfortaa',
-      'PTSansNarrow-Regular',
-      'Courier',
-      'Times New Roman',
-      'Verdana',
-      'Impact',
-      'Comic Sans MS',
-    ];
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                localizations?.fontFamily ?? 'Font Family',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView(
-                  children: fonts.map((font) {
-                    return ListTile(
-                      title: Text(
-                        font,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontFamily: font,
-                          fontSize: 18,
-                        ),
-                      ),
-                      trailing: _fontFamily == font ? const Icon(Icons.check, color: Colors.blue) : null,
-                      onTap: () {
-                        setState(() {
-                          _fontFamily = font;
-                          if (_selectedTextItem != null) {
-                            _selectedTextItem!.fontFamily = font;
-                          }
-                        });
-                        Navigator.pop(context);
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(localizations?.close ?? 'Close', style: const TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _showAlignDialog(AppLocalizations? localizations) async {
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                localizations?.textAlignment ?? 'Text Alignment',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildAlignOption(Icons.format_align_left, TextAlign.left, localizations?.left ?? 'Left'),
-                  _buildAlignOption(Icons.format_align_center, TextAlign.center, localizations?.center ?? 'Center'),
-                  _buildAlignOption(Icons.format_align_right, TextAlign.right, localizations?.right ?? 'Right'),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(localizations?.close ?? 'Close', style: const TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAlignOption(IconData icon, TextAlign align, String tooltip) {
-    return IconButton(
-      icon: Icon(icon, size: 32, color: _textAlign == align ? Colors.blue : Colors.white),
-      onPressed: () {
-        setState(() {
-          _textAlign = align;
-          if (_selectedTextItem != null) {
-            _selectedTextItem!.textAlign = align;
-          }
-        });
-        Navigator.pop(context);
-      },
-      tooltip: tooltip,
-    );
-  }
-
-  Future<void> _deleteSelectedItem() async {
-    if (_selectedTextItem != null) {
-      try {
-        if (_selectedTextItem!.id != null) {
-          final objectDao = dao.ObjectDao();
-          await objectDao.softDeleteText(_selectedTextItem!.id!);
-          debugPrint('Text deleted: ${_selectedTextItem!.text}');
-        }
-        setState(() {
-          _textItems.remove(_selectedTextItem);
-          _selectedTextItem = null;
-          _textController.clear();
-        });
-      } catch (e) {
-        debugPrint('Error deleting text: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete text: $e')),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _saveChanges() async {
     try {
-      setState(() {
-        _selectedTextItem = null;
-      });
-
       await Future.delayed(const Duration(milliseconds: 16));
-      final boundary = _renderKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
       }
 
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose(); // Освобождаем изображение
       if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
+        throw Exception(AppLocalizations.of(context)?.errorEncode ?? 'Image conversion error');
       }
 
       final pngBytes = byteData.buffer.asUint8List();
-      debugPrint('Changes applied with ${_textItems.length} text items');
+      debugPrint('Changes applied with ${_textItems.length} texts');
 
       final history = EditHistory(
+        historyId: null,
         imageId: widget.imageId,
-        operationType: 'text_emoji',
+        operationType: 'text',
         operationParameters: {
-          'text_items_count': _textItems.length,
+          'texts_count': _textItems.length,
         },
         operationDate: DateTime.now(),
+        snapshotPath: kIsWeb ? null : '${Directory.systemTemp.path}/text_${DateTime.now().millisecondsSinceEpoch}.png',
+        snapshotBytes: kIsWeb ? pngBytes : null,
       );
       final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
-      debugPrint('History inserted with ID: $historyId');
+
+      final objectDao = dao.ObjectDao();
+      for (final text in _textItems) {
+        await objectDao.insertText(TextObject(
+          imageId: widget.imageId,
+          text: text.text,
+          positionX: text.position.dx,
+          positionY: text.position.dy,
+          fontSize: text.fontSize,
+          fontWeight: text.fontWeight.toString(),
+          fontStyle: text.fontStyle.toString(),
+          alignment: text.alignment.toString(),
+          color: '#${text.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+          fontFamily: text.fontFamily,
+          scale: text.scale,
+          rotation: text.rotation,
+          historyId: historyId,
+        ));
+      }
+
+      if (!mounted) return;
 
       setState(() {
         if (_historyIndex < _history.length - 1) {
@@ -996,34 +229,633 @@ class _TextEmojiEditorState extends State<TextEmojiEditor> {
         _history.add({
           'image': pngBytes,
           'action': AppLocalizations.of(context)?.text ?? 'Text',
-          'operationType': 'text_emoji',
+          'operationType': 'text',
           'parameters': {
-            'text_items_count': _textItems.length,
+            'texts_count': _textItems.length,
           },
         });
         _historyIndex++;
       });
 
-      await widget.onUpdateImage(
-        pngBytes,
+      await _updateImage(
+        newImage: pngBytes,
         action: AppLocalizations.of(context)?.text ?? 'Text',
-        operationType: 'text_emoji',
+        operationType: 'text',
         parameters: {
-          'text_items_count': _textItems.length,
+          'texts_count': _textItems.length,
         },
       );
 
       widget.onApply(pngBytes);
     } catch (e) {
-      debugPrint('Error saving text/emoji: $e');
+      debugPrint('Error applying text: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving text/emoji: $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.error ?? 'Error'}: $e')),
         );
       }
     } finally {
+      setState(() => _isProcessing = false);
       widget.onCancel();
     }
+  }
+
+  Future<void> _loadTextFromDb() async {
+    try {
+      final objectDao = dao.ObjectDao();
+      final saved = await objectDao.getTexts(widget.imageId);
+      debugPrint('Loaded ${saved.length} texts from DB for imageId: ${widget.imageId}');
+
+      final newTexts = saved.map((t) => TextItem(
+        id: t.id,
+        text: t.text,
+        position: Offset(t.positionX, t.positionY),
+        color: Color(int.parse(t.color.replaceFirst('#', '0xff'))),
+        fontSize: t.fontSize,
+        fontFamily: t.fontFamily,
+        fontWeight: t.fontWeight == 'bold' ? FontWeight.bold : FontWeight.normal,
+        fontStyle: t.fontStyle == 'italic' ? FontStyle.italic : FontStyle.normal,
+        alignment: t.alignment == 'center'
+            ? TextAlign.center
+            : t.alignment == 'right'
+            ? TextAlign.right
+            : TextAlign.left,
+        scale: t.scale,
+        rotation: t.rotation,
+        backgroundColor: Colors.transparent,
+        hasShadow: true,
+      )).toList();
+
+      if (mounted) {
+        setState(() => _textItems.addAll(newTexts));
+      }
+    } catch (e) {
+      _handleError('Failed to load texts: $e');
+    }
+  }
+
+  Future<void> _updateImage({
+    required Uint8List newImage,
+    required String action,
+    required String operationType,
+    required Map<String, dynamic> parameters,
+  }) async {
+    try {
+      await widget.onUpdateImage(
+        newImage,
+        action: action,
+        operationType: operationType,
+        parameters: parameters,
+      );
+      debugPrint('Image updated: $action');
+    } catch (e) {
+      _handleError('Failed to update image: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _undo() async {
+    if (_historyIndex <= 0 || _isProcessing || !_isInitialized) return;
+    setState(() => _isProcessing = true);
+
+    try {
+      setState(() {
+        _historyIndex--;
+        _textItems.clear();
+        _selectedText = null;
+      });
+
+      await _updateImage(
+        newImage: _history[_historyIndex]['image'],
+        action: 'Undo text',
+        operationType: 'undo',
+        parameters: {
+          'previous_action': _history[_historyIndex + 1]['action'],
+        },
+      );
+      debugPrint('Undo performed, history index: $_historyIndex');
+    } catch (e) {
+      _handleError('Failed to undo: $e');
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  void _handleError(String message) {
+    debugPrint(message);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
+  }
+
+  void _updateTextProperties({
+    Color? color,
+    double? fontSize,
+    String? fontFamily,
+    FontWeight? fontWeight,
+    FontStyle? fontStyle,
+    TextAlign? alignment,
+    double? scale,
+    double? rotation,
+    Color? backgroundColor,
+    bool? hasShadow,
+  }) {
+    setState(() {
+      if (color != null) _currentColor = color;
+      if (fontSize != null) _currentFontSize = fontSize;
+      if (fontFamily != null) _currentFontFamily = fontFamily;
+      if (fontWeight != null) _currentFontWeight = fontWeight;
+      if (fontStyle != null) _currentFontStyle = fontStyle;
+      if (alignment != null) _currentAlignment = alignment;
+      if (scale != null) _currentScale = scale;
+      if (rotation != null) _currentRotation = rotation;
+      if (backgroundColor != null) _textBackgroundColor = backgroundColor;
+      if (hasShadow != null) _hasShadow = hasShadow;
+
+      if (_selectedText != null) {
+        _selectedText!.color = _currentColor;
+        _selectedText!.fontSize = _currentFontSize;
+        _selectedText!.fontFamily = _currentFontFamily;
+        _selectedText!.fontWeight = _currentFontWeight;
+        _selectedText!.fontStyle = _currentFontStyle;
+        _selectedText!.alignment = _currentAlignment;
+        _selectedText!.scale = _currentScale;
+        _selectedText!.rotation = _currentRotation;
+        _selectedText!.backgroundColor = _textBackgroundColor;
+        _selectedText!.hasShadow = _hasShadow;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    return Scaffold(
+      backgroundColor: Colors.black.withOpacity(0.8),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                _buildAppBar(localizations),
+                Expanded(
+                  child: _isInitialized
+                      ? GestureDetector(
+                    onTap: () => setState(() => _selectedText = null),
+                    child: RepaintBoundary(
+                      key: _imageKey,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
+                          ..._textItems.map(_buildTextWidget),
+                        ],
+                      ),
+                    ),
+                  )
+                      : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(color: Colors.white),
+                        const SizedBox(height: 16),
+                        Text(
+                          localizations?.loading ?? 'Loading...',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                _buildBottomPanel(localizations),
+              ],
+            ),
+            if (_isProcessing)
+              Container(
+                color: Colors.black.withOpacity(0.5),
+                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppBar(AppLocalizations? localizations) {
+    return AppBar(
+      backgroundColor: Colors.black,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: widget.onCancel,
+        tooltip: localizations?.cancel ?? 'Cancel',
+      ),
+      title: Text(localizations?.text ?? 'Text', style: const TextStyle(color: Colors.white)),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.undo, color: _historyIndex > 0 && _isInitialized ? Colors.white : Colors.grey),
+          onPressed: _historyIndex > 0 && _isInitialized ? _undo : null,
+          tooltip: localizations?.undo ?? 'Undo',
+        ),
+        IconButton(
+          icon: const Icon(Icons.check, color: Colors.white),
+          onPressed: _isInitialized ? _applyChanges : null,
+          tooltip: localizations?.apply ?? 'Apply',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTextWidget(TextItem textItem) {
+    final isSelected = textItem == _selectedText;
+    return Positioned(
+      left: textItem.position.dx,
+      top: textItem.position.dy,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          setState(() {
+            textItem.position += details.delta;
+            debugPrint('Text moved to: ${textItem.position}');
+          });
+        },
+        onTap: () {
+          setState(() {
+            _selectedText = textItem;
+            _currentText = textItem.text;
+            _currentColor = textItem.color;
+            _currentFontSize = textItem.fontSize;
+            _currentFontFamily = textItem.fontFamily;
+            _currentFontWeight = textItem.fontWeight;
+            _currentFontStyle = textItem.fontStyle;
+            _currentAlignment = textItem.alignment;
+            _currentScale = textItem.scale;
+            _currentRotation = textItem.rotation;
+            _textBackgroundColor = textItem.backgroundColor;
+            _hasShadow = textItem.hasShadow;
+            _textController.text = textItem.text;
+            debugPrint('Text selected: ${textItem.text}');
+          });
+        },
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Transform.rotate(
+              angle: textItem.rotation,
+              child: Transform.scale(
+                scale: textItem.scale,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: textItem.backgroundColor,
+                    border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+                    boxShadow: textItem.hasShadow
+                        ? [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 4,
+                        offset: const Offset(2, 2),
+                      ),
+                    ]
+                        : [],
+                  ),
+                  child: SizedBox(
+                    width: 200,
+                    child: Text(
+                      textItem.text,
+                      style: TextStyle(
+                        color: textItem.color,
+                        fontSize: textItem.fontSize,
+                        fontFamily: textItem.fontFamily,
+                        fontWeight: textItem.fontWeight,
+                        fontStyle: textItem.fontStyle,
+                      ),
+                      textAlign: textItem.alignment,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (isSelected)
+              GestureDetector(
+                onTap: () => _confirmDeleteText(textItem),
+                child: const CircleAvatar(
+                  radius: 12,
+                  backgroundColor: Colors.red,
+                  child: Icon(Icons.close, size: 16, color: Colors.white),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteText(TextItem textItem) async {
+    final localizations = AppLocalizations.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(localizations?.confirmDelete ?? 'Delete Text'),
+        content: Text(localizations?.confirmDeleteMessage ?? 'Are you sure you want to delete this text?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(localizations?.cancel ?? 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(localizations?.delete ?? 'Delete', style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        setState(() {
+          _textItems.remove(textItem);
+          _selectedText = null;
+        });
+        final objectDao = dao.ObjectDao();
+        if (textItem.id != null) {
+          await objectDao.softDeleteText(textItem.id!);
+          debugPrint('Text deleted: ${textItem.text}');
+        }
+      } catch (e) {
+        _handleError('Failed to delete text: $e');
+      }
+    }
+  }
+
+  Widget _buildBottomPanel(AppLocalizations? localizations) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TabBar(
+            controller: _tabController,
+            tabs: [
+              Tab(text: localizations?.input ?? 'Input'),
+              Tab(text: localizations?.style ?? 'Style'),
+            ],
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Colors.blue,
+          ),
+          Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.4,
+            ),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildTextInput(localizations),
+                _buildStylePanel(localizations),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar(AppLocalizations? localizations) {
+    return TabBar(
+      tabs: [
+        Tab(text: localizations?.input ?? 'Input'),
+        Tab(text: localizations?.style ?? 'Style'),
+      ],
+      labelColor: Colors.white,
+      unselectedLabelColor: Colors.grey,
+      indicatorColor: Colors.blue,
+    );
+  }
+
+  Widget _buildTextInput(AppLocalizations? localizations) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: localizations?.enterText ?? 'Enter text',
+                hintStyle: TextStyle(color: Colors.grey[600]),
+                filled: true,
+                fillColor: Colors.grey[900],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (value) {
+                setState(() => _currentText = value);
+                if (_selectedText != null) {
+                  _selectedText!.text = value;
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.white),
+            onPressed: _addText,
+            tooltip: localizations?.addText ?? 'Add Text',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStylePanel(AppLocalizations? localizations) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                '${localizations?.color ?? 'Color'}:',
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () async {
+                  final color = await showDialog<Color>(
+                    context: context,
+                    builder: (context) => ColorPickerDialog(initialColor: _currentColor),
+                  );
+                  if (color != null) {
+                    _updateTextProperties(color: color);
+                  }
+                },
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: _currentColor,
+                    border: Border.all(color: Colors.white, width: 1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '${localizations?.size ?? 'Size'}:',
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Slider(
+                  value: _currentFontSize,
+                  min: 10,
+                  max: 50,
+                  divisions: 40,
+                  activeColor: Colors.blue,
+                  inactiveColor: Colors.grey[700],
+                  label: _currentFontSize.round().toString(),
+                  onChanged: (value) => _updateTextProperties(fontSize: value),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '${localizations?.font ?? 'Font'}:',
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _currentFontFamily,
+                dropdownColor: Colors.grey[900],
+                style: const TextStyle(color: Colors.white),
+                items: ['Roboto', 'Arial', 'Times New Roman', 'Courier New'].map((font) {
+                  return DropdownMenuItem(
+                    value: font,
+                    child: Text(font),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    _updateTextProperties(fontFamily: value);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.format_bold,
+                  color: _currentFontWeight == FontWeight.bold ? Colors.blue : Colors.white,
+                ),
+                onPressed: () => _updateTextProperties(
+                  fontWeight: _currentFontWeight == FontWeight.bold ? FontWeight.normal : FontWeight.bold,
+                ),
+                tooltip: localizations?.bold ?? 'Bold',
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.format_italic,
+                  color: _currentFontStyle == FontStyle.italic ? Colors.blue : Colors.white,
+                ),
+                onPressed: () => _updateTextProperties(
+                  fontStyle: _currentFontStyle == FontStyle.italic ? FontStyle.normal : FontStyle.italic,
+                ),
+                tooltip: localizations?.italic ?? 'Italic',
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.format_align_left,
+                  color: _currentAlignment == TextAlign.left ? Colors.blue : Colors.white,
+                ),
+                onPressed: () => _updateTextProperties(alignment: TextAlign.left),
+                tooltip: localizations?.alignLeft ?? 'Align Left',
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.format_align_center,
+                  color: _currentAlignment == TextAlign.center ? Colors.blue : Colors.white,
+                ),
+                onPressed: () => _updateTextProperties(alignment: TextAlign.center),
+                tooltip: localizations?.alignCenter ?? 'Align Center',
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.format_align_right,
+                  color: _currentAlignment == TextAlign.right ? Colors.blue : Colors.white,
+                ),
+                onPressed: () => _updateTextProperties(alignment: TextAlign.right),
+                tooltip: localizations?.alignRight ?? 'Align Right',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '${localizations?.background ?? 'Background'}:',
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () async {
+                  final color = await showDialog<Color>(
+                    context: context,
+                    builder: (context) => ColorPickerDialog(initialColor: _textBackgroundColor),
+                  );
+                  if (color != null) {
+                    _updateTextProperties(backgroundColor: color);
+                  }
+                },
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: _textBackgroundColor,
+                    border: Border.all(color: Colors.white, width: 1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Checkbox(
+                value: _hasShadow,
+                activeColor: Colors.blue,
+                onChanged: (value) => _updateTextProperties(hasShadow: value ?? false),
+              ),
+              Text(
+                localizations?.shadow ?? 'Shadow',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1032,25 +864,54 @@ class TextItem {
   String text;
   Offset position;
   Color color;
-  double size;
+  double fontSize;
   String fontFamily;
-  bool isBold;
-  bool isItalic;
-  bool hasShadow;
-  TextAlign textAlign;
+  FontWeight fontWeight;
+  FontStyle fontStyle;
+  TextAlign alignment;
+  double scale;
+  double rotation;
   Color backgroundColor;
+  bool hasShadow;
 
   TextItem({
     this.id,
     required this.text,
     required this.position,
     required this.color,
-    required this.size,
+    required this.fontSize,
     required this.fontFamily,
-    required this.isBold,
-    required this.isItalic,
-    required this.hasShadow,
-    required this.textAlign,
+    required this.fontWeight,
+    required this.fontStyle,
+    required this.alignment,
+    required this.scale,
+    required this.rotation,
     required this.backgroundColor,
+    required this.hasShadow,
   });
+}
+
+class ColorPickerDialog extends StatelessWidget {
+  final Color initialColor;
+
+  const ColorPickerDialog({required this.initialColor, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Pick a color'),
+      content: SingleChildScrollView(
+        child: ColorPicker(
+          pickerColor: initialColor,
+          onColorChanged: (color) => Navigator.pop(context, color)
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
 }

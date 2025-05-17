@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'dart:io' show Directory;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +11,7 @@ import 'dart:io' if (dart.library.html) 'dart:html' as io;
 import 'package:MagicMoment/database/objectDao.dart' as dao;
 import 'package:MagicMoment/database/objectsModels.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
+import '../../database/editHistory.dart';
 
 class EmojiPanel extends StatefulWidget {
   final Uint8List image;
@@ -90,18 +94,222 @@ class _EmojiPanelState extends State<EmojiPanel> {
   final GlobalKey _imageKey = GlobalKey();
   double _stickerSize = 100.0;
   final ImagePicker _picker = ImagePicker();
+  bool _isProcessing = false;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _loadStickersFromDb();
-    _history.add({
-      'image': widget.image,
-      'action': 'Initial image',
-      'operationType': 'init',
-      'parameters': {},
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await _loadStickersFromDb();
+      _history.add({
+        'image': widget.image,
+        'action': 'Initial image',
+        'operationType': 'init',
+        'parameters': {},
+      });
+      _historyIndex = 0;
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
+    } catch (e) {
+      _handleError('Initialization failed: $e');
+    }
+  }
+
+  Future<void> _addSticker(StickerData sticker) async {
+    if (_isProcessing || !_isInitialized) return;
+    setState(() => _isProcessing = true);
+
+    try {
+      final newSticker = StickerData(
+        path: sticker.path,
+        bytes: sticker.bytes,
+        position: const Offset(100, 100),
+        size: _stickerSize,
+        isAsset: sticker.isAsset,
+      );
+
+      final history = EditHistory(
+        imageId: widget.imageId,
+        operationType: 'stickers',
+        operationParameters: {
+          'sticker_path': newSticker.path,
+          'category': _selectedCategory,
+        },
+        operationDate: DateTime.now(),
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
+
+      final objectDao = dao.ObjectDao();
+      final stickerId = await objectDao.insertSticker(Sticker(
+        imageId: widget.imageId,
+        path: newSticker.path,
+        positionX: newSticker.position.dx,
+        positionY: newSticker.position.dy,
+        scale: newSticker.size,
+        rotation: 0.0,
+        historyId: historyId,
+        isAsset: newSticker.isAsset,
+      ));
+
+      setState(() {
+        newSticker.id = stickerId;
+        _addedStickers.add(newSticker);
+        _selectedSticker = newSticker;
+        debugPrint('Sticker added: ${newSticker.path}, ID: $stickerId');
+      });
+    } catch (e) {
+      _handleError('Failed to add sticker: $e');
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _pickImageFromGallery() async {
+    if (_isProcessing || !_isInitialized) return;
+    setState(() => _isProcessing = true);
+
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null) {
+        debugPrint('No image picked from gallery');
+        return;
+      }
+      final bytes = await pickedFile.readAsBytes();
+      if (bytes.isEmpty) {
+        throw Exception(AppLocalizations.of(context)?.errorEmptyImage ?? 'Empty image bytes');
+      }
+      final sticker = StickerData(
+        path: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+        bytes: bytes,
+        position: const Offset(100, 100),
+        size: _stickerSize,
+        isAsset: false,
+      );
+
+      final history = EditHistory(
+        historyId: null,
+        imageId: widget.imageId,
+        operationType: 'stickers',
+        operationParameters: {
+          'sticker_path': sticker.path,
+          'category': 'Custom',
+        },
+        operationDate: DateTime.now(),
+        snapshotPath: kIsWeb ? null : '${Directory.systemTemp.path}/sticker_${DateTime.now().millisecondsSinceEpoch}.png',
+        snapshotBytes: kIsWeb ? bytes : null,
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
+
+      final objectDao = dao.ObjectDao();
+      final stickerId = await objectDao.insertSticker(Sticker(
+        imageId: widget.imageId,
+        path: sticker.path,
+        positionX: sticker.position.dx,
+        positionY: sticker.position.dy,
+        scale: sticker.size,
+        rotation: 0.0,
+        historyId: historyId,
+        isAsset: sticker.isAsset,
+      ));
+
+      if (!mounted) return;
+
+      setState(() {
+        sticker.id = stickerId;
+        _stickerCategories['Custom']!.add(sticker);
+        _addedStickers.add(sticker);
+        _selectedSticker = sticker;
+        _selectedCategory = 'Custom';
+        debugPrint('Custom sticker added: ${sticker.path}, ID: $stickerId');
+      });
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)?.errorPickImage ?? 'Failed to pick image: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _applyChanges() async {
+    if (_isProcessing || !_isInitialized) return;
+    setState(() {
+      _isProcessing = true;
+      _selectedSticker = null;
     });
-    _historyIndex = 0;
+
+    try {
+      await Future.delayed(const Duration(milliseconds: 16));
+      final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
+      }
+
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
+      }
+
+      final pngBytes = byteData.buffer.asUint8List();
+      debugPrint('Changes applied with ${_addedStickers.length} stickers');
+
+      final history = EditHistory(
+        imageId: widget.imageId,
+        operationType: 'stickers',
+        operationParameters: {
+          'stickers_count': _addedStickers.length,
+          'category': _selectedCategory,
+        },
+        operationDate: DateTime.now(),
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
+
+      setState(() {
+        if (_historyIndex < _history.length - 1) {
+          _history.removeRange(_historyIndex + 1, _history.length);
+        }
+        _history.add({
+          'image': pngBytes,
+          'action': AppLocalizations.of(context)?.emoji ?? 'Emoji',
+          'operationType': 'stickers',
+          'parameters': {
+            'stickers_count': _addedStickers.length,
+            'category': _selectedCategory,
+          },
+        });
+        _historyIndex++;
+      });
+
+      await _updateImage(
+        newImage: pngBytes,
+        action: AppLocalizations.of(context)?.emoji ?? 'Emoji',
+        operationType: 'stickers',
+        parameters: {
+          'stickers_count': _addedStickers.length,
+          'category': _selectedCategory,
+        },
+      );
+
+      widget.onApply(pngBytes);
+    } catch (e) {
+      _handleError('Error applying stickers: $e');
+    } finally {
+      setState(() => _isProcessing = false);
+      widget.onCancel();
+    }
   }
 
   Future<void> _loadStickersFromDb() async {
@@ -110,31 +318,28 @@ class _EmojiPanelState extends State<EmojiPanel> {
       final saved = await objectDao.getStickers(widget.imageId);
       debugPrint('Loaded ${saved.length} stickers from DB for imageId: ${widget.imageId}');
 
-      setState(() {
-        _addedStickers.addAll(saved.map((s) => StickerData(
-          id: s.id,
-          path: s.path,
-          position: Offset(s.positionX, s.positionY),
-          size: s.scale,
-          isAsset: s.isAsset,
-        )));
-      });
-    } catch (e) {
-      debugPrint('Error loading stickers from DB: $e');
+      final newStickers = saved.map((s) => StickerData(
+        id: s.id,
+        path: s.path,
+        position: Offset(s.positionX, s.positionY),
+        size: s.scale,
+        isAsset: s.isAsset,
+      )).toList();
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load stickers: $e')),
-        );
+        setState(() => _addedStickers.addAll(newStickers));
       }
+    } catch (e) {
+      _handleError('Failed to load stickers: $e');
     }
   }
 
-  Future<void> _updateImage(
-      Uint8List newImage, {
-        required String action,
-        required String operationType,
-        required Map<String, dynamic> parameters,
-      }) async {
+  Future<void> _updateImage({
+    required Uint8List newImage,
+    required String action,
+    required String operationType,
+    required Map<String, dynamic> parameters,
+  }) async {
     try {
       await widget.onUpdateImage(
         newImage,
@@ -144,18 +349,14 @@ class _EmojiPanelState extends State<EmojiPanel> {
       );
       debugPrint('Image updated: $action');
     } catch (e) {
-      debugPrint('Error in onUpdateImage: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update image: $e')),
-        );
-      }
+      _handleError('Failed to update image: $e');
       rethrow;
     }
   }
 
   Future<void> _undo() async {
-    if (_historyIndex <= 0) return;
+    if (_historyIndex <= 0 || _isProcessing || !_isInitialized) return;
+    setState(() => _isProcessing = true);
 
     try {
       setState(() {
@@ -165,7 +366,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
       });
 
       await _updateImage(
-        _history[_historyIndex]['image'],
+        newImage: _history[_historyIndex]['image'],
         action: 'Undo stickers',
         operationType: 'undo',
         parameters: {
@@ -174,12 +375,18 @@ class _EmojiPanelState extends State<EmojiPanel> {
       );
       debugPrint('Undo performed, history index: $_historyIndex');
     } catch (e) {
-      debugPrint('Error undoing stickers: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to undo: $e')),
-        );
-      }
+      _handleError('Failed to undo: $e');
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  void _handleError(String message) {
+    debugPrint(message);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     }
   }
 
@@ -189,25 +396,48 @@ class _EmojiPanelState extends State<EmojiPanel> {
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(0.8),
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            _buildAppBar(localizations),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() {}),
-                child: RepaintBoundary(
-                  key: _imageKey,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
-                      ..._addedStickers.map(_buildStickerWidget),
-                    ],
+            Column(
+              children: [
+                _buildAppBar(localizations),
+                Expanded(
+                  child: _isInitialized
+                      ? GestureDetector(
+                    onTap: () => setState(() => _selectedSticker = null),
+                    child: RepaintBoundary(
+                      key: _imageKey,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
+                          ..._addedStickers.map(_buildStickerWidget),
+                        ],
+                      ),
+                    ),
+                  )
+                      : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(color: Colors.white),
+                        const SizedBox(height: 16),
+                        Text(
+                          localizations?.loading ?? 'Loading...',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+                _buildBottomPanel(localizations),
+              ],
             ),
-            _buildBottomPanel(localizations),
+            if (_isProcessing)
+              Container(
+                color: Colors.black.withOpacity(0.5),
+                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+              ),
           ],
         ),
       ),
@@ -226,13 +456,13 @@ class _EmojiPanelState extends State<EmojiPanel> {
       title: Text(localizations?.emoji ?? 'Emoji', style: const TextStyle(color: Colors.white)),
       actions: [
         IconButton(
-          icon: Icon(Icons.undo, color: _historyIndex > 0 ? Colors.white : Colors.grey),
-          onPressed: _historyIndex > 0 ? _undo : null,
+          icon: Icon(Icons.undo, color: _historyIndex > 0 && _isInitialized ? Colors.white : Colors.grey),
+          onPressed: _historyIndex > 0 && _isInitialized ? _undo : null,
           tooltip: localizations?.undo ?? 'Undo',
         ),
         IconButton(
           icon: const Icon(Icons.check, color: Colors.white),
-          onPressed: _applyChanges,
+          onPressed: _isInitialized ? _applyChanges : null,
           tooltip: localizations?.apply ?? 'Apply',
         ),
       ],
@@ -284,26 +514,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
             ),
             if (isSelected)
               GestureDetector(
-                onTap: () async {
-                  try {
-                    setState(() {
-                      _addedStickers.remove(sticker);
-                      _selectedSticker = null;
-                    });
-                    final objectDao = dao.ObjectDao();
-                    if (sticker.id != null) {
-                      await objectDao.softDeleteSticker(sticker.id!);
-                      debugPrint('Sticker deleted: ${sticker.path}');
-                    }
-                  } catch (e) {
-                    debugPrint('Error deleting sticker: $e');
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to delete sticker: $e')),
-                      );
-                    }
-                  }
-                },
+                onTap: () => _confirmDeleteSticker(sticker),
                 child: const CircleAvatar(
                   radius: 12,
                   backgroundColor: Colors.red,
@@ -314,6 +525,43 @@ class _EmojiPanelState extends State<EmojiPanel> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteSticker(StickerData sticker) async {
+    final localizations = AppLocalizations.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(localizations?.confirmDelete ?? 'Delete Sticker'),
+        content: Text(localizations?.confirmDeleteMessage ?? 'Are you sure you want to delete this sticker?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(localizations?.cancel ?? 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(localizations?.delete ?? 'Delete', style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        setState(() {
+          _addedStickers.remove(sticker);
+          _selectedSticker = null;
+        });
+        final objectDao = dao.ObjectDao();
+        if (sticker.id != null) {
+          await objectDao.softDeleteSticker(sticker.id!);
+          debugPrint('Sticker deleted: ${sticker.path}');
+        }
+      } catch (e) {
+        _handleError('Failed to delete sticker: $e');
+      }
+    }
   }
 
   Widget _buildBottomPanel(AppLocalizations? localizations) {
@@ -440,55 +688,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
           final adjustedIndex = _selectedCategory == 'Custom' ? index - 1 : index;
           final sticker = stickers[adjustedIndex];
           return GestureDetector(
-            onTap: () async {
-              try {
-                final newSticker = StickerData(
-                  path: sticker.path,
-                  bytes: sticker.bytes,
-                  position: const Offset(100, 100),
-                  size: _stickerSize,
-                  isAsset: sticker.isAsset,
-                );
-
-                final history = EditHistory(
-                  imageId: widget.imageId,
-                  operationType: 'stickers',
-                  operationParameters: {
-                    'sticker_path': newSticker.path,
-                    'category': _selectedCategory,
-                  },
-                  operationDate: DateTime.now(),
-                );
-                final db = MagicMomentDatabase.instance;
-                final historyId = await db.insertHistory(history);
-                debugPrint('History inserted with ID: $historyId');
-
-                final objectDao = dao.ObjectDao();
-                final stickerId = await objectDao.insertSticker(Sticker(
-                  imageId: widget.imageId,
-                  path: newSticker.path,
-                  positionX: newSticker.position.dx,
-                  positionY: newSticker.position.dy,
-                  scale: newSticker.size,
-                  rotation: 0.0,
-                  historyId: historyId,
-                  isAsset: newSticker.isAsset,
-                ));
-
-                setState(() {
-                  newSticker.id = stickerId;
-                  _addedStickers.add(newSticker);
-                  debugPrint('Sticker added: ${newSticker.path}, ID: $stickerId');
-                });
-              } catch (e) {
-                debugPrint('Error adding sticker: $e');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to add sticker: $e')),
-                  );
-                }
-              }
-            },
+            onTap: () => _addSticker(sticker),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.grey[900],
@@ -516,130 +716,6 @@ class _EmojiPanelState extends State<EmojiPanel> {
         },
       ),
     );
-  }
-
-  Future<void> _pickImageFromGallery() async {
-    try {
-      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile == null) {
-        debugPrint('No image picked from gallery');
-        return;
-      }
-      final bytes = await pickedFile.readAsBytes();
-      if (bytes.isEmpty) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Empty image bytes');
-      }
-      final sticker = StickerData(
-        path: 'custom_${DateTime.now().millisecondsSinceEpoch}',
-        bytes: bytes,
-        position: const Offset(100, 100),
-        size: _stickerSize,
-        isAsset: false,
-      );
-
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'stickers',
-        operationParameters: {
-          'sticker_path': sticker.path,
-          'category': 'Custom',
-        },
-        operationDate: DateTime.now(),
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-      debugPrint('History inserted with ID: $historyId');
-
-      final objectDao = dao.ObjectDao();
-      final stickerId = await objectDao.insertSticker(Sticker(
-        imageId: widget.imageId,
-        path: sticker.path,
-        positionX: sticker.position.dx,
-        positionY: sticker.position.dy,
-        scale: sticker.size,
-        rotation: 0.0,
-        historyId: historyId,
-        isAsset: sticker.isAsset,
-      ));
-
-      setState(() {
-        sticker.id = stickerId;
-        _stickerCategories['Custom']!.add(sticker);
-        _addedStickers.add(sticker);
-        _selectedCategory = 'Custom';
-        debugPrint('Custom sticker added: ${sticker.path}, ID: $stickerId');
-      });
-    } catch (e) {
-      debugPrint('Error picking image: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${AppLocalizations.of(context)?.error ?? 'Error'}: ${e.toString()}'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _applyChanges() async {
-    try {
-      setState(() {
-        _selectedSticker = null;
-      });
-
-      await Future.delayed(const Duration(milliseconds: 16));
-
-      final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
-      }
-
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
-      }
-
-      final pngBytes = byteData.buffer.asUint8List();
-      debugPrint('Changes applied with ${_addedStickers.length} stickers');
-
-      setState(() {
-        if (_historyIndex < _history.length - 1) {
-          _history.removeRange(_historyIndex + 1, _history.length);
-        }
-        _history.add({
-          'image': pngBytes,
-          'action': AppLocalizations.of(context)?.emoji ?? 'Emoji',
-          'operationType': 'stickers',
-          'parameters': {
-            'stickers_count': _addedStickers.length,
-            'category': _selectedCategory,
-          },
-        });
-        _historyIndex++;
-      });
-
-      await _updateImage(
-        pngBytes,
-        action: AppLocalizations.of(context)?.emoji ?? 'Emoji',
-        operationType: 'stickers',
-        parameters: {
-          'stickers_count': _addedStickers.length,
-          'category': _selectedCategory,
-        },
-      );
-
-      widget.onApply(pngBytes);
-    } catch (e) {
-      debugPrint('Error applying stickers: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error applying stickers: $e')),
-        );
-      }
-    } finally {
-      widget.onCancel();
-    }
   }
 }
 

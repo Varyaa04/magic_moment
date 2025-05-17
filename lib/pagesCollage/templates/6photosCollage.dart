@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'resizable_photo_widget.dart';
 
 class SixPhotosTemplates {
   static List<Widget> getTemplates(
@@ -15,20 +16,23 @@ class SixPhotosTemplates {
         int? selectedImageIndex,
         BoxDecoration? Function(int)? selectedImageDecoration,
       ]) {
-    return List.generate(10, (index) => _SixPhotosCollage(
-      images: images,
-      templateIndex: index,
-      borderColor: borderColor,
-      positions: positions,
-      scales: scales,
-      rotations: rotations,
-      onPositionChanged: onPositionChanged,
-      onScaleChanged: onScaleChanged,
-      onRotationChanged: onRotationChanged,
-      onImageTapped: onImageTapped,
-      selectedImageIndex: selectedImageIndex,
-      selectedImageDecoration: selectedImageDecoration,
-    ));
+    return List.generate(
+      10,
+          (index) => _SixPhotosCollage(
+        images: images,
+        templateIndex: index,
+        borderColor: borderColor,
+        positions: positions,
+        scales: scales,
+        rotations: rotations,
+        onPositionChanged: onPositionChanged,
+        onScaleChanged: onScaleChanged,
+        onRotationChanged: onRotationChanged,
+        onImageTapped: onImageTapped,
+        selectedImageIndex: selectedImageIndex,
+        selectedImageDecoration: selectedImageDecoration,
+      ),
+    );
   }
 }
 
@@ -75,46 +79,18 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
     super.dispose();
   }
 
-  Widget _buildImage(int index, Widget image) {
-    return GestureDetector(
-      onTap: () => widget.onImageTapped?.call(index),
-      onScaleUpdate: (details) {
-        _debouncer.run(() {
-          setState(() {
-            widget.onPositionChanged(index, widget.positions[index] + Offset(
-              details.focalPointDelta.dx / 300,
-              details.focalPointDelta.dy / 300,
-            ));
-            if (details.scale != 1.0) {
-              widget.onScaleChanged(index, (widget.scales[index] * details.scale).clamp(0.5, 2.0));
-            }
-            if (details.rotation != 0) {
-              widget.onRotationChanged(index, widget.rotations[index] + details.rotation / 2);
-            }
-          });
-        });
-      },
-      onScaleEnd: (details) {
-        _debouncer.run(() {
-          setState(() {
-            widget.onScaleChanged(index, widget.scales[index].clamp(0.5, 2.0));
-          });
-        });
-      },
-      child: RepaintBoundary(
-        child: Container(
-          decoration: widget.selectedImageDecoration?.call(index),
-          child: Transform.translate(
-            offset: widget.positions[index] * 100,
-            child: Transform.rotate(
-              angle: widget.rotations[index],
-              child: Transform.scale(
-                scale: widget.scales[index],
-                child: image,
-              ),
-            ),
-          ),
-        ),
+  Widget _buildImage(int index) {
+    return Container(
+      decoration: widget.selectedImageDecoration?.call(index),
+      child: ResizablePhotoWidget(
+        imageProvider: widget.images[index],
+        initialScale: widget.scales[index],
+        initialPosition: widget.positions[index] * 100,
+        initialRotation: widget.rotations[index],
+        onPositionChanged: (offset) => widget.onPositionChanged(index, offset),
+        onScaleChanged: (scale) => widget.onScaleChanged(index, scale),
+        onRotationChanged: (rotation) => widget.onRotationChanged(index, rotation),
+        onTap: () => widget.onImageTapped?.call(index),
       ),
     );
   }
@@ -134,16 +110,16 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
               crossAxisCount: 3,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              children: List.generate(6, (i) => _buildImage(i, Image(image: widget.images[i], fit: BoxFit.cover))),
+              children: List.generate(6, (i) => _buildImage(i)),
             ),
             1 => Column(
               children: [
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                     ],
                   ),
                 ),
@@ -151,16 +127,16 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                     ],
                   ),
                 ),
                 Container(height: 4, color: widget.borderColor),
-                Expanded(child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover))),
+                Expanded(child: _buildImage(5)),
               ],
             ),
             2 => Row(
@@ -168,9 +144,9 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                     ],
                   ),
                 ),
@@ -178,13 +154,13 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(5)),
                     ],
                   ),
                 ),
@@ -195,11 +171,11 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                     ],
                   ),
                 ),
@@ -207,11 +183,11 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(5)),
                     ],
                   ),
                 ),
@@ -219,13 +195,13 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
             ),
             4 => Stack(
               children: [
-                Positioned.fill(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                Positioned.fill(child: _buildImage(0)),
                 Align(
                   alignment: Alignment.topLeft,
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover)),
+                    child: _buildImage(1),
                   ),
                 ),
                 Align(
@@ -233,7 +209,7 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover)),
+                    child: _buildImage(2),
                   ),
                 ),
                 Align(
@@ -241,7 +217,7 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover)),
+                    child: _buildImage(3),
                   ),
                 ),
                 Align(
@@ -249,7 +225,7 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover)),
+                    child: _buildImage(4),
                   ),
                 ),
                 Align(
@@ -257,17 +233,14 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover)),
+                    child: _buildImage(5),
                   ),
                 ),
               ],
             ),
             5 => Column(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover)),
-                ),
+                Expanded(flex: 2, child: _buildImage(0)),
                 Container(height: 4, color: widget.borderColor),
                 Expanded(
                   child: GridView.count(
@@ -275,11 +248,11 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover)),
-                      _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover)),
-                      _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover)),
-                      _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover)),
-                      _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover)),
+                      _buildImage(1),
+                      _buildImage(2),
+                      _buildImage(3),
+                      _buildImage(4),
+                      _buildImage(5),
                     ],
                   ),
                 ),
@@ -287,23 +260,20 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
             ),
             6 => Row(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover)),
-                ),
+                Expanded(flex: 2, child: _buildImage(0)),
                 Container(width: 4, color: widget.borderColor),
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(5)),
                     ],
                   ),
                 ),
@@ -314,11 +284,11 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                     ],
                   ),
                 ),
@@ -326,11 +296,11 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(5)),
                     ],
                   ),
                 ),
@@ -341,11 +311,11 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                     ],
                   ),
                 ),
@@ -353,11 +323,11 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(5)),
                     ],
                   ),
                 ),
@@ -365,13 +335,13 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
             ),
             9 => Stack(
               children: [
-                Positioned.fill(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                Positioned.fill(child: _buildImage(0)),
                 Align(
                   alignment: Alignment.topLeft,
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover)),
+                    child: _buildImage(1),
                   ),
                 ),
                 Align(
@@ -379,7 +349,7 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover)),
+                    child: _buildImage(2),
                   ),
                 ),
                 Align(
@@ -387,7 +357,7 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover)),
+                    child: _buildImage(3),
                   ),
                 ),
                 Align(
@@ -395,7 +365,7 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover)),
+                    child: _buildImage(4),
                   ),
                 ),
                 Align(
@@ -403,7 +373,7 @@ class _SixPhotosCollageState extends State<_SixPhotosCollage> {
                   child: Container(
                     width: size * 0.2,
                     height: size * 0.2,
-                    child: _buildImage(5, Image(image: widget.images[5], fit: BoxFit.cover)),
+                    child: _buildImage(5),
                   ),
                 ),
               ],

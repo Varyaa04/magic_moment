@@ -1,695 +1,506 @@
-import 'dart:developer';
-import 'dart:io' show Platform;
-import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
-
-import '../pagesEditing/annotation/emojiPanel.dart';
-import '../pagesEditing/annotation/textEditorPanel.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import '../pagesSettings/classesSettings/app_localizations.dart';
+import 'editHistory.dart';
 import 'objectsModels.dart';
 
 class MagicMomentDatabase {
   static final MagicMomentDatabase instance = MagicMomentDatabase._init();
-  static Database? _database;
-  static bool _isInitialized = false;
 
   MagicMomentDatabase._init();
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('magic_moment.db');
-    return _database!;
-  }
-
-  Future<Database> _initDB(String filePath) async {
+  Future<void> init() async {
     try {
-      if (!_isInitialized) {
-        await _initializeDatabaseFactory();
-        _isInitialized = true;
-      }
+      await Hive.initFlutter();
+      // Регистрация адаптеров
+      Hive.registerAdapter(EditHistoryAdapter());
+      Hive.registerAdapter(DrawingAdapter());
+      Hive.registerAdapter(StickerAdapter());
+      Hive.registerAdapter(TextObjectAdapter());
+      Hive.registerAdapter(ImageDataAdapter());
+      Hive.registerAdapter(FilterDataAdapter());
+      Hive.registerAdapter(CollageDataAdapter());
+      Hive.registerAdapter(CollageImageAdapter());
+      Hive.registerAdapter(CurrentStateAdapter());
+      Hive.registerAdapter(AdjustSettingsAdapter());
 
-      if (kIsWeb) {
-        // Web: Use in-memory database or WebAssembly
-        return await databaseFactory.openDatabase(inMemoryDatabasePath,
-            options: OpenDatabaseOptions(
-              version: 1,
-              onCreate: _onCreate,
-            ));
-      } else {
-        // Mobile: Use file-based database
-        final dbPath = await getDatabasesPath();
-        final path = join(dbPath, filePath);
-        return await databaseFactory.openDatabase(
-          path,
-          options: OpenDatabaseOptions(
-            version: 1,
-            onCreate: _onCreate,
-          ),
+      // Открытие коробок
+      await Hive.openBox<EditHistory>('edit_history');
+      await Hive.openBox<Sticker>('stickers');
+      await Hive.openBox<Drawing>('drawings');
+      await Hive.openBox<TextObject>('texts');
+      await Hive.openBox<ImageData>('image');
+      await Hive.openBox<FilterData>('filter');
+      await Hive.openBox<CollageData>('collage');
+      await Hive.openBox<CollageImage>('collage_images');
+      await Hive.openBox<CurrentState>('current_state');
+      debugPrint('Hive initialized and boxes opened');
+    } catch (e, stackTrace) {
+      debugPrint('Error initializing Hive: $e\n$stackTrace');
+      throw Exception('Failed to initialize database: $e');
+    }
+  }
+  // Access to Hive boxes (public getters)
+  Box<EditHistory> get editHistoryBox => Hive.box<EditHistory>('edit_history');
+  Box<Sticker> get stickersBox => Hive.box<Sticker>('stickers');
+  Box<Drawing> get drawingsBox => Hive.box<Drawing>('drawings');
+  Box<TextObject> get textsBox => Hive.box<TextObject>('texts');
+  Box<ImageData> get imagesBox => Hive.box<ImageData>('image');
+  Box<FilterData> get filtersBox => Hive.box<FilterData>('filter');
+  Box<CollageData> get collagesBox => Hive.box<CollageData>('collage');
+  Box<CollageImage> get collageImagesBox => Hive.box<CollageImage>('collage_images');
+  Box<CurrentState> get currentStateBox => Hive.box<CurrentState>('current_state');
+
+  Future<void> migrateImageIds(BuildContext context) async {
+    try {
+      // Update stickers
+      for (var sticker in stickersBox.values.where((s) => s.imageId == 0)) {
+        final history = editHistoryBox.values.firstWhere(
+              (h) => h.historyId == sticker.historyId,
+          orElse: () {
+            debugPrint('History not found for sticker ${sticker.id}');
+            return null as EditHistory; // Explicit null as EditHistory
+          },
         );
+        if (history == null) continue;
+
+        final updatedSticker = Sticker(
+          id: sticker.id,
+          imageId: history.imageId,
+          path: sticker.path,
+          positionX: sticker.positionX,
+          positionY: sticker.positionY,
+          scale: sticker.scale,
+          rotation: sticker.rotation,
+          historyId: sticker.historyId,
+          isAsset: sticker.isAsset,
+          isDeleted: sticker.isDeleted,
+        );
+        await stickersBox.put(sticker.id, updatedSticker);
       }
-    } catch (e) {
-      log('Error initializing database: $e');
-      rethrow;
+
+      // Update drawings
+      for (var drawing in drawingsBox.values.where((d) => d.imageId == 0)) {
+        final history = editHistoryBox.values.firstWhere(
+              (h) => h.historyId == drawing.historyId,
+          orElse: () {
+            debugPrint('History not found for drawing ${drawing.id}');
+            return null as EditHistory; // Explicit null as EditHistory
+          },
+        );
+        if (history == null) continue;
+
+        final updatedDrawing = Drawing(
+          id: drawing.id,
+          imageId: history.imageId,
+          drawingPath: drawing.drawingPath,
+          color: drawing.color,
+          strokeWidth: drawing.strokeWidth,
+          isDeleted: drawing.isDeleted,
+          historyId: drawing.historyId,
+        );
+        await drawingsBox.put(drawing.id, updatedDrawing);
+      }
+
+      // Update texts
+      for (var text in textsBox.values.where((t) => t.imageId == 0)) {
+        final history = editHistoryBox.values.firstWhere(
+              (h) => h.historyId == text.historyId,
+          orElse: () {
+            debugPrint('History not found for text ${text.id}');
+            return null as EditHistory; // Explicit null as EditHistory
+          },
+        );
+        if (history == null) continue;
+
+        final updatedText = TextObject(
+          id: text.id,
+          imageId: history.imageId,
+          text: text.text,
+          positionX: text.positionX,
+          positionY: text.positionY,
+          fontSize: text.fontSize,
+          fontWeight: text.fontWeight,
+          fontStyle: text.fontStyle,
+          alignment: text.alignment,
+          color: text.color,
+          fontFamily: text.fontFamily,
+          scale: text.scale,
+          rotation: text.rotation,
+          historyId: text.historyId,
+          isDeleted: text.isDeleted,
+        );
+        await textsBox.put(text.id, updatedText);
+      }
+
+      debugPrint('Image IDs migrated successfully');
+    } catch (e, stackTrace) {
+      debugPrint('Error migrating image IDs: $e\n$stackTrace');
+      throw Exception('${AppLocalizations.of(context)?.error ?? 'Error'}: Failed to migrate image IDs: $e');
     }
   }
-
-  Future<void> _initializeDatabaseFactory() async {
-    if (kIsWeb) {
-      databaseFactory = databaseFactoryFfiWeb;
-    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
-  }
-
 
   Future<void> close() async {
-    if (_database != null) {
-      await _database!.close();
-      _database = null;
-    }
+    await Hive.close();
+    debugPrint('All Hive boxes closed');
   }
 
   Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
     try {
-      final db = await database;
-
-      final maps = await db.query(
-        'edit_history',
-        where: 'image_id = ?',
-        whereArgs: [imageId],
-        orderBy: 'operation_date ASC',
-      );
-      return maps.map((map) => EditHistory.fromMap(map)).toList();
-    } catch (e) {
-      log('Error getting history for image $imageId: $e');
-      rethrow;
+      final histories = editHistoryBox.values
+          .where((entry) => entry.imageId == imageId)
+          .toList()
+        ..sort((a, b) => a.operationDate.compareTo(b.operationDate));
+      debugPrint('Retrieved ${histories.length} history entries for imageId: $imageId');
+      return histories;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting history for image $imageId: $e\n$stackTrace');
+      return [];
     }
   }
 
   Future<int> insertHistory(EditHistory history) async {
     try {
-      final db = await database;
-
-      return await db.insert('edit_history', history.toMap());
-    } catch (e) {
-      log('Error inserting history: $e');
-      rethrow;
+      final key = await editHistoryBox.add(history);
+      debugPrint('Inserted history entry with key: $key');
+      return key;
+    } catch (e, stackTrace) {
+      debugPrint('Error inserting history: $e\n$stackTrace');
+      throw Exception('Failed to insert history: $e');
     }
   }
 
-  Future<int> updateCurrentState(int imageId, int lastHistoryId, String? snapshotPath) async {
+  Future<int> updateCurrentState(int imageId, int lastHistoryId, String? snapshotPath, List<int>? snapshotBytes) async {
     try {
-      final db = await database;
-
-      return await db.insert(
-        'current_state',
-        {
-          'image_id': imageId,
-          'last_history_id': lastHistoryId,
-          'current_snapshot_path': snapshotPath,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      final state = CurrentState(
+        imageId: imageId,
+        lastHistoryId: lastHistoryId,
+        currentSnapshotPath: snapshotPath,
+        currentSnapshotBytes: snapshotBytes,
       );
-    } catch (e) {
-      log('Error updating current state for image $imageId: $e');
-      rethrow;
+      await currentStateBox.put('state_$imageId', state); // Используем строковый ключ
+      debugPrint('Updated current state for imageId: $imageId, historyId: $lastHistoryId');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating current state for image $imageId: $e\n$stackTrace');
+      throw Exception('Failed to update current state: $e');
     }
   }
 
   Future<int> deleteHistory(int id) async {
     try {
-      final db = await database;
-      return await db.delete(
-        'edit_history',
-        where: 'history_id = ?',
-        whereArgs: [id],
-      );
-    } catch (e) {
-      log('Error deleting history: $e');
-      rethrow;
+      await editHistoryBox.delete(id);
+      debugPrint('Deleted history entry with id: $id');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error deleting history: $e\n$stackTrace');
+      throw Exception('Failed to delete history: $e');
     }
   }
 
   Future<Map<String, dynamic>?> getCurrentState(int imageId) async {
     try {
-      final db = await database;
-
-      final maps = await db.query(
-        'current_state',
-        where: 'image_id = ?',
-        whereArgs: [imageId],
-        limit: 1,
-      );
-      return maps.isNotEmpty ? maps.first : null;
-    } catch (e) {
-      log('Error getting current state for image $imageId: $e');
-      rethrow;
+      final state = currentStateBox.get('state_$imageId'); // Используем строковый ключ
+      debugPrint('Retrieved current state for imageId: $imageId');
+      return state?.toMap();
+    } catch (e, stackTrace) {
+      debugPrint('Error getting current state for image $imageId: $e\n$stackTrace');
+      return null;
     }
   }
-
-  Future<void> _onCreate(Database db, int version) async {
-    try{
-      await db.execute('''
-      CREATE TABLE image (
-        image_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL,
-        file_name TEXT NOT NULL,
-        file_size INTEGER NOT NULL,
-        width INTEGER NOT NULL,
-        height INTEGER NOT NULL,
-        creation_date TEXT NOT NULL,
-        last_modified TEXT NOT NULL,
-        original_image_id INTEGER,
-        FOREIGN KEY (original_image_id) REFERENCES image (image_id)
-      )
-    ''');
-
-      await db.execute('''
-      CREATE TABLE filter (
-        filter_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filter_name TEXT NOT NULL,
-        brightness REAL NOT NULL,
-        contrast REAL NOT NULL,
-        saturation REAL NOT NULL,
-        warmth REAL NOT NULL,
-        vignette REAL NOT NULL
-      )
-    ''');
-
-      await db.execute('''
-      CREATE TABLE collage (
-        collage_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        template_name TEXT NOT NULL,
-        width INTEGER NOT NULL,
-        height INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        preview_path TEXT NOT NULL,
-        creation_date TEXT NOT NULL
-      )
-    ''');
-
-      await db.execute('''
-      CREATE TABLE collage_images (
-        collage_id INTEGER NOT NULL,
-        image_id INTEGER NOT NULL,
-        position_x REAL NOT NULL,
-        position_y REAL NOT NULL,
-        scale REAL NOT NULL,
-        rotation REAL NOT NULL,
-        z_index INTEGER NOT NULL,
-        PRIMARY KEY (collage_id, image_id),
-        FOREIGN KEY (collage_id) REFERENCES collage (collage_id),
-        FOREIGN KEY (image_id) REFERENCES image (image_id)
-      )
-    ''');
-
-      await db.execute('''
-      CREATE TABLE edit_history (
-        history_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        image_id INTEGER NOT NULL,
-        filter_id INTEGER,
-        operation_type TEXT NOT NULL,
-        operation_parameters TEXT NOT NULL,
-        operation_date TEXT NOT NULL,
-        snapshot_path TEXT,
-        previous_state_id INTEGER,
-        FOREIGN KEY (image_id) REFERENCES image (image_id),
-        FOREIGN KEY (filter_id) REFERENCES filter (filter_id),
-        FOREIGN KEY (previous_state_id) REFERENCES edit_history (history_id)
-      )
-    ''');
-
-      await db.execute('''
-      CREATE TABLE current_state (
-        image_id INTEGER PRIMARY KEY,
-        last_history_id INTEGER NOT NULL,
-        current_snapshot_path TEXT,
-        FOREIGN KEY (image_id) REFERENCES image (image_id),
-        FOREIGN KEY (last_history_id) REFERENCES edit_history (history_id)
-      )
-    ''');
-
-      await db.execute('''
-      CREATE TABLE IF NOT EXISTS stickers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        path TEXT NOT NULL,
-        positionX REAL NOT NULL,
-        positionY REAL NOT NULL,
-        scale REAL NOT NULL,
-        rotation REAL NOT NULL,
-        isDeleted INTEGER DEFAULT 0,
-        historyId INTEGER NOT NULL,
-        FOREIGN KEY (historyId) REFERENCES edit_history(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_stickers_historyId ON stickers(historyId);
-    ''');
-
-      await db.execute('''
-      CREATE TABLE IF NOT EXISTS texts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        text TEXT NOT NULL,
-        positionX REAL NOT NULL,
-        positionY REAL NOT NULL,
-        fontSize REAL,
-        fontWeight TEXT,
-        fontStyle TEXT,
-        alignment TEXT,
-        color TEXT NOT NULL,
-        fontFamily TEXT,
-        scale REAL NOT NULL,
-        rotation REAL NOT NULL,
-        isDeleted INTEGER DEFAULT 0,
-        historyId INTEGER NOT NULL,
-        FOREIGN KEY (historyId) REFERENCES edit_history(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_texts_historyId ON texts(historyId);
-    ''');
-
-      await db.execute('''
-      CREATE TABLE IF NOT EXISTS drawings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        drawingPath TEXT NOT NULL, 
-        color TEXT NOT NULL,
-        strokeWidth REAL NOT NULL,
-        isDeleted INTEGER DEFAULT 0,
-        historyId INTEGER NOT NULL,
-        FOREIGN KEY (historyId) REFERENCES edit_history(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_drawings_historyId ON drawings(historyId);
-    ''');
-    }
-    catch (e, stack) {
-      log('Ошибка при создании базы: $e\n$stack');
-      rethrow;
-    }
-
-  }
-
 
   Future<int> insertImage(ImageData image) async {
-    final db = await instance.database;
-    return await db.insert('image', image.toMap());
+    try {
+      final key = await imagesBox.add(image);
+      debugPrint('Inserted image with id: $key');
+      if (key < 0 || key > 0xFFFFFFFF) {
+        throw Exception('Generated key $key is out of valid range (0 to 0xFFFFFFFF)');
+      }
+      return key;
+    } catch (e, stackTrace) {
+      debugPrint('Error inserting image: $e\n$stackTrace');
+      throw Exception('Failed to insert image: $e');
+    }
   }
-
   Future<List<ImageData>> getAllImages() async {
-    final db = await instance.database;
-    final maps = await db.query('image');
-    return List.generate(maps.length, (i) => ImageData.fromMap(maps[i]));
+    try {
+      final images = imagesBox.values.toList();
+      debugPrint('Retrieved ${images.length} images');
+      return images;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting images: $e\n$stackTrace');
+      return [];
+    }
   }
 
   Future<ImageData?> getImage(int id) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'image',
-      where: 'image_id = ?',
-      whereArgs: [id],
-    );
-    if (maps.isNotEmpty) return ImageData.fromMap(maps.first);
-    return null;
+    try {
+      final image = imagesBox.get(id);
+      debugPrint('Retrieved image with id: $id');
+      return image;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting image $id: $e\n$stackTrace');
+      return null;
+    }
   }
 
   Future<int> updateImage(ImageData image) async {
-    final db = await instance.database;
-    return await db.update(
-      'image',
-      image.toMap(),
-      where: 'image_id = ?',
-      whereArgs: [image.imageId],
-    );
+    try {
+      await imagesBox.put(image.imageId!, image);
+      debugPrint('Updated image with id: ${image.imageId}');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating image: $e\n$stackTrace');
+      throw Exception('Failed to update image: $e');
+    }
   }
 
   Future<int> deleteImage(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'image',
-      where: 'image_id = ?',
-      whereArgs: [id],
-    );
+    try {
+      await imagesBox.delete(id);
+      debugPrint('Deleted image with id: $id');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error deleting image: $e\n$stackTrace');
+      throw Exception('Failed to delete image: $e');
+    }
   }
 
   Future<int> insertFilter(FilterData filter) async {
-    final db = await instance.database;
-    return await db.insert('filter', filter.toMap());
+    try {
+      final key = await filtersBox.add(filter);
+      debugPrint('Inserted filter with id: $key');
+      return key;
+    } catch (e, stackTrace) {
+      debugPrint('Error inserting filter: $e\n$stackTrace');
+      throw Exception('Failed to insert filter: $e');
+    }
   }
 
   Future<List<FilterData>> getAllFilters() async {
-    final db = await instance.database;
-    final maps = await db.query('filter');
-    return List.generate(maps.length, (i) => FilterData.fromMap(maps[i]));
+    try {
+      final filters = filtersBox.values.toList();
+      debugPrint('Retrieved ${filters.length} filters');
+      return filters;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting filters: $e\n$stackTrace');
+      return [];
+    }
   }
 
   Future<FilterData?> getFilter(int id) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'filter',
-      where: 'filter_id = ?',
-      whereArgs: [id],
-    );
-    if (maps.isNotEmpty) return FilterData.fromMap(maps.first);
-    return null;
+    try {
+      final filter = filtersBox.get(id);
+      debugPrint('Retrieved filter with id: $id');
+      return filter;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting filter $id: $e\n$stackTrace');
+      return null;
+    }
   }
 
   Future<int> updateFilter(FilterData filter) async {
-    final db = await instance.database;
-    return await db.update(
-      'filter',
-      filter.toMap(),
-      where: 'filter_id = ?',
-      whereArgs: [filter.filterId],
-    );
+    try {
+      await filtersBox.put(filter.filterId!, filter);
+      debugPrint('Updated filter with id: ${filter.filterId}');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating filter: $e\n$stackTrace');
+      throw Exception('Failed to update filter: $e');
+    }
   }
 
   Future<int> deleteFilter(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'filter',
-      where: 'filter_id = ?',
-      whereArgs: [id],
-    );
+    try {
+      await filtersBox.delete(id);
+      debugPrint('Deleted filter with id: $id');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error deleting filter: $e\n$stackTrace');
+      throw Exception('Failed to delete filter: $e');
+    }
   }
 
   Future<int> insertCollage(CollageData collage) async {
-    final db = await instance.database;
-    return await db.insert('collage', collage.toMap());
+    try {
+      final key = await collagesBox.add(collage);
+      debugPrint('Inserted collage with id: $key');
+      return key;
+    } catch (e, stackTrace) {
+      debugPrint('Error inserting collage: $e\n$stackTrace');
+      throw Exception('Failed to insert collage: $e');
+    }
   }
 
   Future<List<CollageData>> getAllCollage() async {
-    final db = await instance.database;
-    final maps = await db.query('collage');
-    return List.generate(maps.length, (i) => CollageData.fromMap(maps[i]));
+    try {
+      final collages = collagesBox.values.toList();
+      debugPrint('Retrieved ${collages.length} collages');
+      return collages;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting collages: $e\n$stackTrace');
+      return [];
+    }
   }
 
   Future<CollageData?> getCollage(int id) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'collage',
-      where: 'collage_id = ?',
-      whereArgs: [id],
-    );
-    if (maps.isNotEmpty) return CollageData.fromMap(maps.first);
-    return null;
+    try {
+      final collage = collagesBox.get(id);
+      debugPrint('Retrieved collage with id: $id');
+      return collage;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting collage $id: $e\n$stackTrace');
+      return null;
+    }
   }
 
   Future<int> updateCollage(CollageData collage) async {
-    final db = await instance.database;
-    return await db.update(
-      'collage',
-      collage.toMap(),
-      where: 'collage_id = ?',
-      whereArgs: [collage.collageId],
-    );
+    try {
+      await collagesBox.put(collage.collageId!, collage);
+      debugPrint('Updated collage with id: ${collage.collageId}');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating collage: $e\n$stackTrace');
+      throw Exception('Failed to update collage: $e');
+    }
   }
 
   Future<int> deleteCollage(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'collage',
-      where: 'collage_id = ?',
-      whereArgs: [id],
-    );
+    try {
+      await collagesBox.delete(id);
+      debugPrint('Deleted collage with id: $id');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error deleting collage: $e\n$stackTrace');
+      throw Exception('Failed to delete collage: $e');
+    }
   }
 
   Future<List<EditHistory>> getAllHistory() async {
-    final db = await instance.database;
-    final maps = await db.query('edit_history');
-    return List.generate(maps.length, (i) => EditHistory.fromMap(maps[i]));
+    try {
+      final histories = editHistoryBox.values.toList();
+      debugPrint('Retrieved ${histories.length} history entries');
+      return histories;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting all history: $e\n$stackTrace');
+      return [];
+    }
   }
 
   Future<EditHistory?> getHistory(int id) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'edit_history',
-      where: 'history_id = ?',
-      whereArgs: [id],
-    );
-    if (maps.isNotEmpty) return EditHistory.fromMap(maps.first);
-    return null;
+    try {
+      final history = editHistoryBox.get(id);
+      debugPrint('Retrieved history with id: $id');
+      return history;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting history $id: $e\n$stackTrace');
+      return null;
+    }
   }
 
   Future<int> updateHistory(EditHistory history) async {
-    final db = await instance.database;
-    return await db.update(
-      'edit_history',
-      history.toMap(),
-      where: 'history_id = ?',
-      whereArgs: [history.historyId],
-    );
-  }
-
-  Future<int> insertSticker(StickerData sticker, int imageId) async {
-    final db = await database;
-    return await db.insert('stickers', sticker.isAsset as Map<String, Object?>);
-  }
-
-  Future<void> updateSticker(StickerData sticker) async {
-    final db = await database;
-    await db.update(
-      'stickers',
-      {
-        'x': sticker.position.dx,
-        'y': sticker.position.dy,
-        'size': sticker.size,
-      },
-      where: 'id = ?',
-      whereArgs: [sticker.isAsset],
-    );
-  }
-
-  Future<void> deleteSticker(int id) async {
-    final db = await database;
-    await db.delete(
-      'stickers',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    try {
+      await editHistoryBox.put(history.historyId!, history);
+      debugPrint('Updated history with id: ${history.historyId}');
+      return 1;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating history: $e\n$stackTrace');
+      throw Exception('Failed to update history: $e');
+    }
   }
 
   Future<int> insertText(TextObject text) async {
-    final db = await database;
-    return await db.insert('texts', text.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    try {
+      final key = await textsBox.add(text);
+      debugPrint('Inserted text with id: $key');
+      return key;
+    } catch (e, stackTrace) {
+      debugPrint('Error inserting text: $e\n$stackTrace');
+      throw Exception('Failed to insert text: $e');
+    }
   }
 
   Future<List<TextObject>> getTexts(int imageId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'texts',
-      where: 'imageId = ? AND isDeleted = ?',
-      whereArgs: [imageId, 0],
-    );
-    return List.generate(maps.length, (i) => TextObject.fromMap(maps[i]));
+    try {
+      final texts = textsBox.values.where((text) => text.imageId == imageId && !text.isDeleted).toList();
+      debugPrint('Retrieved ${texts.length} texts for imageId: $imageId');
+      return texts;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting texts for imageId $imageId: $e\n$stackTrace');
+      return [];
+    }
   }
 
-  Future<void> updateTextItem(TextItem item) async {
-    final db = await database;
-    await db.update(
-      'texts',
-      {
-        'x': item.position.dx,
-        'y': item.position.dy,
-        'size': item.size,
-        'color': item.color.value,
-      },
-      where: 'id = ?',
-      whereArgs: [item.id],
-    );
+  Future<void> softDeleteText(int id) async {
+    try {
+      final text = textsBox.get(id);
+      if (text != null) {
+        final updatedText = TextObject(
+          id: text.id,
+          imageId: text.imageId,
+          text: text.text,
+          positionX: text.positionX,
+          positionY: text.positionY,
+          fontSize: text.fontSize,
+          fontWeight: text.fontWeight,
+          fontStyle: text.fontStyle,
+          alignment: text.alignment,
+          color: text.color,
+          fontFamily: text.fontFamily,
+          scale: text.scale,
+          rotation: text.rotation,
+          historyId: text.historyId,
+          isDeleted: true,
+        );
+        await textsBox.put(id, updatedText);
+        debugPrint('Soft deleted text with id: $id');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error soft deleting text $id: $e\n$stackTrace');
+      throw Exception('Failed to soft delete text: $e');
+    }
   }
 
-  Future<void> deleteTextItem(int id) async {
-    final db = await database;
-    await db.delete(
-      'texts',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-}
-
-
-
-class ImageData {
-  final int? imageId;
-  final String filePath;
-  final String fileName;
-  final int fileSize;
-  final int width;
-  final int height;
-  final DateTime creationDate;
-  final DateTime lastModified;
-  final int? originalImageId;
-
-  ImageData({
-    this.imageId,
-    required this.filePath,
-    required this.fileName,
-    required this.fileSize,
-    required this.width,
-    required this.height,
-    required this.creationDate,
-    required this.lastModified,
-    this.originalImageId,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'image_id': imageId,
-      'file_path': filePath,
-      'file_name': fileName,
-      'file_size': fileSize,
-      'width': width,
-      'height': height,
-      'creation_date': creationDate.toIso8601String(),
-      'last_modified': lastModified.toIso8601String(),
-      'original_image_id': originalImageId,
-    };
+  Future<int> insertCollageImage(CollageImage collageImage) async {
+    try {
+      final key = await collageImagesBox.add(collageImage);
+      debugPrint('Inserted collage image with key: $key');
+      return key;
+    } catch (e, stackTrace) {
+      debugPrint('Error inserting collage image: $e\n$stackTrace');
+      throw Exception('Failed to insert collage image: $e');
+    }
   }
 
-  factory ImageData.fromMap(Map<String, dynamic> map) {
-    return ImageData(
-      imageId: map['image_id'],
-      filePath: map['file_path'],
-      fileName: map['file_name'],
-      fileSize: map['file_size'],
-      width: map['width'],
-      height: map['height'],
-      creationDate: DateTime.parse(map['creation_date']),
-      lastModified: DateTime.parse(map['last_modified']),
-      originalImageId: map['original_image_id'],
-    );
-  }
-}
-
-class FilterData {
-  final int? filterId;
-  final String filterName;
-  final double brightness;
-  final double contrast;
-  final double saturation;
-  final double warmth;
-  final double vignette;
-
-  FilterData({
-    this.filterId,
-    required this.filterName,
-    required this.brightness,
-    required this.contrast,
-    required this.saturation,
-    required this.warmth,
-    required this.vignette,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'filter_id': filterId,
-      'filter_name': filterName,
-      'brightness': brightness,
-      'contrast': contrast,
-      'saturation': saturation,
-      'warmth': warmth,
-      'vignette': vignette,
-    };
+  Future<List<CollageImage>> getCollageImages(int collageId) async {
+    try {
+      final images = collageImagesBox.values.where((ci) => ci.collageId == collageId).toList();
+      debugPrint('Retrieved ${images.length} collage images for collageId: $collageId');
+      return images;
+    } catch (e, stackTrace) {
+      debugPrint('Error getting collage images for collageId $collageId: $e\n$stackTrace');
+      return [];
+    }
   }
 
-  factory FilterData.fromMap(Map<String, dynamic> map) {
-    return FilterData(
-      filterId: map['filter_id'],
-      filterName: map['filter_name'],
-      brightness: map['brightness'],
-      contrast: map['contrast'],
-      saturation: map['saturation'],
-      warmth: map['warmth'],
-      vignette: map['vignette'],
-    );
-  }
-}
-
-class CollageData {
-  final int? collageId;
-  final String templateName;
-  final int width;
-  final int height;
-  final int fileSize;
-  final String previewPath;
-  final DateTime creationDate;
-
-  CollageData({
-    this.collageId,
-    required this.templateName,
-    required this.width,
-    required this.height,
-    required this.fileSize,
-    required this.previewPath,
-    required this.creationDate,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'collage_id': collageId,
-      'template_name': templateName,
-      'width': width,
-      'height': height,
-      'file_size': fileSize,
-      'preview_path': previewPath,
-      'creation_date': creationDate.toIso8601String(),
-    };
-  }
-
-  factory CollageData.fromMap(Map<String, dynamic> map) {
-    return CollageData(
-      collageId: map['collage_id'],
-      templateName: map['template_name'],
-      width: map['width'],
-      height: map['height'],
-      fileSize: map['file_size'],
-      previewPath: map['preview_path'],
-      creationDate: DateTime.parse(map['creation_date']),
-    );
-  }
-}
-
-class EditHistory {
-  int? historyId;
-  final int imageId;
-  final String operationType;
-  final Map<String, dynamic> operationParameters;
-  final DateTime operationDate;
-  final String? snapshotPath;
-  final int? previousStateId;
-
-  EditHistory({
-    this.historyId,
-    required this.imageId,
-    required this.operationType,
-    required this.operationParameters,
-    required this.operationDate,
-    this.snapshotPath,
-    this.previousStateId,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'history_id': historyId,
-      'image_id': imageId,
-      'operation_type': operationType,
-      'operation_parameters': jsonEncode(operationParameters),
-      'operation_date': operationDate.toIso8601String(),
-      'snapshot_path': snapshotPath,
-      'previous_state_id': previousStateId,
-    };
-  }
-
-  factory EditHistory.fromMap(Map<String, dynamic> map) {
-    return EditHistory(
-      historyId: map['history_id'],
-      imageId: map['image_id'],
-      operationType: map['operation_type'],
-      operationParameters: jsonDecode(map['operation_parameters']),
-      operationDate: DateTime.parse(map['operation_date']),
-      snapshotPath: map['snapshot_path'],
-      previousStateId: map['previous_state_id'],
-    );
+  Future<int> deleteCollageImage(int collageId, int imageId) async {
+    try {
+      final valuesList = collageImagesBox.values.toList();
+      final keys = valuesList
+          .asMap()
+          .entries
+          .where((entry) => entry.value.collageId == collageId && entry.value.imageId == imageId)
+          .map((entry) => entry.key)
+          .toList();
+      for (var key in keys) {
+        await collageImagesBox.delete(key);
+      }
+      debugPrint('Deleted ${keys.length} collage images with collageId: $collageId, imageId: $imageId');
+      return keys.length;
+    } catch (e, stackTrace) {
+      debugPrint('Error deleting collage image: $e\n$stackTrace');
+      throw Exception('Failed to delete collage image: $e');
+    }
   }
 }

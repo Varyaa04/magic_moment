@@ -6,10 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:image_picker_web/image_picker_web.dart' as web_picker;
-
+import 'package:image_picker/image_picker.dart' as mobile_picker;
+import 'image_picker_helper.dart';
 
 class StartPage extends StatefulWidget {
   const StartPage({super.key});
@@ -19,15 +18,13 @@ class StartPage extends StatefulWidget {
 }
 
 class _StartPageState extends State<StartPage> {
-  final ImagePicker picker = ImagePicker();
   List<Uint8List> selectedImages = [];
 
   // Функция выбора изображений для коллажа
   Future<void> getImages() async {
     final appLocalizations = AppLocalizations.of(context);
-    List<Uint8List> imageBytesList = [];
+    List<Uint8List>? imageBytesList;
 
-    // Разрешения на мобилке
     if (!kIsWeb) {
       final permission = await Permission.photos.request();
       if (permission.isDenied || permission.isPermanentlyDenied) {
@@ -50,23 +47,10 @@ class _StartPageState extends State<StartPage> {
     }
 
     try {
-      if (kIsWeb) {
-        final pickedImages = await web_picker.ImagePickerWeb.getMultiImagesAsBytes();
-        if (pickedImages != null && pickedImages.isNotEmpty) {
-          imageBytesList.addAll(pickedImages.take(6));
-        }
-      } else {
-        final picker = ImagePicker();
-        final pickedFiles = await picker.pickMultiImage(imageQuality: 100, maxWidth: 1000, maxHeight: 1000);
+      imageBytesList = await ImagePickerHelper.pickMultiImages();
 
-        if (pickedFiles.isNotEmpty) {
-          for (final file in pickedFiles.take(6)) {
-            imageBytesList.add(await file.readAsBytes());
-          }
-        }
-      }
-
-      if (imageBytesList.length < 2) {
+      if (imageBytesList == null || imageBytesList.length < 2) {
+        if (!mounted) return;
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -87,7 +71,7 @@ class _StartPageState extends State<StartPage> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => CollageEditorPage(images: imageBytesList),
+          builder: (context) => CollageEditorPage(images: imageBytesList!),
         ),
       );
     } catch (e) {
@@ -108,34 +92,22 @@ class _StartPageState extends State<StartPage> {
     }
   }
 
-// Функция для выбора фото из галереи или камеры
-  Future<void> _pickImage(ImageSource source) async {
+  // Функция для выбора фото из галереи или камеры
+  Future<void> _pickImage(mobile_picker.ImageSource source) async {
     try {
-      Uint8List? bytes;
+      final bytes = await ImagePickerHelper.pickImage();
+      debugPrint('Picked image bytes length: ${bytes?.length ?? 0}');
 
-      if (kIsWeb) {
-        if (source == ImageSource.gallery) {
-          bytes = await web_picker.ImagePickerWeb.getImageAsBytes();
-        } else {
-          if (!mounted) return;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Camera not supported on web')),
+            SnackBar(content: Text('No image selected or invalid image data')),
           );
-          return;
         }
-      } else {
-        final XFile? image = await picker.pickImage(
-          source: source,
-          imageQuality: 85,
-          maxWidth: 1024,
-          maxHeight: 1024,
-        );
-
-        if (image == null) return;
-        bytes = await image.readAsBytes();
+        return;
       }
 
-      if (bytes == null || bytes.isEmpty || !mounted) return;
+      if (!mounted) return;
 
       Navigator.push(
         context,
@@ -147,16 +119,16 @@ class _StartPageState extends State<StartPage> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
       debugPrint('Error picking image: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
     }
   }
 
-
-// Диалог выбора источника изображения
+  // Диалог выбора источника изображения
   void _showImageSourceDialog() {
     final appLocalizations = AppLocalizations.of(context);
     showDialog(
@@ -166,18 +138,18 @@ class _StartPageState extends State<StartPage> {
           title: Text(appLocalizations?.choose ?? 'Choose Image Source'),
           content: Text(appLocalizations?.from ?? 'Select an image from:'),
           actions: [
-            if (!kIsWeb) // Показываем кнопку камеры только не на вебе
+            if (!kIsWeb)
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
+                  _pickImage(mobile_picker.ImageSource.camera);
                 },
                 child: Text(appLocalizations?.camera ?? 'Camera'),
               ),
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
+                _pickImage(mobile_picker.ImageSource.gallery);
               },
               child: Text(appLocalizations?.gallery ?? 'Gallery'),
             ),
@@ -192,6 +164,8 @@ class _StartPageState extends State<StartPage> {
     final appLocalizations = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 500;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -199,16 +173,16 @@ class _StartPageState extends State<StartPage> {
         color: colorScheme.onInverseSurface,
         child: Row(
           children: [
-            // Левая часть с изображением
+            // Левая часть с изображением (всегда у края без отступа)
             Container(
-              margin: EdgeInsets.zero,
+              width: isSmallScreen ? screenWidth * 0.4 : screenWidth * 0.5,
               padding: EdgeInsets.zero,
+              margin: EdgeInsets.zero,
               child: Image.asset(
                 'lib/assets/icons/photos.png',
                 fit: BoxFit.contain,
               ),
             ),
-
             // Правая часть с контентом
             Expanded(
               child: Column(
@@ -217,9 +191,12 @@ class _StartPageState extends State<StartPage> {
                 children: [
                   // Кнопка настроек
                   Container(
-                    margin: const EdgeInsets.only(top: 10, right: 25),
+                    margin: EdgeInsets.only(
+                      top: isSmallScreen ? 10 : 20,
+                      right: isSmallScreen ? 15 : 25,
+                    ),
                     child: IconButton(
-                      iconSize: 30,
+                      iconSize: isSmallScreen ? 25 : 30,
                       onPressed: () {
                         Navigator.push(
                           context,
@@ -234,10 +211,12 @@ class _StartPageState extends State<StartPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-
                   // Заголовок и описание
                   Container(
-                    margin: const EdgeInsets.only(top: 40, right: 25),
+                    margin: EdgeInsets.only(
+                      top: isSmallScreen ? 20 : 40,
+                      right: isSmallScreen ? 15 : 25,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -245,19 +224,19 @@ class _StartPageState extends State<StartPage> {
                           'Magic Moment',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 26,
+                            fontSize: isSmallScreen ? 22 : 26,
                             color: colorScheme.onSecondary,
                             fontFamily: 'LilitaOne-Regular',
                           ),
                         ),
                         Container(
-                          width: 200,
+                          width: isSmallScreen ? 180 : 200,
                           padding: const EdgeInsets.all(10),
                           child: Text(
                             appLocalizations?.challengeText ?? 'Create amazing moments!',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: isSmallScreen ? 12 : 13,
                               color: colorScheme.onSecondary,
                               fontFamily: 'PTSansNarrow-Regular',
                             ),
@@ -266,23 +245,33 @@ class _StartPageState extends State<StartPage> {
                       ],
                     ),
                   ),
-
-                  // Блок с кнопками
+                  // Кнопки
                   Container(
-                    margin: const EdgeInsets.only(top: 20, right: 25),
+                    margin: EdgeInsets.only(
+                      top: isSmallScreen ? 15 : 20,
+                      right: isSmallScreen ? 15 : 25,
+                    ),
                     child: Column(
                       children: [
-                        CustomButton(
-                          onPressed: _showImageSourceDialog,
-                          text: appLocalizations?.change ?? 'Edit Photo',
-                          icon: FluentIcons.image_24_regular,
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: isSmallScreen ? 250 : 300),
+                          child: CustomButton(
+                            onPressed: _showImageSourceDialog,
+                            text: appLocalizations?.change ?? 'Edit Photo',
+                            icon: FluentIcons.image_24_regular,
+                            isSmall: isSmallScreen,
+                          ),
                         ),
                         const SizedBox(height: 10),
-                        CustomButton(
-                          onPressed: getImages,
-                          text: appLocalizations?.create ?? 'Create',
-                          secondaryText: appLocalizations?.collage ?? 'Collage',
-                          icon: FluentIcons.layout_column_two_split_left_24_regular,
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: isSmallScreen ? 250 : 300),
+                          child: CustomButton(
+                            onPressed: getImages,
+                            text: appLocalizations?.create ?? 'Create',
+                            secondaryText: appLocalizations?.collage ?? 'Collage',
+                            icon: FluentIcons.layout_column_two_split_left_24_regular,
+                            isSmall: isSmallScreen,
+                          ),
                         ),
                       ],
                     ),

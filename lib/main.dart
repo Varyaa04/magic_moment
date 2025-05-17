@@ -1,24 +1,19 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:sqflite/sqflite.dart';
-import 'database/magicMomentDatabase.dart';
 import 'startPage.dart';
 import 'pagesSettings/classesSettings/app_localizations.dart';
 import 'pagesSettings/classesSettings/language_provider.dart';
 import 'pagesSettings/classesSettings/theme_provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'database/editHistory.dart';
+import 'database/magicMomentDatabase.dart';
+import 'database/objectsModels.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // // Инициализация базы данных
-  // try {
-  //   await MagicMomentDatabase.instance.database;
-  // } catch (e) {
-  //   debugPrint('Error initializing database: $e');
-  // }
+  await MagicMomentDatabase.instance.init();
+  await debugImagesBox();
 
   runApp(
     MultiProvider(
@@ -30,7 +25,6 @@ Future<void> main() async {
     ),
   );
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -79,5 +73,16 @@ class MyApp extends StatelessWidget {
         );
       },
     );
+  }
+
+
+}
+Future<void> debugImagesBox() async {
+  final images = await MagicMomentDatabase.instance.getAllImages();
+  for (var image in images) {
+    debugPrint('Image: id=${image.imageId}, filePath=${image.filePath}');
+    if (image.imageId != null && (image.imageId! < 0 || image.imageId! > 0xFFFFFFFF)) {
+      debugPrint('Invalid imageId found: ${image.imageId}');
+    }
   }
 }

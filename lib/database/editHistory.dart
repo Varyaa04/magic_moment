@@ -1,95 +1,76 @@
-import 'magicMomentDatabase.dart';
-import 'objectsModels.dart';
+import 'dart:convert';
+import 'package:hive/hive.dart';
 
-class EditHistoryManager {
-  final MagicMomentDatabase db;
+part 'editHistory.g.dart';
+
+@HiveType(typeId: 0)
+class EditHistory {
+  @HiveField(0)
+  final int? historyId;
+  @HiveField(1)
   final int imageId;
+  @HiveField(2)
+  final String operationType;
+  @HiveField(3)
+  final Map<String, dynamic> operationParameters;
+  @HiveField(4)
+  final DateTime operationDate;
+  @HiveField(5)
+  final String? snapshotPath; // Для Android
+  @HiveField(6)
+  final List<int>? snapshotBytes; // Для веба
 
-  List<EditHistory> _history = [];
-  int _currentIndex = -1;
+  EditHistory({
+    this.historyId,
+    required this.imageId,
+    required this.operationType,
+    required this.operationParameters,
+    required this.operationDate,
+    this.snapshotPath,
+    this.snapshotBytes,
+  });
 
-  EditHistoryManager({required this.db, required this.imageId});
-
-  Future<void> loadHistory() async {
-    _history = await db.getAllHistoryForImage(imageId);
-    _currentIndex = _history.length - 1;
+  Map<String, dynamic> toMap() {
+    return {
+      'history_id': historyId,
+      'image_id': imageId,
+      'operation_type': operationType,
+      'operation_parameters': jsonEncode(operationParameters),
+      'operation_date': operationDate.toIso8601String(),
+      'snapshot_path': snapshotPath,
+      'snapshot_bytes': snapshotBytes,
+    };
   }
 
-  bool get canUndo => _currentIndex >= 0;
-  bool get canRedo => _currentIndex < _history.length - 1;
+  factory EditHistory.fromMap(Map<String, dynamic> map) {
+    return EditHistory(
+      historyId: map['history_id'] as int?,
+      imageId: map['image_id'] as int,
+      operationType: map['operation_type'] as String,
+      operationParameters: Map<String, dynamic>.from(jsonDecode(map['operation_parameters'] as String)),
+      operationDate: DateTime.parse(map['operation_date'] as String),
+      snapshotPath: map['snapshot_path'] as String?,
+      snapshotBytes: map['snapshot_bytes'] as List<int>?,
+    );
+  }
 
-  Future<void> addOperation({
-    required String operationType,
-    required Map<String, dynamic> parameters,
+  EditHistory copyWith({
+    int? historyId,
+    int? imageId,
+    String? operationType,
+    Map<String, dynamic>? operationParameters,
+    DateTime? operationDate,
     String? snapshotPath,
-  }) async {
-    if (canRedo) {
-      for (int i = _currentIndex + 1; i < _history.length; i++) {
-        if (_history[i].historyId != null) {
-          await db.deleteHistory(_history[i].historyId!);
-        }
-      }
-      _history = _history.sublist(0, _currentIndex + 1);
-    }
-
-    final newEntry = EditHistory(
-      imageId: imageId,
-      operationType: operationType,
-      operationParameters: parameters,
-      operationDate: DateTime.now(),
-      snapshotPath: snapshotPath,
-      previousStateId: canUndo ? _history[_currentIndex].historyId : null,
+    List<int>? snapshotBytes,
+  }) {
+    return EditHistory(
+      historyId: historyId ?? this.historyId,
+      imageId: imageId ?? this.imageId,
+      operationType: operationType ?? this.operationType,
+      operationParameters: operationParameters ?? this.operationParameters,
+      operationDate: operationDate ?? this.operationDate,
+      snapshotPath: snapshotPath ?? this.snapshotPath,
+      snapshotBytes: snapshotBytes ?? this.snapshotBytes,
     );
-
-    final id = await db.insertHistory(newEntry);
-    newEntry.historyId = id;
-
-    _history.add(newEntry);
-    _currentIndex = _history.length - 1;
-
-    await db.updateCurrentState(
-      imageId,
-      newEntry.historyId!,
-      newEntry.snapshotPath,
-    );
-  }
-
-  Future<EditHistory?> undo() async {
-    if (!canUndo) return null;
-
-    final entry = _history[_currentIndex];
-    _currentIndex--;
-
-    if (_currentIndex >= 0) {
-      await db.updateCurrentState(
-        imageId,
-        _history[_currentIndex].historyId!,
-        _history[_currentIndex].snapshotPath,
-      );
-    } else {
-      await db.updateCurrentState(imageId, -1, null);
-    }
-
-    return entry;
-  }
-
-  Future<EditHistory?> redo() async {
-    if (!canRedo) return null;
-
-    _currentIndex++;
-    final entry = _history[_currentIndex];
-
-    await db.updateCurrentState(
-      imageId,
-      entry.historyId!,
-      entry.snapshotPath,
-    );
-
-    return entry;
-  }
-
-  Future<String?> getCurrentSnapshotPath() async {
-    if (!canUndo) return null;
-    return _history[_currentIndex].snapshotPath;
   }
 }

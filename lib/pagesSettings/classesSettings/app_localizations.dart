@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 class AppLocalizations {
@@ -12,7 +13,6 @@ class AppLocalizations {
   static const LocalizationsDelegate<AppLocalizations> delegate =
   _AppLocalizationsDelegate();
 
-  // Локализованные строки
   static final Map<String, Map<String, String>> _localizedValues = {
     'en': {
       'app_title': 'Application language',
@@ -145,6 +145,64 @@ class AppLocalizations {
       'selectedImage': 'Selected image',
       'currentColor': 'Current color',
       'delete': 'Delete',
+      'confirmDeleteMessage': 'Are you sure you want to delete this sticker?',
+      'confirmDelete': 'Delete Sticker',
+      'alignment': 'Alignment',
+      'scale': 'Scale',
+      'rotation': 'Rotation',
+      'color': 'Color',
+      'image': 'Image',
+      'invalidImage': 'Invalid image format',
+      'processingEffect': 'Processing effect...',
+      'invalidFilter': 'Invalid filter matrix',
+      'processingFilter': 'Processing filter...',
+      'cancelPreview': 'Cancel preview',
+      'filter': 'Filter',
+      'description': 'Description',
+      'autoCorrect': 'Autocorrect',
+      'input': 'Input',
+      'style': 'Style',
+      'addText': 'Add Text',
+      'alignLeft': 'Align Left',
+      'alignCenter': 'Align Center',
+      'alignRight': 'Align Right',
+      'removeBackgroundTitle': 'Remove Background',
+      'pickImagePrompt': 'Pick an image to remove the background',
+      'pickImageTooltip': 'Select Image',
+      'objectRemoval': 'Object removal',
+      'changeBackgroundTitle': 'Change background title',
+      'changeImagePrompt': 'Change image prompt',
+      'changeImageTooltip': 'Change image tooltip',
+      'blurBackgroundTitle': 'Blur background title',
+      'blurImagePrompt': 'Blur image prompt',
+      'blurImageTooltip': 'Blur image tooltip',
+      'errorDecode': 'Failed to decode image',
+      'errorSaveGallery': 'Failed to save image to gallery',
+      'errorDownload': 'Failed to download image',
+      'errorLoadDrawings': 'Failed to load drawings',
+      'errorSaveDrawing': 'Failed to save drawing',
+      'errorLoadImage': 'Failed to load image',
+      'errorApi': 'Failed to remove object',
+      'errorPickImage': 'Failed to pick image',
+      'errorApplyAdjustments': 'Failed to apply adjustments',
+      'errorEncode': 'Image encoding error',
+      'errorEmptyImage': 'Empty image bytes',
+      'saveSuccess': 'Image saved successfully',
+      'applyFilter': 'Apply Filter',
+      'applyEffect': 'Apply Effect',
+      'invalidEffect': 'Invalid effect parameters',
+      'applyCrop': 'Apply Crop',
+      'invalidCrop': 'Invalid crop parameters',
+      'processingCrop': 'Processing crop...',
+      'errorApplyFilter': 'Error applying filter',
+      'errorApplyEffect': 'Error applying effect',
+      'errorApplyCrop': 'Error applying crop',
+      'zoomIn': 'Zoom In',
+      'zoomOut': 'Zoom Out',
+      'rotateLeft': 'Rotate Left',
+      'rotateRight': 'Rotate Right',
+      'replace': 'Replace',
+      'borderOptions': 'Border Options',
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -185,7 +243,7 @@ class AppLocalizations {
       'selectedNon': 'Ничего не выбрано',
       'pngText': ' — для графики с прозрачностью',
       'jpegText': ' — для фотографий',
-      'insRigh': 'Недостаточно прав',
+      'insRigh': 'Недостат ballroomочно прав',
       'righText': 'Предоставьте в настройках доступ к вашей камере и галерее!',
       'freeCrop': 'Свободная',
       'portraitCrop': 'Портрет',
@@ -214,7 +272,7 @@ class AppLocalizations {
       'eraser': 'Ластик',
       'brush': 'Кисть',
       'error': 'Ошибка',
-      'clearAll': 'Убрать все',
+      'clearAll': 'У852брать все',
       'permissionDenied': 'Доступ запрещен',
       'undo': 'Назад',
       'redo': 'Вперед',
@@ -277,10 +335,67 @@ class AppLocalizations {
       'selectedImage': 'Выбранное изображение',
       'currentColor': 'Текущий цвет',
       'delete': 'Удалить',
+      'confirmDeleteMessage': 'Вы уверены, что хотите удалить этот стикер?',
+      'confirmDelete': 'Удалить стикер',
+      'alignment': 'Выравнивание',
+      'scale': 'Масштаб',
+      'rotation': 'Поворот',
+      'color': 'Цвет',
+      'image': 'Изображение',
+      'invalidImage': 'Недопустимый формат изображения',
+      'processingEffect': 'Эффект обработки...',
+      'invalidFilter': 'Недопустимая матрица фильтра',
+      'processingFilter': 'Фильтр обработки...',
+      'cancelPreview': 'Отменить предварительный просмотр',
+      'filter': 'Фильтр',
+      'description': 'Описание',
+      'autoCorrect': 'Автокоррекция',
+      'input': 'Ввод',
+      'style': 'Стиль',
+      'addText': 'Добавить текст',
+      'alignLeft': 'Выровнять по левому краю',
+      'alignCenter': 'Выровнять по центру',
+      'alignRight': 'Выровнять по правому краю',
+      'removeBackgroundTitle': 'Удалить фон',
+      'pickImagePrompt': 'Выберите изображение для удаления фона',
+      'pickImageTooltip': 'Выбрать изображение',
+      'objectRemoval': 'Удаление объекта',
+      'changeBackgroundTitle': 'Изменить заголовок фона',
+      'changeImagePrompt': 'Изменить запрос изображения',
+      'changeImageTooltip': 'Изменить подсказку изображения',
+      'blurBackgroundTitle': 'Размытие заголовка фона',
+      'blurImagePrompt': 'Размытие запроса изображения',
+      'blurImageTooltip': 'Размытие подсказки изображения',
+      'errorDecode': 'Не удалось декодировать изображение',
+      'errorSaveGallery': 'Не удалось сохранить изображение в галерею',
+      'errorDownload': 'Не удалось скачать изображение',
+      'errorLoadDrawings': 'Не удалось загрузить рисунки',
+      'errorSaveDrawing': 'Не удалось сохранить рисунок',
+      'errorLoadImage': 'Не удалось загрузить изображение',
+      'errorApi': 'Не удалось удалить объект',
+      'errorPickImage': 'Не удалось выбрать изображение',
+      'errorApplyAdjustments': 'Не удалось применить настройки',
+      'errorEncode': 'Ошибка кодирования изображения',
+      'errorEmptyImage': 'Пустые байты изображения',
+      'saveSuccess': 'Изображение успешно сохранено',
+      'applyFilter': 'Применить фильтр',
+      'applyEffect': 'Применить эффект',
+      'invalidEffect': 'Недопустимые параметры эффекта',
+      'applyCrop': 'Применить обрезку',
+      'invalidCrop': 'Недопустимые параметры обрезки',
+      'processingCrop': 'Обработка обрезки...',
+      'errorApplyFilter': 'Ошибка при применении фильтра',
+      'errorApplyEffect': 'Ошибка при применении эффекта',
+      'errorApplyCrop': 'Ошибка при применении обрезки',
+      'zoomIn': 'Увеличить',
+      'zoomOut': 'Уменьшить',
+      'rotateLeft': 'Повернуть влево',
+      'rotateRight': 'Повернуть вправо',
+      'replace': 'Заменить',
+      'borderOptions': 'Параметры границы',
     },
   };
 
-  // Геттеры для локализованных строк
   String get appTitle => _localizedValues[locale.languageCode]!['app_title']!;
   String get russian => _localizedValues[locale.languageCode]!['russian']!;
   String get english => _localizedValues[locale.languageCode]!['english']!;
@@ -419,6 +534,64 @@ class AppLocalizations {
   String get selectedImage => _localizedValues[locale.languageCode]!['selectedImage']!;
   String get currentColor => _localizedValues[locale.languageCode]!['currentColor']!;
   String get delete => _localizedValues[locale.languageCode]!['delete']!;
+  String get confirmDeleteMessage => _localizedValues[locale.languageCode]!['confirmDeleteMessage']!;
+  String get confirmDelete => _localizedValues[locale.languageCode]!['confirmDelete']!;
+  String get alignment => _localizedValues[locale.languageCode]!['alignment']!;
+  String get scale => _localizedValues[locale.languageCode]!['scale']!;
+  String get rotation => _localizedValues[locale.languageCode]!['rotation']!;
+  String get color => _localizedValues[locale.languageCode]!['color']!;
+  String get image => _localizedValues[locale.languageCode]!['image']!;
+  String get invalidImage => _localizedValues[locale.languageCode]!['invalidImage']!;
+  String get processingEffect => _localizedValues[locale.languageCode]!['processingEffect']!;
+  String get invalidFilter => _localizedValues[locale.languageCode]!['invalidFilter']!;
+  String get processingFilter => _localizedValues[locale.languageCode]!['processingFilter']!;
+  String get cancelPreview => _localizedValues[locale.languageCode]!['cancelPreview']!;
+  String get filter => _localizedValues[locale.languageCode]!['filter']!;
+  String get description => _localizedValues[locale.languageCode]!['description']!;
+  String get autoCorrect => _localizedValues[locale.languageCode]!['autoCorrect']!;
+  String get input => _localizedValues[locale.languageCode]!['input']!;
+  String get style => _localizedValues[locale.languageCode]!['style']!;
+  String get addText => _localizedValues[locale.languageCode]!['addText']!;
+  String get alignLeft => _localizedValues[locale.languageCode]!['alignLeft']!;
+  String get alignCenter => _localizedValues[locale.languageCode]!['alignCenter']!;
+  String get alignRight => _localizedValues[locale.languageCode]!['alignRight']!;
+  String get removeBackgroundTitle => _localizedValues[locale.languageCode]!['removeBackgroundTitle']!;
+  String get pickImagePrompt => _localizedValues[locale.languageCode]!['pickImagePrompt']!;
+  String get pickImageTooltip => _localizedValues[locale.languageCode]!['pickImageTooltip']!;
+  String get objectRemoval => _localizedValues[locale.languageCode]!['objectRemoval']!;
+  String get changeBackgroundTitle => _localizedValues[locale.languageCode]!['changeBackgroundTitle']!;
+  String get changeImagePrompt => _localizedValues[locale.languageCode]!['changeImagePrompt']!;
+  String get changeImageTooltip => _localizedValues[locale.languageCode]!['changeImageTooltip']!;
+  String get blurBackgroundTitle => _localizedValues[locale.languageCode]!['blurBackgroundTitle']!;
+  String get blurImagePrompt => _localizedValues[locale.languageCode]!['blurImagePrompt']!;
+  String get blurImageTooltip => _localizedValues[locale.languageCode]!['blurImageTooltip']!;
+  String get errorDecode => _localizedValues[locale.languageCode]!['errorDecode']!;
+  String get errorSaveGallery => _localizedValues[locale.languageCode]!['errorSaveGallery']!;
+  String get errorDownload => _localizedValues[locale.languageCode]!['errorDownload']!;
+  String get errorLoadDrawings => _localizedValues[locale.languageCode]!['errorLoadDrawings']!;
+  String get errorSaveDrawing => _localizedValues[locale.languageCode]!['errorSaveDrawing']!;
+  String get errorLoadImage => _localizedValues[locale.languageCode]!['errorLoadImage']!;
+  String get errorApi => _localizedValues[locale.languageCode]!['errorApi']!;
+  String get errorPickImage => _localizedValues[locale.languageCode]!['errorPickImage']!;
+  String get errorApplyAdjustments => _localizedValues[locale.languageCode]!['errorApplyAdjustments']!;
+  String get errorEncode => _localizedValues[locale.languageCode]!['errorEncode']!;
+  String get errorEmptyImage => _localizedValues[locale.languageCode]!['errorEmptyImage']!;
+  String get saveSuccess => _localizedValues[locale.languageCode]!['saveSuccess']!;
+  String get applyFilter => _localizedValues[locale.languageCode]!['applyFilter']!;
+  String get applyEffect => _localizedValues[locale.languageCode]!['applyEffect']!;
+  String get invalidEffect => _localizedValues[locale.languageCode]!['invalidEffect']!;
+  String get applyCrop => _localizedValues[locale.languageCode]!['applyCrop']!;
+  String get invalidCrop => _localizedValues[locale.languageCode]!['invalidCrop']!;
+  String get processingCrop => _localizedValues[locale.languageCode]!['processingCrop']!;
+  String get errorApplyFilter => _localizedValues[locale.languageCode]!['errorApplyFilter']!;
+  String get errorApplyEffect => _localizedValues[locale.languageCode]!['errorApplyEffect']!;
+  String get errorApplyCrop => _localizedValues[locale.languageCode]!['errorApplyCrop']!;
+  String get zoomIn => _localizedValues[locale.languageCode]!['zoomIn']!;
+  String get zoomOut => _localizedValues[locale.languageCode]!['zoomOut']!;
+  String get rotateLeft => _localizedValues[locale.languageCode]!['rotateLeft']!;
+  String get rotateRight => _localizedValues[locale.languageCode]!['rotateRight']!;
+  String get replace => _localizedValues[locale.languageCode]!['replace']!;
+  String get borderOptions => _localizedValues[locale.languageCode]!['borderOptions']!;
 }
 
 class _AppLocalizationsDelegate

@@ -9,6 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
+import '../../database/editHistory.dart';
+import '../../database/magicMomentDatabase.dart';
+import '../../pagesSettings/classesSettings/app_localizations.dart';
+
 class EraserPanel extends StatefulWidget {
   final Uint8List image;
   final int imageId;
@@ -40,18 +44,33 @@ class _EraserPanelState extends State<EraserPanel> {
   String apikey = 'a137bd6b259ff34bb97c5730bdf33a5be641b0de';
 
   @override
+  void dispose() {
+    _backgroundImage.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     _loadImage();
   }
 
-  Future<void> _loadImage() async {
-    final codec = await ui.instantiateImageCodec(widget.image);
-    final frame = await codec.getNextFrame();
-    _backgroundImage = frame.image;
-    setState(() => _isInitialized = true);
-  }
 
+  Future<void> _loadImage() async {
+    try {
+      final codec = await ui.instantiateImageCodec(widget.image);
+      final frame = await codec.getNextFrame();
+      _backgroundImage = frame.image;
+      setState(() => _isInitialized = true);
+    } catch (e) {
+      debugPrint('Error loading image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)?.errorLoadImage ?? 'Failed to load image: $e')),
+        );
+      }
+    }
+  }
   void _startPath(Offset offset) {
     final list = [offset];
     setState(() {
@@ -121,19 +140,45 @@ class _EraserPanelState extends State<EraserPanel> {
 
 
   Future<Uint8List?> _callPhotoRoomObjectRemovalAPI(Uint8List originalImage, Uint8List maskImage) async {
-    final uri = Uri.parse('https://sdk.photoroom.com/v1/segment/inpaint');
-    final request = http.MultipartRequest('POST', uri)
-      ..headers['x-api-key'] = apikey
-      ..files.add(http.MultipartFile.fromBytes('image_file', originalImage, filename: 'image.png'))
-      ..files.add(http.MultipartFile.fromBytes('mask_file', maskImage, filename: 'mask.png'));
+    if (apikey.isEmpty) {
+      throw Exception(AppLocalizations.of(context)?.error ?? 'API key is missing');
+    }
 
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
+    try {
+      final uri = Uri.parse('https://sdk.photoroom.com/v1/segment/inpaint');
+      final request = http.MultipartRequest('POST', uri)
+        ..headers['x-api-key'] = apikey
+        ..files.add(http.MultipartFile.fromBytes('image_file', originalImage, filename: 'image.png'))
+        ..files.add(http.MultipartFile.fromBytes('mask_file', maskImage, filename: 'mask.png'));
 
-    if (response.statusCode == 200) {
-      return response.bodyBytes;
-    } else {
-      debugPrint('PhotoRoom error: ${response.statusCode} ${response.body}');
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final pngBytes = response.bodyBytes;
+        final history = EditHistory(
+          historyId: null,
+          imageId: widget.imageId,
+          operationType: 'eraser',
+          operationParameters: {'operation': 'object_removal'},
+          operationDate: DateTime.now(),
+          snapshotPath: kIsWeb ? null : '${Directory.systemTemp.path}/eraser_${DateTime.now().millisecondsSinceEpoch}.png',
+          snapshotBytes: kIsWeb ? pngBytes : null,
+        );
+        final db = MagicMomentDatabase.instance;
+        await db.insertHistory(history);
+        return pngBytes;
+      } else {
+        debugPrint('PhotoRoom error: ${response.statusCode} ${response.body}');
+        throw Exception('PhotoRoom API error: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error calling PhotoRoom API: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)?.errorApi ?? 'Failed to remove object: $e')),
+        );
+      }
       return null;
     }
   }
@@ -256,15 +301,15 @@ class _EraserPanelState extends State<EraserPanel> {
                   tooltip: _isObjectRemovalMode ? 'Режим удаления объектов' : 'Режим ластика',
                 ),
                 const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: _removeObject,
-                    icon: const Icon(Icons.cleaning_services),
-                    label: const Text('Удалить объект'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    ),
-                  )
+                ElevatedButton.icon(
+                  onPressed: _removeObject,
+                  icon: const Icon(Icons.cleaning_services),
+                  label: const Text('Удалить объект'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  ),
+                )
               ],
             ),
           ),

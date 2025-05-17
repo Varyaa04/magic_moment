@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/rendering.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import '../../database/editHistory.dart';
 import '../../database/objectDao.dart' as dao;
 import '../../database/objectsModels.dart';
 import '../../database/magicMomentDatabase.dart';
@@ -57,11 +60,19 @@ class _DrawPanelState extends State<DrawPanel> {
     _historyIndex = 0;
   }
 
+  @override
+  void dispose() {
+    _backgroundImage.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadDrawingsFromDb() async {
     try {
       final objectDao = dao.ObjectDao();
       final drawings = await objectDao.getDrawings(widget.imageId);
       debugPrint('Loaded ${drawings.length} drawings from DB for imageId: ${widget.imageId}');
+
+      if (!mounted) return;
 
       setState(() {
         for (final d in drawings) {
@@ -76,7 +87,7 @@ class _DrawPanelState extends State<DrawPanel> {
               isErasing: false,
             ));
           } catch (e) {
-            debugPrint('Error parsing drawing path for drawing: $e');
+            debugPrint('Error parsing drawing path: $e');
           }
         }
       });
@@ -84,9 +95,94 @@ class _DrawPanelState extends State<DrawPanel> {
       debugPrint('Error loading drawings from DB: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load drawings: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context)?.errorLoadDrawings ?? 'Failed to load drawings: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _saveDrawing() async {
+    try {
+      final boundary = _paintingKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
+      }
+
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose(); // Освобождаем изображение
+      if (byteData == null) {
+        throw Exception(AppLocalizations.of(context)?.errorEncode ?? 'Image conversion error');
+      }
+
+      final pngBytes = byteData.buffer.asUint8List();
+      debugPrint('Drawing saved with ${_drawingActions.length} actions');
+
+      final history = EditHistory(
+        historyId: null,
+        imageId: widget.imageId,
+        operationType: 'drawing',
+        operationParameters: {
+          'stroke_width': _currentStrokeWidth,
+          'actions_count': _drawingActions.length,
+        },
+        operationDate: DateTime.now(),
+        snapshotPath: kIsWeb ? null : '${Directory.systemTemp.path}/drawing_${DateTime.now().millisecondsSinceEpoch}.png',
+        snapshotBytes: kIsWeb ? pngBytes : null,
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
+
+      final objectDao = dao.ObjectDao();
+      for (final action in _drawingActions) {
+        final pathJson = jsonEncode(action.points.map((p) => {'x': p.dx, 'y': p.dy}).toList());
+        await objectDao.insertDrawing(Drawing(
+          imageId: widget.imageId,
+          drawingPath: pathJson,
+          color: '#${action.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+          strokeWidth: action.strokeWidth,
+          historyId: historyId,
+        ));
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        if (_historyIndex < _history.length - 1) {
+          _history.removeRange(_historyIndex + 1, _history.length);
+        }
+        _history.add({
+          'image': pngBytes,
+          'action': AppLocalizations.of(context)?.draw ?? 'Draw',
+          'operationType': 'drawing',
+          'parameters': {
+            'stroke_width': _currentStrokeWidth,
+            'actions_count': _drawingActions.length,
+          },
+        });
+        _historyIndex++;
+      });
+
+      await _updateImage(
+        pngBytes,
+        action: AppLocalizations.of(context)?.draw ?? 'Draw',
+        operationType: 'drawing',
+        parameters: {
+          'stroke_width': _currentStrokeWidth,
+          'actions_count': _drawingActions.length,
+        },
+      );
+
+      widget.onApply(pngBytes);
+    } catch (e) {
+      debugPrint('Error saving drawing: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)?.errorSaveDrawing ?? 'Error saving drawing: $e')),
+        );
+      }
+    } finally {
+      widget.onCancel();
     }
   }
 
@@ -131,86 +227,6 @@ class _DrawPanelState extends State<DrawPanel> {
         );
       }
       rethrow;
-    }
-  }
-
-  Future<void> _saveDrawing() async {
-    try {
-      final boundary = _paintingKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
-      }
-
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
-      }
-
-      final pngBytes = byteData.buffer.asUint8List();
-      debugPrint('Drawing saved with ${_drawingActions.length} actions');
-
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'drawing',
-        operationParameters: {
-          'stroke_width': _currentStrokeWidth,
-          'actions_count': _drawingActions.length,
-        },
-        operationDate: DateTime.now(),
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-      debugPrint('History inserted with ID: $historyId');
-
-      final objectDao = dao.ObjectDao();
-      for (final action in _drawingActions) {
-        final pathJson = jsonEncode(action.points.map((p) => {'x': p.dx, 'y': p.dy}).toList());
-        await objectDao.insertDrawing(Drawing(
-          imageId: widget.imageId,
-          drawingPath: pathJson,
-          color: '#${action.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
-          strokeWidth: action.strokeWidth,
-          historyId: historyId,
-        ));
-      }
-
-      setState(() {
-        if (_historyIndex < _history.length - 1) {
-          _history.removeRange(_historyIndex + 1, _history.length);
-        }
-        _history.add({
-          'image': pngBytes,
-          'action': AppLocalizations.of(context)?.draw ?? 'Draw',
-          'operationType': 'drawing',
-          'parameters': {
-            'stroke_width': _currentStrokeWidth,
-            'actions_count': _drawingActions.length,
-          },
-        });
-        _historyIndex++;
-      });
-
-      await _updateImage(
-        pngBytes,
-        action: AppLocalizations.of(context)?.draw ?? 'Draw',
-        operationType: 'drawing',
-        parameters: {
-          'stroke_width': _currentStrokeWidth,
-          'actions_count': _drawingActions.length,
-        },
-      );
-
-      widget.onApply(pngBytes);
-    } catch (e) {
-      debugPrint('Error saving drawing: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving drawing: $e')),
-        );
-      }
-    } finally {
-      widget.onCancel();
     }
   }
 

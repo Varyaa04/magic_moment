@@ -7,6 +7,7 @@ class CustomButton extends StatelessWidget {
   final String text;
   final String? secondaryText;
   final IconData icon;
+  final bool isSmall;
 
   const CustomButton({
     super.key,
@@ -14,17 +15,26 @@ class CustomButton extends StatelessWidget {
     required this.text,
     this.secondaryText,
     required this.icon,
+    this.isSmall = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-
-    final  theme = Theme.of(context);
+    final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    final double buttonHeight = isSmall ? 50 : 60;
+    final double buttonWidth = isSmall ? 130 : 150;
+    final iconSize = isSmall ? 18.0 : 24.0;
+    final textSize = isSmall ? 12.0 : 14.0;
+    final padding = isSmall
+        ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+        : const EdgeInsets.symmetric(horizontal: 16, vertical: 12);
+
     return Container(
-      height: 60,
-      width: 150,
+      height: buttonHeight,
+      width: buttonWidth,
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(10),
@@ -40,7 +50,7 @@ class CustomButton extends StatelessWidget {
       child: TextButton(
         onPressed: onPressed,
         style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: padding,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -48,29 +58,29 @@ class CustomButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: colorScheme.onSurface),
-            const SizedBox(width: 8),
+            Icon(icon, size: iconSize, color: colorScheme.onSurface),
+            SizedBox(width: isSmall ? 6 : 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   text,
-                  style:  TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface,
-                    fontFamily: 'Comfortaa',
-                    fontWeight: FontWeight.bold
+                  style: TextStyle(
+                      fontSize: textSize,
+                      color: colorScheme.onSurface,
+                      fontFamily: 'Comfortaa',
+                      fontWeight: FontWeight.bold
                   ),
                 ),
                 if (secondaryText != null)
                   Text(
                     secondaryText!,
-                    style:  TextStyle(
-                      fontSize: 14,
-                      color: colorScheme.onSurface,
-                      fontFamily: 'Comfortaa',
-                      fontWeight: FontWeight.bold
+                    style: TextStyle(
+                        fontSize: textSize,
+                        color: colorScheme.onSurface,
+                        fontFamily: 'Comfortaa',
+                        fontWeight: FontWeight.bold
                     ),
                   ),
               ],

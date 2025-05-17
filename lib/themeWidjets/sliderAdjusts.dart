@@ -9,6 +9,8 @@ class SliderRow extends StatelessWidget {
   final String label;
   final ValueChanged<double>? onChanged;
   final bool isProcessing;
+  final Color activeColor;
+  final Color inactiveColor;
 
   const SliderRow({
     required this.icon,
@@ -19,6 +21,8 @@ class SliderRow extends StatelessWidget {
     required this.label,
     this.onChanged,
     required this.isProcessing,
+    required this.activeColor,
+    required this.inactiveColor,
     super.key,
   });
 
@@ -26,17 +30,34 @@ class SliderRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: Colors.white),
+        Icon(
+          icon,
+          color: Colors.white70,
+          size: 20,
+        ),
+        const SizedBox(width: 8),
         Expanded(
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            label: label,
-            onChanged: isProcessing ? null : onChanged,
-            activeColor: Colors.blue,
-            inactiveColor: Colors.grey,
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
+              activeTrackColor: activeColor,
+              inactiveTrackColor: inactiveColor,
+              thumbColor: activeColor,
+              overlayColor: activeColor.withOpacity(0.3),
+              valueIndicatorColor: activeColor,
+              valueIndicatorTextStyle: const TextStyle(color: Colors.white),
+            ),
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              label: label,
+              onChanged: isProcessing ? null : onChanged,
+            ),
           ),
         ),
       ],

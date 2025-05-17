@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'resizable_photo_widget.dart';
 
 class FivePhotosTemplates {
   static List<Widget> getTemplates(
@@ -15,20 +16,23 @@ class FivePhotosTemplates {
         int? selectedImageIndex,
         BoxDecoration? Function(int)? selectedImageDecoration,
       ]) {
-    return List.generate(10, (index) => _FivePhotosCollage(
-      images: images,
-      templateIndex: index,
-      borderColor: borderColor,
-      positions: positions,
-      scales: scales,
-      rotations: rotations,
-      onPositionChanged: onPositionChanged,
-      onScaleChanged: onScaleChanged,
-      onRotationChanged: onRotationChanged,
-      onImageTapped: onImageTapped,
-      selectedImageIndex: selectedImageIndex,
-      selectedImageDecoration: selectedImageDecoration,
-    ));
+    return List.generate(
+      10,
+          (index) => _FivePhotosCollage(
+        images: images,
+        templateIndex: index,
+        borderColor: borderColor,
+        positions: positions,
+        scales: scales,
+        rotations: rotations,
+        onPositionChanged: onPositionChanged,
+        onScaleChanged: onScaleChanged,
+        onRotationChanged: onRotationChanged,
+        onImageTapped: onImageTapped,
+        selectedImageIndex: selectedImageIndex,
+        selectedImageDecoration: selectedImageDecoration,
+      ),
+    );
   }
 }
 
@@ -75,46 +79,18 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
     super.dispose();
   }
 
-  Widget _buildImage(int index, Widget image) {
-    return GestureDetector(
-      onTap: () => widget.onImageTapped?.call(index),
-      onScaleUpdate: (details) {
-        _debouncer.run(() {
-          setState(() {
-            widget.onPositionChanged(index, widget.positions[index] + Offset(
-              details.focalPointDelta.dx / 300,
-              details.focalPointDelta.dy / 300,
-            ));
-            if (details.scale != 1.0) {
-              widget.onScaleChanged(index, (widget.scales[index] * details.scale).clamp(0.5, 2.0));
-            }
-            if (details.rotation != 0) {
-              widget.onRotationChanged(index, widget.rotations[index] + details.rotation / 2);
-            }
-          });
-        });
-      },
-      onScaleEnd: (details) {
-        _debouncer.run(() {
-          setState(() {
-            widget.onScaleChanged(index, widget.scales[index].clamp(0.5, 2.0));
-          });
-        });
-      },
-      child: RepaintBoundary(
-        child: Container(
-          decoration: widget.selectedImageDecoration?.call(index),
-          child: Transform.translate(
-            offset: widget.positions[index] * 100,
-            child: Transform.rotate(
-              angle: widget.rotations[index],
-              child: Transform.scale(
-                scale: widget.scales[index],
-                child: image,
-              ),
-            ),
-          ),
-        ),
+  Widget _buildImage(int index) {
+    return Container(
+      decoration: widget.selectedImageDecoration?.call(index),
+      child: ResizablePhotoWidget(
+        imageProvider: widget.images[index],
+        initialScale: widget.scales[index],
+        initialPosition: widget.positions[index] * 100,
+        initialRotation: widget.rotations[index],
+        onPositionChanged: (offset) => widget.onPositionChanged(index, offset),
+        onScaleChanged: (scale) => widget.onScaleChanged(index, scale),
+        onRotationChanged: (rotation) => widget.onRotationChanged(index, rotation),
+        onTap: () => widget.onImageTapped?.call(index),
       ),
     );
   }
@@ -135,13 +111,15 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover)),
-                _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover)),
-                _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover)),
-                _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover)),
+                _buildImage(0),
+                _buildImage(1),
+                _buildImage(2),
+                _buildImage(3),
                 Container(
-                  decoration: BoxDecoration(border: Border.all(color: widget.borderColor, width: 2)),
-                  child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover)),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: widget.borderColor, width: 2),
+                  ),
+                  child: _buildImage(4),
                 ),
               ],
             ),
@@ -150,9 +128,9 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                     ],
                   ),
                 ),
@@ -160,11 +138,11 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                     ],
                   ),
                 ),
@@ -175,9 +153,9 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                     ],
                   ),
                 ),
@@ -185,11 +163,11 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                     ],
                   ),
                 ),
@@ -197,32 +175,32 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
             ),
             3 => Column(
               children: [
-                Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                Expanded(child: _buildImage(0)),
                 Container(height: 4, color: widget.borderColor),
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                     ],
                   ),
                 ),
                 Container(height: 4, color: widget.borderColor),
-                Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                Expanded(child: _buildImage(4)),
               ],
             ),
             4 => Stack(
               children: [
-                Positioned.fill(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                Positioned.fill(child: _buildImage(0)),
                 Align(
                   alignment: Alignment.topLeft,
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover)),
+                    child: _buildImage(1),
                   ),
                 ),
                 Align(
@@ -230,7 +208,7 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover)),
+                    child: _buildImage(2),
                   ),
                 ),
                 Align(
@@ -238,7 +216,7 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover)),
+                    child: _buildImage(3),
                   ),
                 ),
                 Align(
@@ -246,17 +224,14 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover)),
+                    child: _buildImage(4),
                   ),
                 ),
               ],
             ),
             5 => Column(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover)),
-                ),
+                Expanded(flex: 2, child: _buildImage(0)),
                 Container(height: 4, color: widget.borderColor),
                 Expanded(
                   child: GridView.count(
@@ -264,10 +239,10 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover)),
-                      _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover)),
-                      _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover)),
-                      _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover)),
+                      _buildImage(1),
+                      _buildImage(2),
+                      _buildImage(3),
+                      _buildImage(4),
                     ],
                   ),
                 ),
@@ -275,21 +250,18 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
             ),
             6 => Row(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover)),
-                ),
+                Expanded(flex: 2, child: _buildImage(0)),
                 Container(width: 4, color: widget.borderColor),
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                     ],
                   ),
                 ),
@@ -300,9 +272,9 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                     ],
                   ),
                 ),
@@ -310,11 +282,11 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Row(
                     children: [
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(width: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                     ],
                   ),
                 ),
@@ -325,9 +297,9 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(0)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(1)),
                     ],
                   ),
                 ),
@@ -335,11 +307,11 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(2)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(3)),
                       Container(height: 4, color: widget.borderColor),
-                      Expanded(child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover))),
+                      Expanded(child: _buildImage(4)),
                     ],
                   ),
                 ),
@@ -347,13 +319,13 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
             ),
             9 => Stack(
               children: [
-                Positioned.fill(child: _buildImage(0, Image(image: widget.images[0], fit: BoxFit.cover))),
+                Positioned.fill(child: _buildImage(0)),
                 Align(
                   alignment: Alignment.topLeft,
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(1, Image(image: widget.images[1], fit: BoxFit.cover)),
+                    child: _buildImage(1),
                   ),
                 ),
                 Align(
@@ -361,7 +333,7 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(2, Image(image: widget.images[2], fit: BoxFit.cover)),
+                    child: _buildImage(2),
                   ),
                 ),
                 Align(
@@ -369,7 +341,7 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(3, Image(image: widget.images[3], fit: BoxFit.cover)),
+                    child: _buildImage(3),
                   ),
                 ),
                 Align(
@@ -377,7 +349,7 @@ class _FivePhotosCollageState extends State<_FivePhotosCollage> {
                   child: Container(
                     width: size * 0.25,
                     height: size * 0.25,
-                    child: _buildImage(4, Image(image: widget.images[4], fit: BoxFit.cover)),
+                    child: _buildImage(4),
                   ),
                 ),
               ],

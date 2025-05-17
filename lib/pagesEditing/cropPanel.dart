@@ -1,15 +1,22 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:MagicMoment/database/editHistory.dart';
+import 'package:MagicMoment/database/magicMomentDatabase.dart';
+import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 
 class CropPanel extends StatefulWidget {
   final Uint8List image;
+  final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
   final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
 
   const CropPanel({
     required this.image,
+    required this.imageId,
     required this.onCancel,
     required this.onApply,
     required this.onUpdateImage,
@@ -29,6 +36,8 @@ class _CropPanelState extends State<CropPanel> {
   double _scale = 1.0;
   Offset _offset = Offset.zero;
 
+  static const double _minCropSize = 10.0;
+
   final Map<String, double?> _aspectRatios = {
     'Freeform': null,
     '1:1': 1.0,
@@ -44,20 +53,37 @@ class _CropPanelState extends State<CropPanel> {
     _loadImage();
   }
 
+  @override
+  void dispose() {
+    _uiImage?.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadImage() async {
+    final localizations = AppLocalizations.of(context);
     try {
       final codec = await ui.instantiateImageCodec(widget.image);
       final frame = await codec.getNextFrame();
-      setState(() {
-        _uiImage = frame.image;
-        _imageSize = Size(_uiImage!.width.toDouble(), _uiImage!.height.toDouble());
-        _initializeCropRect();
-      });
+      if (mounted) {
+        setState(() {
+          _uiImage = frame.image;
+          _imageSize = Size(_uiImage!.width.toDouble(), _uiImage!.height.toDouble());
+          if (_imageSize.width > 0 && _imageSize.height > 0) {
+            _initializeCropRect();
+          } else {
+            throw Exception(localizations?.invalidImage ?? 'Invalid image size');
+          }
+        });
+      }
+      codec.dispose();
     } catch (e) {
-      debugPrint('Error loading image: $e');
+      debugPrint('CropPanel image loading error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load image: $e')),
+          SnackBar(
+            content: Text('${localizations?.error ?? 'Error'}: $e'),
+            backgroundColor: Colors.red[700],
+          ),
         );
         widget.onCancel();
       }
@@ -65,7 +91,6 @@ class _CropPanelState extends State<CropPanel> {
   }
 
   void _initializeCropRect() {
-    // Start with a centered rect that's 80% of image size
     final width = _imageSize.width * 0.8;
     final height = _imageSize.height * 0.8;
     final left = (_imageSize.width - width) / 2;
@@ -76,27 +101,25 @@ class _CropPanelState extends State<CropPanel> {
   }
 
   void _applyAspectRatio(String aspectRatio) {
+    if (!mounted) return;
     setState(() {
       _selectedAspectRatio = aspectRatio;
       final ratio = _aspectRatios[aspectRatio];
-      if (ratio == null) return;
+      if (ratio == null || _imageSize.isEmpty) return;
 
       final center = _cropRect.center;
       double newWidth, newHeight;
 
       if (_cropRect.width / _cropRect.height > ratio) {
-        // Current rect is wider than desired ratio - adjust height
         newHeight = _cropRect.width / ratio;
         newWidth = _cropRect.width;
       } else {
-        // Current rect is taller than desired ratio - adjust width
         newWidth = _cropRect.height * ratio;
         newHeight = _cropRect.height;
       }
 
-      // Ensure the new rect fits within image bounds
-      newWidth = newWidth.clamp(10, _imageSize.width);
-      newHeight = newHeight.clamp(10, _imageSize.height);
+      newWidth = newWidth.clamp(_minCropSize, _imageSize.width);
+      newHeight = newHeight.clamp(_minCropSize, _imageSize.height);
 
       _cropRect = Rect.fromCenter(
         center: center,
@@ -104,7 +127,6 @@ class _CropPanelState extends State<CropPanel> {
         height: newHeight,
       );
 
-      // Adjust if the rect goes outside image bounds
       _cropRect = Rect.fromLTWH(
         _cropRect.left.clamp(0, _imageSize.width - _cropRect.width),
         _cropRect.top.clamp(0, _imageSize.height - _cropRect.height),
@@ -115,6 +137,7 @@ class _CropPanelState extends State<CropPanel> {
   }
 
   void _updateCropRect(Offset delta, DragHandle handle) {
+    if (!mounted) return;
     setState(() {
       final ratio = _aspectRatios[_selectedAspectRatio];
       Rect newRect = _cropRect;
@@ -125,8 +148,8 @@ class _CropPanelState extends State<CropPanel> {
             delta = _constrainDeltaForAspectRatio(delta, ratio, handle);
           }
           newRect = Rect.fromLTRB(
-            (_cropRect.left + delta.dx).clamp(0, _cropRect.right - 10),
-            (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - 10),
+            (_cropRect.left + delta.dx).clamp(0, _cropRect.right - _minCropSize),
+            (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - _minCropSize),
             _cropRect.right,
             _cropRect.bottom,
           );
@@ -137,8 +160,8 @@ class _CropPanelState extends State<CropPanel> {
           }
           newRect = Rect.fromLTRB(
             _cropRect.left,
-            (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - 10),
-            (_cropRect.right + delta.dx).clamp(_cropRect.left + 10, _imageSize.width),
+            (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - _minCropSize),
+            (_cropRect.right + delta.dx).clamp(_cropRect.left + _minCropSize, _imageSize.width),
             _cropRect.bottom,
           );
           break;
@@ -147,10 +170,10 @@ class _CropPanelState extends State<CropPanel> {
             delta = _constrainDeltaForAspectRatio(delta, ratio, handle);
           }
           newRect = Rect.fromLTRB(
-            (_cropRect.left + delta.dx).clamp(0, _cropRect.right - 10),
+            (_cropRect.left + delta.dx).clamp(0, _cropRect.right - _minCropSize),
             _cropRect.top,
             _cropRect.right,
-            (_cropRect.bottom + delta.dy).clamp(_cropRect.top + 10, _imageSize.height),
+            (_cropRect.bottom + delta.dy).clamp(_cropRect.top + _minCropSize, _imageSize.height),
           );
           break;
         case DragHandle.bottomRight:
@@ -160,8 +183,8 @@ class _CropPanelState extends State<CropPanel> {
           newRect = Rect.fromLTRB(
             _cropRect.left,
             _cropRect.top,
-            (_cropRect.right + delta.dx).clamp(_cropRect.left + 10, _imageSize.width),
-            (_cropRect.bottom + delta.dy).clamp(_cropRect.top + 10, _imageSize.height),
+            (_cropRect.right + delta.dx).clamp(_cropRect.left + _minCropSize, _imageSize.width),
+            (_cropRect.bottom + delta.dy).clamp(_cropRect.top + _minCropSize, _imageSize.height),
           );
           break;
         case DragHandle.center:
@@ -204,9 +227,10 @@ class _CropPanelState extends State<CropPanel> {
   }
 
   Future<void> _applyCrop() async {
-    if (_isProcessing || _uiImage == null) return;
+    if (_isProcessing || _uiImage == null || !mounted) return;
 
     setState(() => _isProcessing = true);
+    final localizations = AppLocalizations.of(context);
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
@@ -218,15 +242,29 @@ class _CropPanelState extends State<CropPanel> {
       final picture = recorder.endRecording();
       final croppedImage = await picture.toImage(srcRect.width.toInt(), srcRect.height.toInt());
       final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) throw Exception('Failed to convert cropped image to bytes');
+      croppedImage.dispose();
+      picture.dispose();
+      if (byteData == null) {
+        throw Exception(localizations?.invalidImage ?? 'Failed to convert cropped image to bytes');
+      }
 
       final bytes = byteData.buffer.asUint8List();
 
-      await widget.onUpdateImage(
-        bytes,
-        action: 'Applied crop',
+      String? snapshotPath;
+      List<int>? snapshotBytes;
+      if (!kIsWeb) {
+        final tempDir = await Directory.systemTemp.createTemp();
+        snapshotPath = '${tempDir.path}/crop_${DateTime.now().millisecondsSinceEpoch}.png';
+        final file = File(snapshotPath);
+        await file.writeAsBytes(bytes);
+      } else {
+        snapshotBytes = bytes;
+      }
+
+      final history = EditHistory(
+        imageId: widget.imageId,
         operationType: 'crop',
-        parameters: {
+        operationParameters: {
           'template': _selectedAspectRatio,
           'aspect_ratio': _aspectRatios[_selectedAspectRatio]?.toString() ?? 'Freeform',
           'crop_rect': {
@@ -236,19 +274,53 @@ class _CropPanelState extends State<CropPanel> {
             'height': _cropRect.height,
           },
         },
+        operationDate: DateTime.now(),
+        snapshotPath: snapshotPath,
+        snapshotBytes: snapshotBytes,
       );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(history);
 
-      widget.onApply(bytes);
-      widget.onCancel();
+      if (mounted) {
+        await widget.onUpdateImage(
+          bytes,
+          action: localizations?.applyCrop ?? 'Applied crop',
+          operationType: 'crop',
+          parameters: {
+            'template': _selectedAspectRatio,
+            'aspect_ratio': _aspectRatios[_selectedAspectRatio]?.toString() ?? 'Freeform',
+            'crop_rect': {
+              'left': _cropRect.left,
+              'top': _cropRect.top,
+              'width': _cropRect.width,
+              'height': _cropRect.height,
+            },
+            'historyId': historyId,
+          },
+        );
+
+        widget.onApply(bytes);
+        widget.onCancel();
+      }
     } catch (e) {
-      widget.onCancel();
+      debugPrint('Crop error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${localizations?.errorApplyCrop ?? 'Error applying crop'}: $e'),
+            backgroundColor: Colors.red[700],
+          ),
+        );
+        widget.onCancel();
+      }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -275,39 +347,39 @@ class _CropPanelState extends State<CropPanel> {
                                 painter: CropPainter(_cropRect, _imageSize),
                                 child: Stack(
                                   children: [
-                                    // Top-left handle
                                     Positioned(
                                       left: _cropRect.left - 15,
                                       top: _cropRect.top - 15,
                                       child: GestureDetector(
-                                        onPanUpdate: (details) => _updateCropRect(details.delta, DragHandle.topLeft),
+                                        onPanUpdate: (details) =>
+                                            _updateCropRect(details.delta, DragHandle.topLeft),
                                         child: _buildHandle(),
                                       ),
                                     ),
-                                    // Top-right handle
                                     Positioned(
                                       left: _cropRect.right - 15,
                                       top: _cropRect.top - 15,
                                       child: GestureDetector(
-                                        onPanUpdate: (details) => _updateCropRect(details.delta, DragHandle.topRight),
+                                        onPanUpdate: (details) =>
+                                            _updateCropRect(details.delta, DragHandle.topRight),
                                         child: _buildHandle(),
                                       ),
                                     ),
-                                    // Bottom-left handle
                                     Positioned(
                                       left: _cropRect.left - 15,
                                       top: _cropRect.bottom - 15,
                                       child: GestureDetector(
-                                        onPanUpdate: (details) => _updateCropRect(details.delta, DragHandle.bottomLeft),
+                                        onPanUpdate: (details) =>
+                                            _updateCropRect(details.delta, DragHandle.bottomLeft),
                                         child: _buildHandle(),
                                       ),
                                     ),
-                                    // Bottom-right handle
                                     Positioned(
                                       left: _cropRect.right - 15,
                                       top: _cropRect.bottom - 15,
                                       child: GestureDetector(
-                                        onPanUpdate: (details) => _updateCropRect(details.delta, DragHandle.bottomRight),
+                                        onPanUpdate: (details) =>
+                                            _updateCropRect(details.delta, DragHandle.bottomRight),
                                         child: _buildHandle(),
                                       ),
                                     ),
@@ -321,13 +393,25 @@ class _CropPanelState extends State<CropPanel> {
                     ),
                   ),
                 ),
-                _buildControls(),
+                _buildControls(localizations),
               ],
             ),
             if (_isProcessing)
               Container(
                 color: Colors.black.withOpacity(0.5),
-                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(color: Colors.white),
+                      const SizedBox(height: 16),
+                      Text(
+                        localizations?.processingCrop ?? 'Processing crop...',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
               ),
           ],
         ),
@@ -337,17 +421,17 @@ class _CropPanelState extends State<CropPanel> {
 
   Widget _buildHandle() {
     return Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.blue, width: 2),
-    ),
+      ),
     );
   }
 
-  Widget _buildControls() {
+  Widget _buildControls(AppLocalizations? localizations) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.black.withOpacity(0.9),
@@ -358,16 +442,16 @@ class _CropPanelState extends State<CropPanel> {
             child: Row(
               children: _aspectRatios.keys.map((ratio) {
                 return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ElevatedButton(
-                  child: Text(ratio, style: const TextStyle(fontSize: 14)),
-                  onPressed: _isProcessing ? null : () => _applyAspectRatio(ratio),
-                style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: _selectedAspectRatio == ratio ? Colors.blue : Colors.grey[800],
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ElevatedButton(
+                    onPressed: _isProcessing ? null : () => _applyAspectRatio(ratio),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: _selectedAspectRatio == ratio ? Colors.blue : Colors.grey[800],
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text(ratio, style: const TextStyle(fontSize: 14)),
+                  ),
                 );
               }).toList(),
             ),
@@ -378,11 +462,17 @@ class _CropPanelState extends State<CropPanel> {
             children: [
               TextButton(
                 onPressed: _isProcessing ? null : widget.onCancel,
-                child: const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
+                child: Text(
+                  localizations?.cancel ?? 'Cancel',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
               ),
               TextButton(
                 onPressed: _isProcessing ? null : _applyCrop,
-                child: const Text('Apply', style: TextStyle(color: Colors.blue, fontSize: 16)),
+                child: Text(
+                  localizations?.applyCrop ?? 'Apply Crop',
+                  style: const TextStyle(color: Colors.blue, fontSize: 16),
+                ),
               ),
             ],
           ),
@@ -420,20 +510,19 @@ class CropPainter extends CustomPainter {
       ..color = Colors.black.withOpacity(0.5)
       ..style = PaintingStyle.fill;
 
-    // Draw overlay outside crop area
     canvas.drawRect(Rect.fromLTWH(0, 0, imageSize.width, cropRect.top), overlayPaint);
-    canvas.drawRect(Rect.fromLTWH(0, cropRect.bottom, imageSize.width, imageSize.height - cropRect.bottom), overlayPaint);
+    canvas.drawRect(
+        Rect.fromLTWH(0, cropRect.bottom, imageSize.width, imageSize.height - cropRect.bottom), overlayPaint);
     canvas.drawRect(Rect.fromLTWH(0, cropRect.top, cropRect.left, cropRect.height), overlayPaint);
-    canvas.drawRect(Rect.fromLTWH(cropRect.right, cropRect.top, imageSize.width - cropRect.right, cropRect.height), overlayPaint);
+    canvas.drawRect(
+        Rect.fromLTWH(cropRect.right, cropRect.top, imageSize.width - cropRect.right, cropRect.height), overlayPaint);
 
-    // Draw crop border
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     canvas.drawRect(cropRect, borderPaint);
 
-    // Draw grid
     final gridPaint = Paint()
       ..color = Colors.white.withOpacity(0.5)
       ..style = PaintingStyle.stroke
