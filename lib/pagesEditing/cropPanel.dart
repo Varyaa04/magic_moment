@@ -6,13 +6,19 @@ import 'package:flutter/material.dart';
 import 'package:MagicMoment/database/editHistory.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:image/image.dart' as img;
+import 'package:universal_html/html.dart' as html
+    if (dart.library.io) 'dart:io';
 
 class CropPanel extends StatefulWidget {
   final Uint8List image;
   final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
-  final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
+  final Function(Uint8List,
+      {String? action,
+      String? operationType,
+      Map<String, dynamic>? parameters}) onUpdateImage;
 
   const CropPanel({
     required this.image,
@@ -28,18 +34,21 @@ class CropPanel extends StatefulWidget {
 }
 
 class _CropPanelState extends State<CropPanel> {
-  Rect _cropRect = Rect.zero;
+  Rect _tempCropRect = Rect.zero;
   Size _imageSize = Size.zero;
   bool _isProcessing = false;
-  String _selectedAspectRatio = 'Freeform';
+  String _tempAspectRatio = 'Свободная форма';
   ui.Image? _uiImage;
-  double _scale = 1.0;
-  Offset _offset = Offset.zero;
+  final List<Map<String, dynamic>> _history = [];
+  int _historyIndex = -1;
+
+  late Rect _initialCropRect;
+  late String _initialAspectRatio;
 
   static const double _minCropSize = 10.0;
 
   final Map<String, double?> _aspectRatios = {
-    'Freeform': null,
+    'Свободная форма': null,
     '1:1': 1.0,
     '4:3': 4 / 3,
     '3:4': 3 / 4,
@@ -60,35 +69,188 @@ class _CropPanelState extends State<CropPanel> {
   }
 
   Future<void> _loadImage() async {
-    final localizations = AppLocalizations.of(context);
+    if (!mounted) return;
+    setState(() => _isProcessing = true);
     try {
+      if (widget.image.isEmpty) {
+        throw Exception(AppLocalizations.of(context)?.noImages ??
+            'Изображение отсутствует');
+      }
       final codec = await ui.instantiateImageCodec(widget.image);
       final frame = await codec.getNextFrame();
-      if (mounted) {
-        setState(() {
-          _uiImage = frame.image;
-          _imageSize = Size(_uiImage!.width.toDouble(), _uiImage!.height.toDouble());
-          if (_imageSize.width > 0 && _imageSize.height > 0) {
-            _initializeCropRect();
-          } else {
-            throw Exception(localizations?.invalidImage ?? 'Invalid image size');
-          }
-        });
+      final image = frame.image;
+      final size = Size(image.width.toDouble(), image.height.toDouble());
+      if (size.width <= 0 || size.height <= 0) {
+        throw Exception('Недопустимый размер изображения');
       }
+      if (!mounted) {
+        image.dispose();
+        codec.dispose();
+        return;
+      }
+      setState(() {
+        _uiImage = image;
+        _imageSize = size;
+        _initializeCropRect();
+        _history.add({
+          'image': widget.image,
+          'action': AppLocalizations.of(context)?.crop ?? 'Обрезка',
+          'operationType': 'init',
+          'parameters': {
+            'crop_rect': {
+              'left': _tempCropRect.left,
+              'top': _tempCropRect.top,
+              'width': _tempCropRect.width,
+              'height': _tempCropRect.height,
+            },
+            'template': _tempAspectRatio,
+          },
+        });
+        _historyIndex = 0;
+        _initialCropRect = _tempCropRect;
+        _initialAspectRatio = _tempAspectRatio;
+        _isProcessing = false;
+      });
       codec.dispose();
-    } catch (e) {
-      debugPrint('CropPanel image loading error: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка загрузки изображения: $e\n$stackTrace');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${localizations?.error ?? 'Error'}: $e'),
-            backgroundColor: Colors.red[700],
-          ),
-        );
-        widget.onCancel();
+        _showError('${AppLocalizations.of(context)?.error ?? 'Ошибка'}: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
       }
     }
   }
+
+// В классе _CropPanelState
+
+  void _updateCropRect(Offset delta, DragHandle handle) {
+    if (!mounted) return;
+    setState(() {
+      final ratio = _aspectRatios[_tempAspectRatio];
+      Rect newRect = _tempCropRect;
+
+      switch (handle) {
+        case DragHandle.topLeft:
+          if (ratio != null) {
+// Для фиксированного соотношения сторон корректируем изменение
+            final newWidth = _tempCropRect.width - delta.dx;
+            final newHeight = newWidth / ratio;
+            newRect = Rect.fromLTWH(
+              (_tempCropRect.left + delta.dx)
+                  .clamp(0, _tempCropRect.right - _minCropSize),
+              (_tempCropRect.top + (_tempCropRect.height - newHeight))
+                  .clamp(0, _tempCropRect.bottom - _minCropSize),
+              newWidth.clamp(_minCropSize, _imageSize.width),
+              newHeight.clamp(_minCropSize, _imageSize.height),
+            );
+          } else {
+// Свободная форма - обычное изменение
+            newRect = Rect.fromLTRB(
+              (_tempCropRect.left + delta.dx)
+                  .clamp(0, _tempCropRect.right - _minCropSize),
+              (_tempCropRect.top + delta.dy)
+                  .clamp(0, _tempCropRect.bottom - _minCropSize),
+              _tempCropRect.right,
+              _tempCropRect.bottom,
+            );
+          }
+          break;
+
+        case DragHandle.topRight:
+          if (ratio != null) {
+// Для фиксированного соотношения сторон
+            final newWidth = _tempCropRect.width + delta.dx;
+            final newHeight = newWidth / ratio;
+            newRect = Rect.fromLTRB(
+              _tempCropRect.left,
+              (_tempCropRect.top + (_tempCropRect.height - newHeight))
+                  .clamp(0, _tempCropRect.bottom - _minCropSize),
+              (_tempCropRect.right + delta.dx)
+                  .clamp(_tempCropRect.left + _minCropSize, _imageSize.width),
+              newHeight.clamp(_minCropSize, _imageSize.height),
+            );
+          } else {
+// Свободная форма
+            newRect = Rect.fromLTRB(
+              _tempCropRect.left,
+              (_tempCropRect.top + delta.dy)
+                  .clamp(0, _tempCropRect.bottom - _minCropSize),
+              (_tempCropRect.right + delta.dx)
+                  .clamp(_tempCropRect.left + _minCropSize, _imageSize.width),
+              _tempCropRect.bottom,
+            );
+          }
+          break;
+
+        case DragHandle.bottomLeft:
+          if (ratio != null) {
+// Для фиксированного соотношения сторон
+            final newWidth = _tempCropRect.width - delta.dx;
+            final newHeight = newWidth / ratio;
+            newRect = Rect.fromLTRB(
+              (_tempCropRect.left + delta.dx)
+                  .clamp(0, _tempCropRect.right - _minCropSize),
+              _tempCropRect.top,
+              newWidth.clamp(_minCropSize, _imageSize.width),
+              newHeight.clamp(_minCropSize, _imageSize.height),
+            );
+          } else {
+// Свободная форма
+            newRect = Rect.fromLTRB(
+              (_tempCropRect.left + delta.dx)
+                  .clamp(0, _tempCropRect.right - _minCropSize),
+              _tempCropRect.top,
+              _tempCropRect.right,
+              (_tempCropRect.bottom + delta.dy)
+                  .clamp(_tempCropRect.top + _minCropSize, _imageSize.height),
+            );
+          }
+          break;
+
+        case DragHandle.bottomRight:
+          if (ratio != null) {
+// Для фиксированного соотношения сторон
+            final newWidth = _tempCropRect.width + delta.dx;
+            final newHeight = newWidth / ratio;
+            newRect = Rect.fromLTRB(
+              _tempCropRect.left,
+              _tempCropRect.top,
+              (_tempCropRect.right + delta.dx)
+                  .clamp(_tempCropRect.left + _minCropSize, _imageSize.width),
+              newHeight.clamp(_minCropSize, _imageSize.height),
+            );
+          } else {
+// Свободная форма
+            newRect = Rect.fromLTRB(
+              _tempCropRect.left,
+              _tempCropRect.top,
+              (_tempCropRect.right + delta.dx)
+                  .clamp(_tempCropRect.left + _minCropSize, _imageSize.width),
+              (_tempCropRect.bottom + delta.dy)
+                  .clamp(_tempCropRect.top + _minCropSize, _imageSize.height),
+            );
+          }
+          break;
+
+        case DragHandle.center:
+// Перемещение - всегда одинаково для всех режимов
+          final newLeft = (_tempCropRect.left + delta.dx)
+              .clamp(0, _imageSize.width - _tempCropRect.width);
+          final newTop = (_tempCropRect.top + delta.dy)
+              .clamp(0, _imageSize.height - _tempCropRect.height);
+          newRect = _tempCropRect.shift(
+              Offset(newLeft - _tempCropRect.left, newTop - _tempCropRect.top));
+          break;
+      }
+
+      _tempCropRect = newRect;
+    });
+  }
+
+// Удаляем старый метод _constrainDeltaForAspectRatio, так как он больше не нужен
 
   void _initializeCropRect() {
     final width = _imageSize.width * 0.8;
@@ -96,167 +258,141 @@ class _CropPanelState extends State<CropPanel> {
     final left = (_imageSize.width - width) / 2;
     final top = (_imageSize.height - height) / 2;
 
-    _cropRect = Rect.fromLTWH(left, top, width, height);
-    _applyAspectRatio(_selectedAspectRatio);
+    _tempCropRect = Rect.fromLTWH(left, top, width, height);
+    _applyAspectRatio(_tempAspectRatio);
   }
 
   void _applyAspectRatio(String aspectRatio) {
-    if (!mounted) return;
+    if (!mounted || _imageSize.isEmpty) return;
     setState(() {
-      _selectedAspectRatio = aspectRatio;
+      _tempAspectRatio = aspectRatio;
       final ratio = _aspectRatios[aspectRatio];
-      if (ratio == null || _imageSize.isEmpty) return;
+      if (ratio == null) {
+        debugPrint('Выбрано соотношение сторон: Свободная форма');
+        return;
+      }
 
-      final center = _cropRect.center;
-      double newWidth, newHeight;
+      double newWidth = _imageSize.width * 0.8;
+      double newHeight = newWidth / ratio;
 
-      if (_cropRect.width / _cropRect.height > ratio) {
-        newHeight = _cropRect.width / ratio;
-        newWidth = _cropRect.width;
-      } else {
-        newWidth = _cropRect.height * ratio;
-        newHeight = _cropRect.height;
+      if (newHeight > _imageSize.height * 0.8) {
+        newHeight = _imageSize.height * 0.8;
+        newWidth = newHeight * ratio;
       }
 
       newWidth = newWidth.clamp(_minCropSize, _imageSize.width);
       newHeight = newHeight.clamp(_minCropSize, _imageSize.height);
 
-      _cropRect = Rect.fromCenter(
-        center: center,
-        width: newWidth,
-        height: newHeight,
-      );
+      final left = (_imageSize.width - newWidth) / 2;
+      final top = (_imageSize.height - newHeight) / 2;
 
-      _cropRect = Rect.fromLTWH(
-        _cropRect.left.clamp(0, _imageSize.width - _cropRect.width),
-        _cropRect.top.clamp(0, _imageSize.height - _cropRect.height),
-        _cropRect.width,
-        _cropRect.height,
-      );
+      _tempCropRect = Rect.fromLTWH(left, top, newWidth, newHeight);
+
+      debugPrint(
+          'Применено соотношение сторон: $aspectRatio, новая область обрезки: $_tempCropRect');
     });
   }
 
-  void _updateCropRect(Offset delta, DragHandle handle) {
-    if (!mounted) return;
-    setState(() {
-      final ratio = _aspectRatios[_selectedAspectRatio];
-      Rect newRect = _cropRect;
+  Future<void> _undo() async {
+    if (_isProcessing || _historyIndex <= 0 || !mounted) return;
+    setState(() => _isProcessing = true);
+    try {
+      final prevImage = _history[_historyIndex - 1]['image'] as Uint8List;
+      final codec = await ui.instantiateImageCodec(prevImage);
+      final frame = await codec.getNextFrame();
+      final updatedImage = frame.image;
+      codec.dispose();
 
-      switch (handle) {
-        case DragHandle.topLeft:
-          if (ratio != null) {
-            delta = _constrainDeltaForAspectRatio(delta, ratio, handle);
-          }
-          newRect = Rect.fromLTRB(
-            (_cropRect.left + delta.dx).clamp(0, _cropRect.right - _minCropSize),
-            (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - _minCropSize),
-            _cropRect.right,
-            _cropRect.bottom,
-          );
-          break;
-        case DragHandle.topRight:
-          if (ratio != null) {
-            delta = _constrainDeltaForAspectRatio(delta, ratio, handle);
-          }
-          newRect = Rect.fromLTRB(
-            _cropRect.left,
-            (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - _minCropSize),
-            (_cropRect.right + delta.dx).clamp(_cropRect.left + _minCropSize, _imageSize.width),
-            _cropRect.bottom,
-          );
-          break;
-        case DragHandle.bottomLeft:
-          if (ratio != null) {
-            delta = _constrainDeltaForAspectRatio(delta, ratio, handle);
-          }
-          newRect = Rect.fromLTRB(
-            (_cropRect.left + delta.dx).clamp(0, _cropRect.right - _minCropSize),
-            _cropRect.top,
-            _cropRect.right,
-            (_cropRect.bottom + delta.dy).clamp(_cropRect.top + _minCropSize, _imageSize.height),
-          );
-          break;
-        case DragHandle.bottomRight:
-          if (ratio != null) {
-            delta = _constrainDeltaForAspectRatio(delta, ratio, handle);
-          }
-          newRect = Rect.fromLTRB(
-            _cropRect.left,
-            _cropRect.top,
-            (_cropRect.right + delta.dx).clamp(_cropRect.left + _minCropSize, _imageSize.width),
-            (_cropRect.bottom + delta.dy).clamp(_cropRect.top + _minCropSize, _imageSize.height),
-          );
-          break;
-        case DragHandle.center:
-          final newLeft = (_cropRect.left + delta.dx).clamp(0, _imageSize.width - _cropRect.width);
-          final newTop = (_cropRect.top + delta.dy).clamp(0, _imageSize.height - _cropRect.height);
-          newRect = _cropRect.shift(Offset(newLeft - _cropRect.left, newTop - _cropRect.top));
-          break;
+      if (!mounted) return;
+
+      setState(() {
+        _historyIndex--;
+        _tempCropRect = Rect.fromLTWH(
+          _history[_historyIndex]['parameters']['crop_rect']['left'] ??
+              _tempCropRect.left,
+          _history[_historyIndex]['parameters']['crop_rect']['top'] ??
+              _tempCropRect.top,
+          _history[_historyIndex]['parameters']['crop_rect']['width'] ??
+              _tempCropRect.width,
+          _history[_historyIndex]['parameters']['crop_rect']['height'] ??
+              _tempCropRect.height,
+        );
+        _tempAspectRatio = _history[_historyIndex]['parameters']['template'] ??
+            _tempAspectRatio;
+        _uiImage?.dispose();
+        _uiImage = updatedImage;
+        _imageSize =
+            Size(updatedImage.width.toDouble(), updatedImage.height.toDouble());
+      });
+
+      debugPrint('Отмена выполнена, индекс истории: $_historyIndex');
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка отмены: $e\n$stackTrace');
+      if (mounted) {
+        _showError(
+            '${AppLocalizations.of(context)?.error ?? 'Ошибка'}: Не удалось отменить');
       }
-
-      _cropRect = newRect;
-    });
-  }
-
-  Offset _constrainDeltaForAspectRatio(Offset delta, double ratio, DragHandle handle) {
-    double dx = delta.dx;
-    double dy = delta.dy;
-
-    switch (handle) {
-      case DragHandle.topLeft:
-      case DragHandle.bottomRight:
-        if (dx.abs() > dy.abs() * ratio) {
-          dy = dx / ratio * (handle == DragHandle.topLeft ? -1 : 1);
-        } else {
-          dx = dy * ratio * (handle == DragHandle.topLeft ? -1 : 1);
-        }
-        break;
-      case DragHandle.topRight:
-      case DragHandle.bottomLeft:
-        if (dx.abs() > dy.abs() * ratio) {
-          dy = dx / ratio * (handle == DragHandle.topRight ? -1 : 1);
-        } else {
-          dx = dy * ratio * (handle == DragHandle.topRight ? -1 : 1);
-        }
-        break;
-      case DragHandle.center:
-        break;
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
-
-    return Offset(dx, dy);
   }
 
   Future<void> _applyCrop() async {
     if (_isProcessing || _uiImage == null || !mounted) return;
 
+// Сначала быстрый предпросмотр с низким качеством
+    final previewResult = await compute(_cropImageIsolate, {
+      'imageBytes': widget.image,
+      'cropRect': {
+        'left': _tempCropRect.left,
+        'top': _tempCropRect.top,
+        'width': _tempCropRect.width,
+        'height': _tempCropRect.height,
+      },
+      'quality': 0.5, // Низкое качество для предпросмотра
+    });
+
+// Показать предпросмотр
+
+// Затем полная обработка в фоне
+    final fullResult = await compute(_cropImageIsolate, {
+      'imageBytes': widget.image,
+      'cropRect': {
+        'left': _tempCropRect.left,
+        'top': _tempCropRect.top,
+        'width': _tempCropRect.width,
+        'height': _tempCropRect.height,
+      },
+      'quality': 1.0, // Полное качество
+    });
     setState(() => _isProcessing = true);
-    final localizations = AppLocalizations.of(context);
     try {
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final srcRect = _cropRect;
-      final dstRect = Rect.fromLTWH(0, 0, srcRect.width, srcRect.height);
+      final result = await compute(_cropImageIsolate, {
+        'imageBytes': widget.image,
+        'cropRect': {
+          'left': _tempCropRect.left,
+          'top': _tempCropRect.top,
+          'width': _tempCropRect.width,
+          'height': _tempCropRect.height,
+        },
+      });
 
-      canvas.drawImageRect(_uiImage!, srcRect, dstRect, Paint());
-
-      final picture = recorder.endRecording();
-      final croppedImage = await picture.toImage(srcRect.width.toInt(), srcRect.height.toInt());
-      final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.png);
-      croppedImage.dispose();
-      picture.dispose();
-      if (byteData == null) {
-        throw Exception(localizations?.invalidImage ?? 'Failed to convert cropped image to bytes');
+      final bytes = result['bytes'] as Uint8List;
+      if (bytes.isEmpty) {
+        throw Exception('Обрезанное изображение пустое');
       }
-
-      final bytes = byteData.buffer.asUint8List();
 
       String? snapshotPath;
       List<int>? snapshotBytes;
       if (!kIsWeb) {
         final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath = '${tempDir.path}/crop_${DateTime.now().millisecondsSinceEpoch}.png';
+        snapshotPath =
+            '${tempDir.path}/crop_${DateTime.now().millisecondsSinceEpoch}.png';
         final file = File(snapshotPath);
         await file.writeAsBytes(bytes);
+        if (!await file.exists()) {
+          throw Exception('Не удалось сохранить снимок в файл: $snapshotPath');
+        }
       } else {
         snapshotBytes = bytes;
       }
@@ -265,13 +401,14 @@ class _CropPanelState extends State<CropPanel> {
         imageId: widget.imageId,
         operationType: 'crop',
         operationParameters: {
-          'template': _selectedAspectRatio,
-          'aspect_ratio': _aspectRatios[_selectedAspectRatio]?.toString() ?? 'Freeform',
+          'template': _tempAspectRatio,
+          'aspect_ratio':
+              _aspectRatios[_tempAspectRatio]?.toString() ?? 'Свободная форма',
           'crop_rect': {
-            'left': _cropRect.left,
-            'top': _cropRect.top,
-            'width': _cropRect.width,
-            'height': _cropRect.height,
+            'left': _tempCropRect.left,
+            'top': _tempCropRect.top,
+            'width': _tempCropRect.width,
+            'height': _tempCropRect.height,
           },
         },
         operationDate: DateTime.now(),
@@ -280,120 +417,219 @@ class _CropPanelState extends State<CropPanel> {
       );
       final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
+      if (historyId == null || historyId <= 0) {
+        throw Exception('Не удалось сохранить историю изменений');
+      }
 
-      if (mounted) {
-        await widget.onUpdateImage(
-          bytes,
-          action: localizations?.applyCrop ?? 'Applied crop',
-          operationType: 'crop',
-          parameters: {
-            'template': _selectedAspectRatio,
-            'aspect_ratio': _aspectRatios[_selectedAspectRatio]?.toString() ?? 'Freeform',
+      if (!mounted) return;
+
+      setState(() {
+        if (_historyIndex < _history.length - 1) {
+          _history.removeRange(_historyIndex + 1, _history.length);
+        }
+        _history.add({
+          'image': bytes,
+          'action':
+              AppLocalizations.of(context)?.cropApplied ?? 'Обрезка применена',
+          'operationType': 'crop',
+          'parameters': {
+            'template': _tempAspectRatio,
+            'aspect_ratio': _aspectRatios[_tempAspectRatio]?.toString() ??
+                'Свободная форма',
             'crop_rect': {
-              'left': _cropRect.left,
-              'top': _cropRect.top,
-              'width': _cropRect.width,
-              'height': _cropRect.height,
+              'left': _tempCropRect.left,
+              'top': _tempCropRect.top,
+              'width': _tempCropRect.width,
+              'height': _tempCropRect.height,
             },
             'historyId': historyId,
           },
-        );
+        });
+        _historyIndex++;
+      });
 
-        widget.onApply(bytes);
-        widget.onCancel();
-      }
-    } catch (e) {
-      debugPrint('Crop error: $e');
+      await widget.onUpdateImage(
+        bytes,
+        action:
+            AppLocalizations.of(context)?.cropApplied ?? 'Обрезка применена',
+        operationType: 'crop',
+        parameters: {
+          'template': _tempAspectRatio,
+          'aspect_ratio':
+              _aspectRatios[_tempAspectRatio]?.toString() ?? 'Свободная форма',
+          'crop_rect': {
+            'left': _tempCropRect.left,
+            'top': _tempCropRect.top,
+            'width': _tempCropRect.width,
+            'height': _tempCropRect.height,
+          },
+          'historyId': historyId,
+        },
+      );
+
+      widget.onApply(bytes);
+      widget.onCancel();
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка обрезки: $e\n$stackTrace');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${localizations?.errorApplyCrop ?? 'Error applying crop'}: $e'),
-            backgroundColor: Colors.red[700],
-          ),
-        );
-        widget.onCancel();
+        _showError(
+            '${AppLocalizations.of(context)?.error ?? 'Ошибка'}: Не удалось применить обрезку');
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
   }
 
+  static Future<Map<String, dynamic>> _cropImageIsolate(
+      Map<String, dynamic> params) async {
+    final imageBytes = params['imageBytes'] as Uint8List;
+    final cropRect = params['cropRect'] as Map<String, dynamic>;
+
+    try {
+// Decode image using the image package
+      final image = img.decodeImage(imageBytes)!;
+
+// Crop the image
+      final cropped = img.copyCrop(
+        image,
+        x: cropRect['left'].toInt(),
+        y: cropRect['top'].toInt(),
+        width: cropRect['width'].toInt(),
+        height: cropRect['height'].toInt(),
+      );
+
+// Encode back to PNG
+      final result = img.encodePng(cropped);
+      return {'bytes': result};
+    } catch (e) {
+      debugPrint('Error in _cropImageIsolate: $e');
+      return {'bytes': Uint8List(0)};
+    }
+  }
+
+  void _resetChanges() {
+    if (!mounted) return;
+    setState(() {
+      _tempCropRect = _initialCropRect;
+      _tempAspectRatio = _initialAspectRatio;
+    });
+    widget.onCancel();
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(AppLocalizations.of(context)?.errorTitle ?? 'Ошибка'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => widget.onCancel(),
+              child: Text(AppLocalizations.of(context)?.ok ?? 'ОК'),
+            ),
+            TextButton(
+              onPressed: () {
+                widget.onCancel();
+              },
+              child: Text(AppLocalizations.of(context)?.close ?? 'Закрыть'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.black.withOpacity(0.8),
       body: SafeArea(
         child: Stack(
           children: [
             Column(
               children: [
+                _buildAppBar(theme, localizations, isDesktop),
                 Expanded(
                   child: Center(
                     child: _uiImage == null
-                        ? const CircularProgressIndicator(color: Colors.white)
+                        ? const Center(
+                            child:
+                                CircularProgressIndicator(color: Colors.blue),
+                          )
                         : FittedBox(
-                      child: SizedBox(
-                        width: _imageSize.width,
-                        height: _imageSize.height,
-                        child: GestureDetector(
-                          onPanUpdate: (details) => _updateCropRect(details.delta, DragHandle.center),
-                          child: Stack(
-                            children: [
-                              CustomPaint(
-                                painter: ImagePainter(_uiImage!),
-                              ),
-                              CustomPaint(
-                                painter: CropPainter(_cropRect, _imageSize),
+                            fit: BoxFit.contain,
+                            child: SizedBox(
+                              width: _imageSize.width,
+                              height: _imageSize.height,
+                              child: GestureDetector(
+                                onPanUpdate: (details) => _updateCropRect(
+                                    details.delta, DragHandle.center),
                                 child: Stack(
                                   children: [
-                                    Positioned(
-                                      left: _cropRect.left - 15,
-                                      top: _cropRect.top - 15,
-                                      child: GestureDetector(
-                                        onPanUpdate: (details) =>
-                                            _updateCropRect(details.delta, DragHandle.topLeft),
-                                        child: _buildHandle(),
-                                      ),
+                                    CustomPaint(
+                                      painter: ImagePainter(_uiImage!),
                                     ),
-                                    Positioned(
-                                      left: _cropRect.right - 15,
-                                      top: _cropRect.top - 15,
-                                      child: GestureDetector(
-                                        onPanUpdate: (details) =>
-                                            _updateCropRect(details.delta, DragHandle.topRight),
-                                        child: _buildHandle(),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      left: _cropRect.left - 15,
-                                      top: _cropRect.bottom - 15,
-                                      child: GestureDetector(
-                                        onPanUpdate: (details) =>
-                                            _updateCropRect(details.delta, DragHandle.bottomLeft),
-                                        child: _buildHandle(),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      left: _cropRect.right - 15,
-                                      top: _cropRect.bottom - 15,
-                                      child: GestureDetector(
-                                        onPanUpdate: (details) =>
-                                            _updateCropRect(details.delta, DragHandle.bottomRight),
-                                        child: _buildHandle(),
+                                    CustomPaint(
+                                      painter: CropPainter(
+                                          _tempCropRect, _imageSize),
+                                      child: Stack(
+                                        children: [
+                                          Positioned(
+                                            left: _tempCropRect.left - 20,
+                                            top: _tempCropRect.top - 20,
+                                            child: GestureDetector(
+                                              onPanUpdate: (details) =>
+                                                  _updateCropRect(details.delta,
+                                                      DragHandle.topLeft),
+                                              child: _buildHandle(isDesktop),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            left: _tempCropRect.right - 20,
+                                            top: _tempCropRect.top - 20,
+                                            child: GestureDetector(
+                                              onPanUpdate: (details) =>
+                                                  _updateCropRect(details.delta,
+                                                      DragHandle.topRight),
+                                              child: _buildHandle(isDesktop),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            left: _tempCropRect.left - 20,
+                                            top: _tempCropRect.bottom - 20,
+                                            child: GestureDetector(
+                                              onPanUpdate: (details) =>
+                                                  _updateCropRect(details.delta,
+                                                      DragHandle.bottomLeft),
+                                              child: _buildHandle(isDesktop),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            left: _tempCropRect.right - 20,
+                                            top: _tempCropRect.bottom - 20,
+                                            child: GestureDetector(
+                                              onPanUpdate: (details) =>
+                                                  _updateCropRect(details.delta,
+                                                      DragHandle.bottomRight),
+                                              child: _buildHandle(isDesktop),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
                   ),
                 ),
-                _buildControls(localizations),
+                _buildControls(theme, localizations, isDesktop),
               ],
             ),
             if (_isProcessing)
@@ -403,11 +639,14 @@ class _CropPanelState extends State<CropPanel> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const CircularProgressIndicator(color: Colors.white),
-                      const SizedBox(height: 16),
+                      const CircularProgressIndicator(color: Colors.blue),
+                      const SizedBox(height: 12),
                       Text(
-                        localizations?.processingCrop ?? 'Processing crop...',
-                        style: const TextStyle(color: Colors.white),
+                        localizations?.processingCrop ?? 'Обработка обрезки...',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -419,65 +658,148 @@ class _CropPanelState extends State<CropPanel> {
     );
   }
 
-  Widget _buildHandle() {
+  Widget _buildHandle(bool isDesktop) {
     return Container(
-      width: 30,
-      height: 30,
+      width: isDesktop ? 48 : 36,
+      height: isDesktop ? 48 : 36,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white.withOpacity(0.9),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.blue, width: 2),
+        border: Border.all(color: Colors.blue, width: 3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 6,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Container(
+          width: isDesktop ? 16 : 12,
+          height: isDesktop ? 16 : 12,
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildControls(AppLocalizations? localizations) {
+  Widget _buildControls(
+      ThemeData theme, AppLocalizations? localizations, bool isDesktop) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.black.withOpacity(0.9),
-      child: Column(
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _aspectRatios.keys.map((ratio) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ElevatedButton(
-                    onPressed: _isProcessing ? null : () => _applyAspectRatio(ratio),
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: _selectedAspectRatio == ratio ? Colors.blue : Colors.grey[800],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: Text(ratio, style: const TextStyle(fontSize: 14)),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: _isProcessing ? null : widget.onCancel,
-                child: Text(
-                  localizations?.cancel ?? 'Cancel',
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-              TextButton(
-                onPressed: _isProcessing ? null : _applyCrop,
-                child: Text(
-                  localizations?.applyCrop ?? 'Apply Crop',
-                  style: const TextStyle(color: Colors.blue, fontSize: 16),
-                ),
-              ),
-            ],
+      padding: EdgeInsets.symmetric(
+        vertical: isDesktop ? 12 : 8,
+        horizontal: isDesktop ? 16 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 5,
+            spreadRadius: 1,
           ),
         ],
       ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: _aspectRatios.keys.map((ratio) {
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: isDesktop ? 8 : 6),
+              child: GestureDetector(
+                onTap: _isProcessing ? null : () => _applyAspectRatio(ratio),
+                child: Container(
+                  width: isDesktop ? 90 : 70,
+                  height: isDesktop ? 60 : 48,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _tempAspectRatio == ratio
+                          ? Colors.blue
+                          : Colors.white.withOpacity(0.5),
+                      width: _tempAspectRatio == ratio ? 2.5 : 1.5,
+                    ),
+                    color: _tempAspectRatio == ratio
+                        ? Colors.blue.withOpacity(0.2)
+                        : Colors.transparent,
+                  ),
+                  child: Center(
+                    child: Text(
+                      ratio,
+                      style: TextStyle(
+                        color: _tempAspectRatio == ratio
+                            ? Colors.blue
+                            : Colors.white,
+                        fontSize: isDesktop ? 16 : 14,
+                        fontWeight: _tempAspectRatio == ratio
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppBar(
+      ThemeData theme, AppLocalizations? localizations, bool isDesktop) {
+    return AppBar(
+      backgroundColor: Colors.black.withOpacity(0.7),
+      elevation: 0,
+      leading: IconButton(
+        icon: Icon(Icons.close,
+            color: Colors.redAccent, size: isDesktop ? 28 : 24),
+        onPressed: _resetChanges,
+        tooltip: localizations?.cancel ?? 'Отмена',
+        padding: EdgeInsets.all(isDesktop ? 8 : 6),
+      ),
+      title: Text(
+        localizations?.crop ?? 'Обрезка',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: isDesktop ? 18 : 16,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(
+            Icons.undo,
+            color: _historyIndex > 0 && !_isProcessing
+                ? Colors.white
+                : Colors.grey[400],
+            size: isDesktop ? 28 : 24,
+          ),
+          onPressed: _historyIndex > 0 && !_isProcessing ? _undo : null,
+          tooltip: localizations?.undo ?? 'Отменить',
+          padding: EdgeInsets.all(isDesktop ? 8 : 6),
+        ),
+        IconButton(
+          icon: Icon(
+            Icons.check,
+            color: _isProcessing || _uiImage == null
+                ? Colors.grey[400]
+                : Colors.green,
+            size: isDesktop ? 28 : 24,
+          ),
+          onPressed: _isProcessing || _uiImage == null ? null : _applyCrop,
+          tooltip: localizations?.applyCrop ?? 'Применить обрезку',
+          padding: EdgeInsets.all(isDesktop ? 8 : 6),
+        ),
+      ],
     );
   }
 }
@@ -487,7 +809,7 @@ enum DragHandle { topLeft, topRight, bottomLeft, bottomRight, center }
 class ImagePainter extends CustomPainter {
   final ui.Image image;
 
-  ImagePainter(this.image);
+  const ImagePainter(this.image);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -495,7 +817,8 @@ class ImagePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(ImagePainter oldDelegate) => oldDelegate.image != image;
+  bool shouldRepaint(covariant ImagePainter oldDelegate) =>
+      oldDelegate.image != image;
 }
 
 class CropPainter extends CustomPainter {
@@ -510,12 +833,24 @@ class CropPainter extends CustomPainter {
       ..color = Colors.black.withOpacity(0.5)
       ..style = PaintingStyle.fill;
 
-    canvas.drawRect(Rect.fromLTWH(0, 0, imageSize.width, cropRect.top), overlayPaint);
     canvas.drawRect(
-        Rect.fromLTWH(0, cropRect.bottom, imageSize.width, imageSize.height - cropRect.bottom), overlayPaint);
-    canvas.drawRect(Rect.fromLTWH(0, cropRect.top, cropRect.left, cropRect.height), overlayPaint);
+      Rect.fromLTWH(0, 0, imageSize.width, cropRect.top),
+      overlayPaint,
+    );
     canvas.drawRect(
-        Rect.fromLTWH(cropRect.right, cropRect.top, imageSize.width - cropRect.right, cropRect.height), overlayPaint);
+      Rect.fromLTWH(0, cropRect.bottom, imageSize.width,
+          imageSize.height - cropRect.bottom),
+      overlayPaint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, cropRect.top, cropRect.left, cropRect.height),
+      overlayPaint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(cropRect.right, cropRect.top,
+          imageSize.width - cropRect.right, cropRect.height),
+      overlayPaint,
+    );
 
     final borderPaint = Paint()
       ..color = Colors.white
@@ -524,14 +859,14 @@ class CropPainter extends CustomPainter {
     canvas.drawRect(cropRect, borderPaint);
 
     final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.5)
+      ..color = Colors.white.withOpacity(0.7)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
     final thirdWidth = cropRect.width / 3;
     final thirdHeight = cropRect.height / 3;
 
-    for (int i = 1; i < 3; i++) {
+    for (var i = 1; i < 3; i++) {
       canvas.drawLine(
         Offset(cropRect.left + thirdWidth * i, cropRect.top),
         Offset(cropRect.left + thirdWidth * i, cropRect.bottom),
@@ -546,6 +881,6 @@ class CropPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CropPainter oldDelegate) =>
+  bool shouldRepaint(covariant CropPainter oldDelegate) =>
       oldDelegate.cropRect != cropRect || oldDelegate.imageSize != imageSize;
 }

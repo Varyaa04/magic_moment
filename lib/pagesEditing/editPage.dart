@@ -1,16 +1,23 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:MagicMoment/pagesEditing/rotatePanel.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
-import 'package:universal_io/io.dart';
-import 'package:universal_html/html.dart' as html;
-import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:universal_html/html.dart' as html
+    if (dart.library.io) 'dart:io';
+import 'package:share_plus/share_plus.dart';
+import 'package:gallery_saver_plus/gallery_saver.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../database/editHistory.dart';
 import '../database/editHistoryManager.dart';
 import '../database/magicMomentDatabase.dart';
+import '../pagesSettings/classesSettings/app_localizations.dart';
 import 'annotation/eraserPanel.dart';
 import 'background/backgroundPanel.dart';
 import 'effects/effectsPanel.dart';
@@ -21,15 +28,91 @@ import 'adjustsButtonsPanel.dart';
 import 'annotation/drawPanel.dart';
 import 'annotation/textEditorPanel.dart';
 import 'annotation/emojiPanel.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+
+// Утилиты для адаптивного дизайна
+class ResponsiveUtils {
+// Получение адаптивной ширины
+  static double getResponsiveWidth(BuildContext context, double percentage) {
+    return MediaQuery.of(context).size.width * percentage;
+  }
+
+// Получение адаптивной высоты
+  static double getResponsiveHeight(BuildContext context, double percentage) {
+    return MediaQuery.of(context).size.height * percentage;
+  }
+
+// Получение адаптивного размера шрифта
+  static double getResponsiveFontSize(BuildContext context, double baseSize) {
+    final width = MediaQuery.of(context).size.width;
+    return baseSize * (width / 600).clamp(0.8, 1.5);
+  }
+
+// Проверка, является ли устройство десктопным
+  static bool isDesktop(BuildContext context) {
+    if (kIsWeb) {
+      return MediaQuery.of(context).size.width > 800;
+    }
+    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
+
+// Получение адаптивных отступов
+  static EdgeInsets getResponsivePadding(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return EdgeInsets.symmetric(
+      horizontal: width * 0.02,
+      vertical: width * 0.01,
+    );
+  }
+}
+
+// Реализация LRU-кэша
+class LRUCache<K, V> {
+  final int capacity;
+  final Map<K, V> _cache = {};
+  final List<K> _keys = [];
+
+  LRUCache(this.capacity);
+
+// Получение значения из кэша
+  V? get(K key) {
+    if (_cache.containsKey(key)) {
+      _keys.remove(key);
+      _keys.add(key);
+      return _cache[key];
+    }
+    return null;
+  }
+
+// Добавление значения в кэш
+  void put(K key, V value) {
+    if (_cache.containsKey(key)) {
+      _keys.remove(key);
+    } else if (_cache.length >= capacity) {
+      final oldestKey = _keys.removeAt(0);
+      _cache.remove(oldestKey);
+    }
+    _cache[key] = value;
+    _keys.add(key);
+  }
+
+// Очистка кэша
+  void clear() {
+    _cache.clear();
+    _keys.clear();
+  }
+}
 
 class EditPage extends StatefulWidget {
-  final dynamic imageBytes;
+  final Uint8List imageBytes;
   final int imageId;
+  final bool isFromCollage; // Параметр для проверки происхождения изображения
 
   const EditPage({
     super.key,
     required this.imageBytes,
     required this.imageId,
+    this.isFromCollage = false, // По умолчанию false
   });
 
   @override
@@ -45,7 +128,7 @@ class EditState {
 }
 
 class _EditPageState extends State<EditPage> {
-  final ValueNotifier<Uint8List> _currentImage = ValueNotifier(Uint8List(0));
+  final ValueNotifier<Uint8List?> _currentImage = ValueNotifier(null);
   late Uint8List _originalImage;
   late EditHistoryManager _historyManager;
   final ValueNotifier<Size> _imageSize = ValueNotifier(Size.zero);
@@ -58,39 +141,41 @@ class _EditPageState extends State<EditPage> {
   final ValueNotifier<bool> _isProcessing = ValueNotifier(false);
   final ValueNotifier<double> _loadingProgress = ValueNotifier(0.0);
   final List<EditState> _history = [];
+  List<EditHistory> _cachedHistory = [];
   int _currentHistoryIndex = -1;
-  final int _maxHistorySteps = 30;
+  final int _maxHistorySteps = 20;
   bool _isHistoryEnabled = true;
-  final Map<String, Uint8List> _imageCache = {};
-  final Map<int, Uint8List> _webHistorySnapshots = {};
+  final LRUCache<int, Uint8List> _imageCache = LRUCache(10);
+  Timer? _debounceTimer;
+
   @override
   void initState() {
     super.initState();
     _initializeApp();
   }
 
+// Инициализация приложения
   Future<void> _initializeApp() async {
     try {
-// Быстрая инициализация основных переменных
-      _currentImage.value = widget.imageBytes is Uint8List
-          ? widget.imageBytes as Uint8List
-          : Uint8List(0);
-      _originalImage = Uint8List.fromList(_currentImage.value);
+      if (widget.imageBytes.isEmpty) {
+        throw Exception('Пустые данные изображения');
+      }
+      _currentImage.value = widget.imageBytes;
+      _originalImage = Uint8List.fromList(widget.imageBytes);
       _historyManager = EditHistoryManager(
         db: MagicMomentDatabase.instance,
         imageId: widget.imageId,
       );
 
-// Параллельная загрузка истории и инициализация изображения
-      await Future.wait([
-        _loadHistory(),
-        _initializeImage(),
-      ]);
-    } catch (e) {
-      debugPrint('Initialization error: $e');
+      await Future.wait([_initializeImage()]);
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка инициализации: $e\nСтек: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to initialize: $e')),
+          SnackBar(
+            content: Text('Не удалось инициализировать: $e'),
+            backgroundColor: Colors.red[700],
+          ),
         );
         Navigator.of(context).pop();
       }
@@ -99,6 +184,7 @@ class _EditPageState extends State<EditPage> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _currentImage.dispose();
     _imageSize.dispose();
     _isInitialized.dispose();
@@ -109,40 +195,11 @@ class _EditPageState extends State<EditPage> {
     _isRedoAvailable.dispose();
     _isProcessing.dispose();
     _loadingProgress.dispose();
-    if (kIsWeb) {
-      _webHistorySnapshots.clear();
-    } else {
-      _historyManager.db.getAllHistoryForImage(widget.imageId).then((history) async {
-        for (var entry in history) {
-          if (entry.snapshotPath != null) {
-            final file = File(entry.snapshotPath!);
-            if (await file.exists()) {
-              await file.delete();
-            }
-          }
-        }
-      });
-    }
+    _imageCache.clear();
     super.dispose();
   }
 
-  Future<void> _loadHistory() async {
-    try {
-      await _historyManager.loadHistory();
-      _updateUndoRedoState();
-    } catch (e) {
-      debugPrint('Error loading history: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                '${AppLocalizations.of(context)?.error ?? 'Error'}: Failed to load edit history.'),
-          ),
-        );
-      }
-    }
-  }
-
+// Инициализация изображения
   Future<void> _initializeImage() async {
     if (!mounted) return;
 
@@ -150,49 +207,30 @@ class _EditPageState extends State<EditPage> {
     _loadingProgress.value = 0.1;
 
     try {
-      Uint8List bytes;
-
-      if (widget.imageBytes is Uint8List) {
-        bytes = widget.imageBytes;
-      } else {
-        throw Exception('Unsupported image type');
-      }
-
-      if (bytes.isEmpty) {
-        throw Exception('Empty image data');
+      final bytes = await _resizeImage(widget.imageBytes,
+          maxWidth: 1080, preserveTransparency: true);
+      if (bytes == null || bytes.isEmpty) {
+        throw Exception('Не удалось изменить размер изображения');
       }
 
       _loadingProgress.value = 0.3;
 
-// Оптимизированное декодирование изображения
-      final completer = Completer<ui.Image>();
-      ui.decodeImageFromList(bytes, (ui.Image img) {
-        completer.complete(img);
-      });
-
-      _loadingProgress.value = 0.5;
-
-      final image = await completer.future.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => throw Exception('Image decoding timeout'),
-      );
-
-      _loadingProgress.value = 0.8;
-
       _currentImage.value = bytes;
       _originalImage = Uint8List.fromList(bytes);
-      _imageSize.value = Size(image.width.toDouble(), image.height.toDouble());
+      _imageSize.value = await _decodeImageSize(bytes);
       _isInitialized.value = true;
 
-      image.dispose();
       _resetHistory();
 
       _loadingProgress.value = 1.0;
-    } catch (e) {
-      debugPrint('Error initializing image: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка инициализации изображения: $e\nСтек: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading image: $e')),
+          SnackBar(
+            content: Text('Ошибка загрузки изображения: $e'),
+            backgroundColor: Colors.red[700],
+          ),
         );
         _isInitialized.value = true;
         Navigator.of(context).pop();
@@ -204,89 +242,238 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-  Uint8List _compressImage(Uint8List imageData) {
-    final decoded = img.decodeImage(imageData);
-    if (decoded == null) return imageData;
-    return Uint8List.fromList(img.encodeJpg(decoded, quality: 80)); // Сжатие до 80%
+// Декодирование размера изображения
+  Future<Size> _decodeImageSize(Uint8List bytes) async {
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromList(bytes, (ui.Image img) {
+      completer.complete(img);
+    });
+    final image = await completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => throw Exception('Тайм-аут декодирования изображения'),
+    );
+    final size = Size(image.width.toDouble(), image.height.toDouble());
+    image.dispose();
+    return size;
   }
 
+// Очистка параметров для сериализации
+  Map<String, dynamic> _sanitizeParameters(Map<String, dynamic> parameters) {
+    final sanitized = <String, dynamic>{};
+    for (var entry in parameters.entries) {
+      if (entry.value is num ||
+          entry.value is String ||
+          entry.value is bool ||
+          entry.value is List ||
+          entry.value is Map ||
+          entry.value == null) {
+        sanitized[entry.key] = entry.value;
+      } else {
+        debugPrint('Пропуск несереализуемого параметра: ${entry.key}');
+        sanitized[entry.key] = entry.value.toString();
+      }
+    }
+    return sanitized;
+  }
+
+// Обновление изображения
+  Future<void> _updateImage(
+    Uint8List newImage, {
+    String? action,
+    String? operationType,
+    Map<String, dynamic>? parameters,
+  }) async {
+    if (newImage.isEmpty) {
+      debugPrint(
+          'Ошибка: newImage пустое в _updateImage, действие: $action, тип операции: $operationType');
+      return;
+    }
+    if (!mounted || listEquals(_currentImage.value, newImage)) return;
+
+// Отменяем предыдущий таймер дебансинга, если он существует
+    _debounceTimer?.cancel();
+
+// Запускаем обновление с небольшой задержкой для дебансинга
+    _debounceTimer = Timer(const Duration(milliseconds: 100), () async {
+      if (!mounted) return; // Exit if widget is disposed
+      setState(() => _isProcessing.value = true);
+      try {
+        final bool preserveTransparency = operationType == 'Eraser' ||
+            operationType == 'object_removal' ||
+            operationType == 'collage';
+        final bytes = await _compressImage(newImage,
+            quality: 70,
+            maxWidth: 800,
+            preserveTransparency: preserveTransparency);
+        if (bytes.isEmpty) {
+          throw Exception('Не удалось изменить размер изображения');
+        }
+        if (!mounted) return; // Check again before updating ValueNotifier
+        _currentImage.value = bytes;
+        _imageCache.put(_currentHistoryIndex + 1, bytes);
+
+        _imageSize.value = await _decodeImageSize(bytes);
+
+        await _addHistoryState(action ?? 'Обновление');
+        if (parameters != null && operationType != null) {
+          final serializableParameters = _sanitizeParameters(parameters);
+          await _historyManager.addOperation(
+            context: context,
+            operationType: operationType,
+            parameters: serializableParameters,
+            snapshotBytes: bytes,
+          );
+        }
+        debugPrint(
+            'Изображение обновлено: $operationType, размер: ${bytes.length} байт');
+        _updateUndoRedoState();
+      } catch (e, stackTrace) {
+        debugPrint('Ошибка обновления изображения: $e\nСтек: $stackTrace');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка обновления изображения: $e'),
+              backgroundColor: Colors.red[700],
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isProcessing.value = false);
+        }
+      }
+    });
+  }
+
+// Сжатие изображения
+  Future<Uint8List> _compressImage(Uint8List imageBytes,
+      {int quality = 80,
+      int maxWidth = 1080,
+      bool preserveTransparency = false}) async {
+    return await compute(_compressImageIsolate, {
+      'imageBytes': imageBytes,
+      'quality': quality,
+      'maxWidth': maxWidth,
+      'preserveTransparency': preserveTransparency,
+    });
+  }
+
+// Сжатие изображения в изоляте
+  static Uint8List _compressImageIsolate(Map<String, dynamic> params) {
+    final imageBytes = params['imageBytes'] as Uint8List;
+    final quality = params['quality'] as int;
+    final maxWidth = params['maxWidth'] as int;
+    final preserveTransparency = params['preserveTransparency'] as bool;
+
+    debugPrint(
+        'Начало _compressImageIsolate: размер входного изображения=${imageBytes.length} байт');
+    try {
+      if (imageBytes.isEmpty) {
+        throw Exception(
+            'Пустой массив байтов изображения в _compressImageIsolate');
+      }
+      if (preserveTransparency) {
+        final decoded = img.decodeImage(imageBytes);
+        if (decoded == null) {
+          debugPrint('Не удалось декодировать изображение в _compressImage');
+          return imageBytes;
+        }
+        final resized =
+            img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+        final compressed = img.encodePng(resized, level: 6);
+        debugPrint(
+            'Сжатое изображение (PNG): оригинал=${imageBytes.length}, сжатое=${compressed.length}');
+        return Uint8List.fromList(compressed);
+      } else {
+// Используем img.encodeJpg вместо FlutterImageCompress для упрощения
+        final decoded = img.decodeImage(imageBytes);
+        if (decoded == null) {
+          debugPrint('Не удалось декодировать изображение в _compressImage');
+          return imageBytes;
+        }
+        final resized =
+            img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+        final compressed = img.encodeJpg(resized, quality: quality);
+        debugPrint(
+            'Сжатое изображение (JPEG): оригинал=${imageBytes.length}, сжатое=${compressed.length}');
+        return Uint8List.fromList(compressed);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка сжатия изображения: $e\nСтек: $stackTrace');
+      return imageBytes;
+    }
+  }
+
+// Обновление состояния отмены/повтора
   void _updateUndoRedoState() {
     _isUndoAvailable.value = _historyManager.canUndo;
     _isRedoAvailable.value = _historyManager.canRedo;
   }
 
-  Future<void> _initPage() async {
-    _originalImage = Uint8List.fromList(widget.imageBytes);
-    Uint8List resized = await compute(_resizeImage, _originalImage);
-    _currentImage.value = resized;
-
-    _historyManager = EditHistoryManager(
-      db: MagicMomentDatabase.instance,
-      imageId: widget.imageId,
-    );
-
-    await _historyManager.loadHistory();
-    _isInitialized.value = true;
+// Изменение размера изображения
+  Future<Uint8List?> _resizeImage(Uint8List imageData,
+      {int maxWidth = 1080, bool preserveTransparency = false}) async {
+    try {
+      final decoded = img.decodeImage(imageData);
+      if (decoded == null) {
+        debugPrint('Не удалось декодировать изображение в _resizeImage');
+        return null;
+      }
+      final resized =
+          img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+      final compressed = preserveTransparency
+          ? img.encodePng(resized, level: 6)
+          : img.encodeJpg(resized, quality: 80);
+      debugPrint(
+          'Измененный размер изображения: размер=${compressed.length} байт');
+      return Uint8List.fromList(compressed);
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка изменения размера изображения: $e\nСтек: $stackTrace');
+      return null;
+    }
   }
 
-  static Uint8List _resizeImage(Uint8List imageData) {
-    final decoded = img.decodeImage(imageData);
-    if (decoded == null) return imageData;
-    final resized = img.copyResize(decoded, width: 1080);
-    return Uint8List.fromList(img.encodeJpg(resized));
-  }
-
+// Сброс истории
   void _resetHistory() {
     final localizations = AppLocalizations.of(context);
     _history.clear();
-    _webHistorySnapshots.clear();
     _imageCache.clear();
-    _addHistoryState(localizations?.create ?? 'Original image');
+    _cachedHistory.clear();
+    _addHistoryState(localizations?.create ?? 'Оригинальное изображение');
     _currentHistoryIndex = 0;
   }
 
+// Отмена действия
   void _undo() async {
     if (!_isUndoAvailable.value) return;
 
     setState(() => _isProcessing.value = true);
     try {
       final entry = await _historyManager.undo();
-      if (entry == null) return;
-
-      Uint8List bytes;
-      if (kIsWeb && _webHistorySnapshots.containsKey(_currentHistoryIndex - 1)) {
-        bytes = _webHistorySnapshots[_currentHistoryIndex - 1]!;
-      } else if (entry.snapshotPath != null) {
-        final file = File(entry.snapshotPath!);
-        if (await file.exists()) {
-          bytes = await _resizeImage(await file.readAsBytes());
-        } else {
-          throw Exception('History file not found');
-        }
-      } else {
-        throw Exception('No snapshot available');
+      if (entry == null) {
+        throw Exception('Нет записей в истории для отмены');
       }
 
-      final completer = Completer<ui.Image>();
-      ui.decodeImageFromList(bytes, (ui.Image img) {
-        completer.complete(img);
-      });
-      final image = await completer.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw Exception('Image decoding timeout'),
-      );
-      final newSize = Size(image.width.toDouble(), image.height.toDouble());
-      image.dispose();
+      final bytes = entry.snapshotBytes != null
+          ? Uint8List.fromList(entry.snapshotBytes!)
+          : throw Exception('Нет данных снимка для отмены');
+
+      if (bytes.isEmpty) {
+        throw Exception('Пустые данные снимка для отмены');
+      }
 
       _currentImage.value = bytes;
-      _imageSize.value = newSize;
-      _currentHistoryIndex--;
-      _historyManager.setCurrentIndex(_currentHistoryIndex);
+      _imageSize.value = await _decodeImageSize(bytes);
+      _currentHistoryIndex = _historyManager.currentIndex;
       _updateUndoRedoState();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка отмены: $e\nСтек: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error undoing action: $e')),
+          SnackBar(
+            content: Text('Ошибка при отмене действия: $e'),
+            backgroundColor: Colors.red[700],
+          ),
         );
       }
     } finally {
@@ -294,48 +481,37 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
+// Повтор действия
   void _redo() async {
     if (!_isRedoAvailable.value) return;
 
     setState(() => _isProcessing.value = true);
     try {
       final entry = await _historyManager.redo();
-      if (entry == null) return;
-
-      Uint8List bytes;
-      if (kIsWeb &&
-          _webHistorySnapshots.containsKey(_currentHistoryIndex + 1)) {
-        bytes = _webHistorySnapshots[_currentHistoryIndex + 1]!;
-      } else if (entry.snapshotPath != null) {
-        final file = File(entry.snapshotPath!);
-        if (await file.exists()) {
-          bytes = await _resizeImage(await file.readAsBytes());
-        } else {
-          throw Exception('History file not found');
-        }
-      } else {
-        throw Exception('No snapshot available');
+      if (entry == null) {
+        throw Exception('Нет записей в истории для повтора');
       }
 
-      final completer = Completer<ui.Image>();
-      ui.decodeImageFromList(bytes, (ui.Image img) {
-        completer.complete(img);
-      });
-      final image = await completer.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw Exception('Image decoding timeout'),
-      );
-      final newSize = Size(image.width.toDouble(), image.height.toDouble());
-      image.dispose();
+      final bytes = entry.snapshotBytes != null
+          ? Uint8List.fromList(entry.snapshotBytes!)
+          : throw Exception('Нет данных снимка для повтора');
+
+      if (bytes.isEmpty) {
+        throw Exception('Пустые данные снимка для повтора');
+      }
 
       _currentImage.value = bytes;
-      _imageSize.value = newSize;
-      _currentHistoryIndex++;
+      _imageSize.value = await _decodeImageSize(bytes);
+      _currentHistoryIndex = _historyManager.currentIndex; // Обновляем индекс
       _updateUndoRedoState();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка повтора: $e\nСтек: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error redoing action: $e')),
+          SnackBar(
+            content: Text('Ошибка при повторе действия: $e'),
+            backgroundColor: Colors.red[700],
+          ),
         );
       }
     } finally {
@@ -343,58 +519,93 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-  void _addHistoryState(String description) async {
-    if (!_isHistoryEnabled) return;
-
-    String? snapshotPath;
-    if (!kIsWeb) {
-      final tempDir = await Directory.systemTemp.createTemp();
-      snapshotPath = '${tempDir.path}/snapshot_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File(snapshotPath);
-      await file.writeAsBytes(_currentImage.value);
-    } else {
-      _webHistorySnapshots[_history.length] = Uint8List.fromList(_currentImage.value);
+// Добавление состояния в историю
+  Future<void> _addHistoryState(String description) async {
+    if (!_isHistoryEnabled ||
+        _currentImage.value == null ||
+        _currentImage.value!.isEmpty) {
+      debugPrint(
+          'Ошибка: Невозможно сохранить историю — нет данных изображения');
+      return;
     }
 
-    await _historyManager.addOperation(
-      context: context, // Pass context
+    final snapshotBytes = await _compressImage(_currentImage.value!,
+        quality: 70, maxWidth: 800, preserveTransparency: true);
+
+    final historyEntry = await _historyManager.addOperation(
+      context: context,
       operationType: description,
       parameters: {},
-      snapshotPath: snapshotPath,
+      snapshotBytes: snapshotBytes,
     );
+    _cachedHistory.add(historyEntry);
+    _imageCache.put(historyEntry.historyId!, snapshotBytes);
 
-    _history.add(EditState(Uint8List.fromList(_currentImage.value), description));
+    _history.add(EditState(snapshotBytes, description));
     if (_history.length > _maxHistorySteps) {
       _history.removeAt(0);
-      if (kIsWeb) {
-        _webHistorySnapshots.remove(0);
-      }
+      _cachedHistory.removeAt(0);
     }
-    _currentHistoryIndex = _history.length - 1;
+    _currentHistoryIndex = _historyManager.currentIndex;
     _updateUndoRedoState();
   }
 
+// Валидация байтов изображения
+  Uint8List validateImageBytes(Uint8List? bytes, String context) {
+    if (bytes == null) {
+      debugPrint('Ошибка: $context: Байты изображения null');
+      throw Exception('$context: Байты изображения null');
+    }
+    if (bytes.isEmpty) {
+      debugPrint('Ошибка: $context: Байты изображения пустые');
+      throw Exception('$context: Байты изображения пустые');
+    }
+    return bytes;
+  }
+
+// Сохранение изображения в высоком качестве
   Future<void> _saveImage() async {
     final localizations = AppLocalizations.of(context);
-    if (!_isInitialized.value || !mounted) return;
+    if (!_isInitialized.value || !mounted || _currentImage.value == null) {
+      return;
+    }
 
     final selectedFormat = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(localizations?.save ?? 'Save Image'),
-        content: Text(localizations?.chooseFormat ?? 'Choose image format:'),
+        backgroundColor: Colors.grey[850],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          localizations?.save ?? 'Сохранить изображение',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          localizations?.chooseFormat ?? 'Выберите формат изображения:',
+          style: const TextStyle(color: Colors.white70),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop('PNG'),
-            child: Text(localizations?.pngTr ?? 'PNG (with transparency)'),
+            child: Text(
+              localizations?.pngTr ?? 'PNG (с прозрачностью)',
+              style: const TextStyle(color: Colors.white70),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop('JPEG'),
-            child: const Text('JPEG'),
+            child: const Text(
+              'JPEG',
+              style: TextStyle(color: Colors.white70),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(null),
-            child: Text(localizations?.cancel ?? 'Cancel'),
+            child: Text(
+              localizations?.cancel ?? 'Отмена',
+              style: const TextStyle(color: Colors.white70),
+            ),
           ),
         ],
       ),
@@ -404,23 +615,56 @@ class _EditPageState extends State<EditPage> {
 
     setState(() => _isProcessing.value = true);
     try {
-      if (kIsWeb) {
-        await _downloadImageWeb(_currentImage.value, format: selectedFormat);
+      Uint8List bytes;
+      if (selectedFormat == 'PNG') {
+        final decoded = img.decodeImage(_currentImage.value!);
+        if (decoded == null) {
+          throw Exception('Не удалось декодировать изображение для сохранения');
+        }
+        bytes =
+            Uint8List.fromList(img.encodePng(decoded, level: 0)); // Без сжатия
       } else {
-        await _saveImageToGallery(_currentImage.value, format: selectedFormat);
+        final decoded = img.decodeImage(_currentImage.value!);
+        if (decoded == null) {
+          throw Exception('Не удалось декодировать изображение для сохранения');
+        }
+        bytes = Uint8List.fromList(img.encodeJpg(decoded, quality: 100));
       }
+
+      if (kIsWeb) {
+        await _downloadImageWeb(bytes, format: selectedFormat);
+      } else {
+        final hasPermission = await _requestPermissions();
+        if (!hasPermission) {
+          throw Exception(
+              localizations?.permissionDenied ?? 'Доступ к хранилищу запрещен');
+        }
+        await _saveImageToGallery(bytes, format: selectedFormat);
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(localizations?.saveSuccess ?? 'Image saved successfully'),
+            content: Text(
+              localizations?.saveSuccess ?? 'Изображение успешно сохранено',
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.green[700],
             duration: const Duration(seconds: 2),
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка сохранения изображения: $e\nСтек: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${localizations?.error ?? 'Error'}: $e')),
+          SnackBar(
+            content: Text(
+              '${localizations?.error ?? 'Ошибка'}: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red[700],
+          ),
         );
       }
     } finally {
@@ -428,155 +672,157 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-  Future<void> _saveImageToGallery(Uint8List bytes, {required String format}) async {
+// Запрос разрешений
+  Future<bool> _requestPermissions() async {
+    if (Platform.isAndroid) {
+      final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      final sdkVersion = deviceInfo.version.sdkInt;
+
+      if (sdkVersion >= 33) {
+        final photosStatus = await Permission.photos.request();
+        if (photosStatus.isGranted) {
+          return true;
+        }
+        final writeStatus = await Permission.photosAddOnly.request();
+        if (writeStatus.isGranted) {
+          return true;
+        }
+      } else {
+        final storageStatus = await Permission.storage.request();
+        if (storageStatus.isGranted) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return true;
+  }
+
+// Сохранение изображения в галерею
+  Future<void> _saveImageToGallery(Uint8List bytes,
+      {required String format}) async {
     final localizations = AppLocalizations.of(context);
     try {
-      final tempDir = await Directory.systemTemp.createTemp();
+      final tempDir = await getTemporaryDirectory();
       final extension = format.toLowerCase();
-      final imagePath = '${tempDir.path}/image_${DateTime.now().millisecondsSinceEpoch}.$extension';
-      final file = File(imagePath);
+      final filePath =
+          '${tempDir.path}/MagicMoment_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final file = File(filePath);
 
-      if (format == 'JPEG') {
-        final decodedImage = img.decodeImage(bytes);
-        if (decodedImage == null) {
-          throw Exception(localizations?.errorDecode ?? 'Failed to decode image');
-        }
-        final jpegBytes = img.encodeJpg(decodedImage, quality: 90);
-        await file.writeAsBytes(jpegBytes);
-      } else {
-        await file.writeAsBytes(bytes);
+      await file.writeAsBytes(bytes);
+
+      final result =
+          await GallerySaver.saveImage(filePath, albumName: 'MagicMoment');
+
+      if (result == null) {
+        throw Exception(localizations?.errorSaveGallery ??
+            'Не удалось сохранить изображение в галерею');
       }
 
-      const channel = MethodChannel('gallery_saver');
-      final result = await channel.invokeMethod('saveImage', imagePath);
-      if (result != true) {
-        throw Exception(localizations?.errorSaveGallery ?? 'Failed to save image to gallery');
-      }
-    } catch (e) {
-      debugPrint('Error saving image: $e');
-      rethrow;
+      await file.delete();
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка сохранения в галерею: $e\nСтек: $stackTrace');
+      throw Exception(localizations?.errorSaveGallery ??
+          'Не удалось сохранить изображение в галерею: $e');
     }
   }
 
-  Future<void> _downloadImageWeb(Uint8List bytes, {required String format}) async {
+// Поделиться изображением
+  Future<void> _shareImage() async {
+    final localizations = AppLocalizations.of(context);
+    if (!_isInitialized.value || !mounted || _currentImage.value == null) {
+      return;
+    }
+
+    setState(() => _isProcessing.value = true);
+    try {
+      final bytes = await _compressImage(_currentImage.value!,
+          quality: 90, maxWidth: 1080, preserveTransparency: true);
+      final tempDir = await getTemporaryDirectory();
+      final filePath =
+          '${tempDir.path}/MagicMoment_share_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(filePath);
+
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles([XFile(filePath)],
+          text: localizations?.shareText ??
+              'Посмотрите мое отредактированное изображение в MagicMoment!');
+      await file.delete();
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка при поделиться изображением: $e\nСтек: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${localizations?.error ?? 'Ошибка'}: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red[700],
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isProcessing.value = false);
+    }
+  }
+
+// Скачивание изображения на веб-платформе
+  Future<void> _downloadImageWeb(Uint8List bytes,
+      {required String format}) async {
     final localizations = AppLocalizations.of(context);
     try {
       Uint8List formattedBytes;
       String mimeType;
 
       if (format == 'JPEG') {
-        final decodedImage = img.decodeImage(bytes);
-        if (decodedImage == null) {
-          throw Exception(localizations?.errorDecode ?? 'Failed to decode image');
-        }
-        formattedBytes = img.encodeJpg(decodedImage, quality: 90);
+        formattedBytes = bytes; // Уже в высоком качестве
         mimeType = 'image/jpeg';
       } else {
-        formattedBytes = bytes;
+        formattedBytes = bytes; // Уже в высоком качестве
         mimeType = 'image/png';
       }
 
       final blob = html.Blob([formattedBytes], mimeType);
       final url = html.Url.createObjectUrlFromBlob(blob);
       final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', 'image_${DateTime.now().millisecondsSinceEpoch}.${format.toLowerCase()}')
+        ..setAttribute('download',
+            'MagicMoment_${DateTime.now().millisecondsSinceEpoch}.${format.toLowerCase()}')
         ..click();
       html.Url.revokeObjectUrl(url);
-    } catch (e) {
-      debugPrint('Error downloading image: $e');
-      throw Exception(localizations?.errorDownload ?? 'Failed to download image: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка скачивания изображения: $e\nСтек: $stackTrace');
+      throw Exception(
+          localizations?.errorDownload ?? 'Не удалось скачать изображение: $e');
     }
   }
 
-// In editPage.dart, _updateImage (replace around line 500)
-  Future<void> _updateImage(
-      Uint8List newImage, {
-        String? action,
-        String? operationType,
-        Map<String, dynamic>? parameters,
-      }) async {
-    if (!mounted || listEquals(_currentImage.value, newImage)) return;
-
-    setState(() => _isProcessing.value = true);
-    try {
-      final bytes = await _resizeImage(newImage);
-      final completer = Completer<ui.Image>();
-      ui.decodeImageFromList(bytes, (ui.Image img) {
-        completer.complete(img);
-      });
-      final image = await completer.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw Exception(AppLocalizations.of(context)?.errorDecode ?? 'Image decoding timeout'),
-      );
-      final newSize = Size(image.width.toDouble(), image.height.toDouble());
-      image.dispose(); // Освобождаем ui.Image
-
-      _currentImage.value = bytes;
-      _imageSize.value = newSize;
-
-      if (action != null && operationType != null && parameters != null) {
-        String? snapshotPath;
-        List<int>? snapshotBytes;
-        if (!kIsWeb) {
-          final tempDir = await Directory.systemTemp.createTemp();
-          snapshotPath = '${tempDir.path}/snapshot_${DateTime.now().millisecondsSinceEpoch}.png';
-          final file = File(snapshotPath);
-          await file.writeAsBytes(bytes);
-        } else {
-          snapshotBytes = Uint8List.fromList(bytes);
-        }
-
-        await _historyManager.addOperation(
-          context: context, // Pass context
-          operationType: operationType,
-          parameters: parameters,
-          snapshotPath: snapshotPath,
-          snapshotBytes: snapshotBytes,
-        );
-        _history.add(EditState(Uint8List.fromList(bytes), operationType));
-        if (_history.length > _maxHistorySteps) {
-          _history.removeAt(0);
-          if (kIsWeb) {
-            _webHistorySnapshots.remove(0);
-          } else {
-            // Use _historyManager's history instead of _history
-            final managerHistory = await _historyManager.db.getAllHistoryForImage(widget.imageId);
-            if (managerHistory.isNotEmpty && managerHistory.first.snapshotPath != null) {
-              final file = File(managerHistory.first.snapshotPath!);
-              if (await file.exists()) {
-                await file.delete();
-              }
-            }
-          }
-        }
-        _currentHistoryIndex = _history.length - 1;
-        _updateUndoRedoState();
-      }
-    } catch (e) {
-      debugPrint('Error updating image: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocalizations.of(context)?.error ?? 'Error'}: $e')),
-        );
-      }
-    } finally {
-      setState(() => _isProcessing.value = false);
-    }
-  }
-
+// Обработка выбора инструмента
   void _handleToolSelected(String tool) {
+    final localizations = AppLocalizations.of(context);
+    if (_currentImage.value == null || _currentImage.value!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localizations?.error ?? 'Изображение не загружено',
+            style: const TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Colors.red[700],
+        ),
+      );
+      return;
+    }
+
     _activeTool.value = tool;
     _showToolsPanel.value = false;
-    _selectedAdjustTool.value = null;
   }
 
+// Закрытие панели инструментов
   void _closeToolPanel() {
     _activeTool.value = null;
-    _selectedAdjustTool.value = null;
   }
 
-
-
+// Подтверждение навигации назад
   Future<void> _confirmBackNavigation() async {
     final localizations = AppLocalizations.of(context);
 
@@ -584,17 +830,33 @@ class _EditPageState extends State<EditPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(localizations?.back ?? 'Go Back'),
-          content: Text(localizations?.unsavedChangesWarning ??
-              'Are you sure you want to go back? All unsaved changes will be lost.'),
+          backgroundColor: Colors.grey[850],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            localizations?.back ?? 'Вернуться назад',
+            style: const TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            localizations?.unsavedChangesWarning ??
+                'Вы уверены, что хотите вернуться? Все несохраненные изменения будут потеряны.',
+            style: const TextStyle(color: Colors.white70),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(localizations?.cancel ?? 'Cancel'),
+              child: Text(
+                localizations?.cancel ?? 'Отмена',
+                style: const TextStyle(color: Colors.white70),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(localizations?.yes ?? 'Yes'),
+              child: Text(
+                localizations?.yes ?? 'Да',
+                style: const TextStyle(color: Colors.redAccent),
+              ),
             ),
           ],
         );
@@ -606,9 +868,8 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
+// Показ истории редактирования
   void _showEditHistory() async {
-    final history =
-        await _historyManager.db.getAllHistoryForImage(widget.imageId);
     final localizations = AppLocalizations.of(context);
 
     showModalBottomSheet(
@@ -625,7 +886,7 @@ class _EditPageState extends State<EditPage> {
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text(
-                  localizations?.history ?? 'Edit History',
+                  localizations?.history ?? 'История редактирования',
                   style: const TextStyle(color: Colors.white, fontSize: 18),
                 ),
               ),
@@ -633,62 +894,47 @@ class _EditPageState extends State<EditPage> {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.all(12),
-                  itemCount: history.length,
+                  itemCount: _cachedHistory.length,
                   itemBuilder: (context, index) {
-                    final item = history[index];
-                    return FutureBuilder<Uint8List>(
-                      future: kIsWeb
-                          ? Future.value(_webHistorySnapshots[index])
-                          : File(item.snapshotPath!).readAsBytes(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
-                          return const SizedBox(
-                            width: 100,
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        }
-                        return GestureDetector(
-                          onTap: () async {
-                            Navigator.pop(context);
-                            final imageBytes = snapshot.data!;
-                            await _updateImage(imageBytes);
-                            _currentHistoryIndex = index;
-                            _historyManager.setCurrentIndex(index);
-                            _updateUndoRedoState();
-                          },
-                          child: Column(
-                            children: [
-                              Container(
-                                margin:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                width: 100,
-                                height: 100,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  border:
-                                      Border.all(color: Colors.white, width: 2),
-                                  image: DecorationImage(
-                                    image: MemoryImage(snapshot.data!),
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  item.operationType,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 12),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ],
-                          ),
+                    final item = _cachedHistory[index];
+                    return GestureDetector(
+                      onTap: () async {
+                        Navigator.pop(context);
+                        final imageBytes = item.snapshotBytes != null
+                            ? Uint8List.fromList(item.snapshotBytes!)
+                            : throw Exception(
+                                'Нет данных снимка для historyId: ${item.historyId}');
+                        debugPrint(
+                            'История: Загрузка снимка для индекса $index, длина байт: ${imageBytes.length}');
+                        await _updateImage(
+                          imageBytes,
+                          action: 'Восстановление из истории',
+                          operationType: 'restore',
+                          parameters: {'historyId': item.historyId},
                         );
+                        _currentHistoryIndex = index;
+                        _historyManager.setCurrentIndex(index);
+                        _updateUndoRedoState();
                       },
+                      child: item.snapshotBytes != null
+                          ? Image.memory(
+                              Uint8List.fromList(item.snapshotBytes!),
+                              fit: BoxFit.cover,
+                              width: 80,
+                              height: 80,
+                              errorBuilder: (context, error, stackTrace) {
+                                debugPrint(
+                                    'Ошибка отображения снимка для historyId: ${item.historyId}');
+                                return const Text(
+                                  'Ошибка изображения',
+                                  style: TextStyle(color: Colors.white),
+                                );
+                              },
+                            )
+                          : const Text(
+                              'Нет изображения',
+                              style: TextStyle(color: Colors.white),
+                            ),
                     );
                   },
                 ),
@@ -707,271 +953,196 @@ class _EditPageState extends State<EditPage> {
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 600;
         final iconSize = isMobile ? 24.0 : 32.0;
-        final padding = isMobile ? 8.0 : 16.0;
+        final padding = 16.0;
 
         return Scaffold(
+          backgroundColor: Colors.transparent,
           body: Stack(
             children: [
-              Container(
-                color: Colors.black,
-                child: Column(
-                  children: [
-                    SafeArea(
-                      bottom: false,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: padding),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            IconButton(
-                              onPressed: _confirmBackNavigation,
-                              icon: Icon(Icons.arrow_back, size: iconSize),
-                              color: Colors.white,
-                              tooltip: localizations?.back ?? 'Back',
-                            ),
-                            Row(
+              Column(
+                children: [
+                  SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: padding),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            onPressed: _confirmBackNavigation,
+                            icon: Icon(Icons.arrow_back, size: iconSize),
+                            color: Colors.white,
+                            tooltip: localizations?.back ?? 'Назад',
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.history, size: iconSize),
+                                color: Colors.white,
+                                onPressed: _showEditHistory,
+                                tooltip: localizations?.history ?? 'История',
+                              ),
+                              IconButton(
+                                onPressed: _saveImage,
+                                icon: Icon(Icons.save_alt, size: iconSize),
+                                color: Colors.white,
+                                tooltip: localizations?.save ?? 'Сохранить',
+                              ),
+                              IconButton(
+                                onPressed: _shareImage,
+                                icon: Icon(Icons.share, size: iconSize),
+                                color: Colors.white,
+                                tooltip: localizations?.share ?? 'Поделиться',
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ValueListenableBuilder(
+                      valueListenable: _isInitialized,
+                      builder: (context, isInitialized, _) {
+                        if (!isInitialized) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 ValueListenableBuilder(
-                                  valueListenable: _isUndoAvailable,
-                                  builder: (context, isAvailable, _) =>
-                                      IconButton(
-                                    icon: Icon(Icons.undo, size: iconSize),
-                                    color: isAvailable
-                                        ? Colors.white
-                                        : Colors.grey,
-                                    onPressed: isAvailable ? _undo : null,
-                                    tooltip: localizations?.undo ?? 'Undo',
+                                  valueListenable: _loadingProgress,
+                                  builder: (context, progress, _) {
+                                    return SizedBox(
+                                      width: 200,
+                                      child: LinearProgressIndicator(
+                                        value: progress,
+                                        backgroundColor: Colors.grey[800],
+                                        color: Colors.white,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                SizedBox(height: padding),
+                                Text(
+                                  localizations?.loading ??
+                                      'Загрузка изображения...',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize:
+                                        ResponsiveUtils.getResponsiveFontSize(
+                                            context, 16),
                                   ),
-                                ),
-                                ValueListenableBuilder(
-                                  valueListenable: _isRedoAvailable,
-                                  builder: (context, isAvailable, _) =>
-                                      IconButton(
-                                    icon: Icon(Icons.redo, size: iconSize),
-                                    color: isAvailable
-                                        ? Colors.white
-                                        : Colors.grey,
-                                    onPressed: isAvailable ? _redo : null,
-                                    tooltip: localizations?.redo ?? 'Redo',
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.history),
-                                  color: Colors.white,
-                                  onPressed: _showEditHistory,
-                                  tooltip: localizations?.history ?? 'History',
-                                ),
-                                IconButton(
-                                  onPressed: _saveImage,
-                                  icon: Icon(Icons.save_alt, size: iconSize),
-                                  color: Colors.white,
-                                  tooltip: localizations?.save ?? 'Save',
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: ValueListenableBuilder(
-                        valueListenable: _isInitialized,
-                        builder: (context, isInitialized, _) {
-                          if (!isInitialized) {
-                            return Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ValueListenableBuilder(
-                                    valueListenable: _loadingProgress,
-                                    builder: (context, progress, _) {
-                                      return SizedBox(
-                                        width: 200,
-                                        child: LinearProgressIndicator(
-                                          value: progress,
-                                          backgroundColor: Colors.grey[800],
+                          );
+                        }
+                        return ValueListenableBuilder(
+                          valueListenable: _currentImage,
+                          builder: (context, image, _) {
+                            if (image == null || image.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  localizations?.error ??
+                                      'Не удалось загрузить изображение',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize:
+                                        ResponsiveUtils.getResponsiveFontSize(
+                                            context, 16),
+                                  ),
+                                ),
+                              );
+                            }
+                            return ValueListenableBuilder(
+                              valueListenable: _imageSize,
+                              builder: (context, size, _) => InteractiveViewer(
+                                minScale: 0.5,
+                                maxScale: 2.0,
+                                child: Center(
+                                  child: SizedBox(
+                                    width: size.width,
+                                    height: size.height,
+                                    child: Image.memory(
+                                      image,
+                                      gaplessPlayback: true,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) => Text(
+                                        '${localizations?.error ?? 'Ошибка загрузки изображения'}: $error',
+                                        style: TextStyle(
                                           color: Colors.white,
+                                          fontSize: ResponsiveUtils
+                                              .getResponsiveFontSize(
+                                                  context, 16),
                                         ),
-                                      );
-                                    },
+                                      ),
+                                    ),
                                   ),
-                                  SizedBox(height: padding),
-                                  Text(
-                                    localizations?.loading ??
-                                        'Loading image...',
-                                    style: const TextStyle(
-                                        color: Colors.white, fontSize: 16),
-                                  ),
-                                ],
+                                ),
                               ),
                             );
-                          }
-                          return ValueListenableBuilder(
-                            valueListenable: _currentImage,
-                            builder: (context, image, _) {
-                              if (image.isEmpty) {
-                                return Center(
-                                  child: Text(
-                                    localizations?.error ??
-                                        'Failed to load image',
-                                    style: const TextStyle(
-                                        color: Colors.white, fontSize: 16),
-                                  ),
-                                );
-                              }
-                              return ValueListenableBuilder(
-                                valueListenable: _imageSize,
-                                builder: (context, size, _) =>
-                                    InteractiveViewer(
-                                  minScale: 0.5,
-                                  maxScale: 3.0,
-                                  child: Center(
-                                    child: SizedBox(
-                                      width: size.width,
-                                      height: size.height,
-                                      child: Image.memory(
-                                        image,
-                                        gaplessPlayback: true,
-                                        fit: BoxFit.contain,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                Text(
-                                          '${localizations?.error ?? 'Error loading image'}: $error',
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
+                          },
+                        );
+                      },
                     ),
-                    Container(
-                      height: isMobile ? 80 : 100,
-                      color: Colors.black.withOpacity(0.7),
-                      child: FutureBuilder<List<EditHistory>>(
-                        future: _historyManager.db
-                            .getAllHistoryForImage(widget.imageId),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          }
-                          final history = snapshot.data!;
-                          return ListView.builder(
-                            scrollDirection: Axis.horizontal,
+                  ),
+                  ValueListenableBuilder(
+                    valueListenable: _showToolsPanel,
+                    builder: (context, show, _) => show
+                        ? Container(
+                            constraints:
+                                BoxConstraints(maxHeight: isMobile ? 80 : 100),
+                            child:
+                                ToolsPanel(onToolSelected: _handleToolSelected),
+                          )
+                        : Padding(
                             padding: EdgeInsets.all(padding),
-                            itemCount: history.length,
-                            itemBuilder: (context, index) {
-                              final item = history[index];
-                              return FutureBuilder<Uint8List>(
-                                future: kIsWeb
-                                    ? Future.value(_webHistorySnapshots[index])
-                                    : File(item.snapshotPath!).readAsBytes(),
-                                builder: (context, snapshot) {
-                                  if (!snapshot.hasData) {
-                                    return const SizedBox(
-                                      width: 80,
-                                      child: Center(
-                                          child: CircularProgressIndicator()),
-                                    );
-                                  }
-                                  return GestureDetector(
-                                    onTap: () async {
-                                      final imageBytes = snapshot.data!;
-                                      await _updateImage(imageBytes);
-                                      _currentHistoryIndex = index;
-                                      _historyManager.setCurrentIndex(index);
-                                      _updateUndoRedoState();
-                                    },
-                                    child: Container(
-                                      margin: const EdgeInsets.symmetric(
-                                          horizontal: 4),
-                                      width: 80,
-                                      height: 80,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: _currentHistoryIndex == index
-                                              ? Colors.blue
-                                              : Colors.white,
-                                          width: 2,
-                                        ),
-                                        image: DecorationImage(
-                                          image: MemoryImage(snapshot.data!),
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                      child: Align(
-                                        alignment: Alignment.bottomCenter,
-                                        child: Container(
-                                          color: Colors.black54,
-                                          padding: const EdgeInsets.all(4),
-                                          child: Text(
-                                            item.operationType,
-                                            style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    ValueListenableBuilder(
-                      valueListenable: _showToolsPanel,
-                      builder: (context, show, _) => show
-                          ? Container(
-                              constraints: BoxConstraints(
-                                  maxHeight: isMobile ? 80 : 100),
-                              child: ToolsPanel(
-                                  onToolSelected: _handleToolSelected),
-                            )
-                          : Padding(
-                              padding: EdgeInsets.all(padding),
-                              child: IconButton(
-                                icon: Icon(
-                                  show ? Icons.close : Icons.edit,
-                                  color: Colors.white,
-                                  size: iconSize,
-                                ),
-                                onPressed: () {
-                                  _showToolsPanel.value = !show;
-                                },
-                                tooltip: show
-                                    ? localizations?.cancel ?? 'Close'
-                                    : localizations?.edit ?? 'Edit',
+                            child: IconButton(
+                              icon: Icon(
+                                show ? Icons.close : Icons.edit,
+                                color: Colors.white,
+                                size: iconSize,
                               ),
+                              onPressed: () {
+                                _showToolsPanel.value = !show;
+                              },
+                              tooltip: show
+                                  ? localizations?.cancel ?? 'Закрыть'
+                                  : localizations?.edit ?? 'Редактировать',
                             ),
-                    ),
-                  ],
-                ),
+                          ),
+                  ),
+                ],
               ),
               ValueListenableBuilder(
                 valueListenable: _activeTool,
                 builder: (context, tool, _) {
-                  if (tool == null) return const SizedBox.shrink();
+                  if (tool == null || _currentImage.value == null)
+                    return const SizedBox.shrink();
                   switch (tool) {
                     case 'crop':
                       return CropPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         onCancel: _closeToolPanel,
                         onApply: (croppedImage) {
                           _updateImage(croppedImage,
-                              action: 'crop',
+                              action: 'Обрезка',
                               operationType: 'Crop',
+                              parameters: {});
+                          _closeToolPanel();
+                        },
+                        onUpdateImage: _updateImage,
+                        imageId: widget.imageId,
+                      );
+                    case 'rotate':
+                      return RotatePanel(
+                        image: _currentImage.value!,
+                        onCancel: _closeToolPanel,
+                        onApply: (croppedImage) {
+                          _updateImage(croppedImage,
+                              action: 'Поворот',
+                              operationType: 'Rotate',
                               parameters: {});
                           _closeToolPanel();
                         },
@@ -980,11 +1151,11 @@ class _EditPageState extends State<EditPage> {
                       );
                     case 'filters':
                       return FiltersPanel(
-                        imageBytes: _currentImage.value,
+                        imageBytes: _currentImage.value!,
                         onCancel: _closeToolPanel,
                         onApply: (filteredImage) {
                           _updateImage(filteredImage,
-                              action: 'filter',
+                              action: 'Фильтр',
                               operationType: 'Filter',
                               parameters: {});
                           _closeToolPanel();
@@ -994,25 +1165,26 @@ class _EditPageState extends State<EditPage> {
                       );
                     case 'adjust':
                       return AdjustPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         imageId: widget.imageId,
-                        onImageChanged: (value) {
-                          _updateImage(value,
-                              action: 'adjust',
-                              operationType: 'Adjust',
-                              parameters: {});
-                          _closeToolPanel();
+                        onImageChanged: (value, parameters) {
+                          _updateImage(
+                            value,
+                            action: localizations?.adjust ?? 'Корректировка',
+                            operationType: 'Adjustments',
+                            parameters: parameters,
+                          );
                         },
                         onClose: _closeToolPanel,
                         onUpdateImage: _updateImage,
                       );
                     case 'draw':
                       return DrawPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         onCancel: _closeToolPanel,
                         onApply: (drawnImage) {
                           _updateImage(drawnImage,
-                              action: 'draw',
+                              action: 'Рисование',
                               operationType: 'Draw',
                               parameters: {});
                           _closeToolPanel();
@@ -1022,12 +1194,12 @@ class _EditPageState extends State<EditPage> {
                       );
                     case 'text':
                       return TextEditorPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         imageId: widget.imageId,
                         onCancel: _closeToolPanel,
                         onApply: (textImage) {
                           _updateImage(textImage,
-                              action: 'text',
+                              action: 'Текст',
                               operationType: 'Text',
                               parameters: {});
                           _closeToolPanel();
@@ -1036,12 +1208,12 @@ class _EditPageState extends State<EditPage> {
                       );
                     case 'emoji':
                       return EmojiPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         imageId: widget.imageId,
                         onCancel: _closeToolPanel,
                         onApply: (emojiImage) {
                           _updateImage(emojiImage,
-                              action: 'emoji',
+                              action: 'Эмодзи',
                               operationType: 'Emoji',
                               parameters: {});
                           _closeToolPanel();
@@ -1050,12 +1222,12 @@ class _EditPageState extends State<EditPage> {
                       );
                     case 'effects':
                       return EffectsPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         imageId: widget.imageId,
                         onCancel: _closeToolPanel,
                         onApply: (effectsImage) {
                           _updateImage(effectsImage,
-                              action: 'effects',
+                              action: 'Эффекты',
                               operationType: 'Effects',
                               parameters: {});
                           _closeToolPanel();
@@ -1063,12 +1235,12 @@ class _EditPageState extends State<EditPage> {
                       );
                     case 'eraser':
                       return EraserPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         imageId: widget.imageId,
                         onCancel: _closeToolPanel,
                         onApply: (eraserImage) {
                           _updateImage(eraserImage,
-                              action: 'eraser',
+                              action: 'Ластик',
                               operationType: 'Eraser',
                               parameters: {});
                           _closeToolPanel();
@@ -1077,12 +1249,12 @@ class _EditPageState extends State<EditPage> {
                       );
                     case 'background':
                       return BackgroundPanel(
-                        image: _currentImage.value,
+                        image: _currentImage.value!,
                         imageId: widget.imageId,
                         onCancel: _closeToolPanel,
                         onApply: (bgImage) {
                           _updateImage(bgImage,
-                              action: 'background',
+                              action: 'Фон',
                               operationType: 'Background',
                               parameters: {});
                           _closeToolPanel();
@@ -1113,5 +1285,19 @@ class _EditPageState extends State<EditPage> {
         );
       },
     );
+  }
+
+// Захват изображения
+  Future<Uint8List> captureImage() async {
+    try {
+      if (_currentImage.value == null || _currentImage.value!.isEmpty) {
+        throw Exception(
+            AppLocalizations.of(context)?.error ?? 'Изображение недоступно');
+      }
+      return Uint8List.fromList(_currentImage.value!);
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка захвата байтов изображения: $e\nСтек: $stackTrace');
+      rethrow;
+    }
   }
 }

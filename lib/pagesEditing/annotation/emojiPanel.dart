@@ -7,18 +7,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-import 'dart:io' if (dart.library.html) 'dart:html' as io;
 import 'package:MagicMoment/database/objectDao.dart' as dao;
 import 'package:MagicMoment/database/objectsModels.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import '../../database/editHistory.dart';
+import 'ResponsiveUtils.dart';
+import 'package:universal_html/html.dart' as html if (dart.library.io) 'dart:io';
 
 class EmojiPanel extends StatefulWidget {
   final Uint8List image;
   final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
-  final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
+  final Function(Uint8List,
+      {String? action,
+      String? operationType,
+      Map<String, dynamic>? parameters}) onUpdateImage;
 
   const EmojiPanel({
     required this.image,
@@ -96,6 +100,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
   final ImagePicker _picker = ImagePicker();
   bool _isProcessing = false;
   bool _isInitialized = false;
+  double? _imageAspectRatio;
 
   @override
   void initState() {
@@ -106,6 +111,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
   Future<void> _initialize() async {
     try {
       await _loadStickersFromDb();
+      _imageAspectRatio = await _getImageAspectRatio();
       _history.add({
         'image': widget.image,
         'action': 'Initial image',
@@ -116,9 +122,45 @@ class _EmojiPanelState extends State<EmojiPanel> {
       if (mounted) {
         setState(() => _isInitialized = true);
       }
-    } catch (e) {
-      _handleError('Initialization failed: $e');
+    } catch (e, stackTrace) {
+      _handleError('Initialization failed: $e\n$stackTrace');
     }
+  }
+
+  Future<double> _getImageAspectRatio() async {
+    final codec = await ui.instantiateImageCodec(widget.image);
+    final frame = await codec.getNextFrame();
+    final width = frame.image.width.toDouble();
+    final height = frame.image.height.toDouble();
+    frame.image.dispose();
+    return width / height;
+  }
+
+  Future<Uint8List> _cropToImageBounds(
+      Uint8List inputBytes, int targetWidth, int targetHeight) async {
+    final codec = await ui.instantiateImageCodec(inputBytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
+      Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
+      Paint(),
+    );
+
+    final croppedImage =
+        await recorder.endRecording().toImage(targetWidth, targetHeight);
+    final byteData =
+        await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    croppedImage.dispose();
+    if (byteData == null) {
+      throw Exception('Failed to encode cropped image');
+    }
+    return byteData.buffer.asUint8List();
   }
 
   Future<void> _addSticker(StickerData sticker) async {
@@ -158,14 +200,16 @@ class _EmojiPanelState extends State<EmojiPanel> {
         isAsset: newSticker.isAsset,
       ));
 
+      if (!mounted) return;
+
       setState(() {
         newSticker.id = stickerId;
         _addedStickers.add(newSticker);
         _selectedSticker = newSticker;
         debugPrint('Sticker added: ${newSticker.path}, ID: $stickerId');
       });
-    } catch (e) {
-      _handleError('Failed to add sticker: $e');
+    } catch (e, stackTrace) {
+      _handleError('Failed to add sticker: $e\n$stackTrace');
     } finally {
       setState(() => _isProcessing = false);
     }
@@ -176,14 +220,16 @@ class _EmojiPanelState extends State<EmojiPanel> {
     setState(() => _isProcessing = true);
 
     try {
-      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? pickedFile =
+          await _picker.pickImage(source: ImageSource.gallery);
       if (pickedFile == null) {
         debugPrint('No image picked from gallery');
         return;
       }
       final bytes = await pickedFile.readAsBytes();
       if (bytes.isEmpty) {
-        throw Exception(AppLocalizations.of(context)?.errorEmptyImage ?? 'Empty image bytes');
+        throw Exception(AppLocalizations.of(context)?.errorEmptyImage ??
+            'Empty image bytes');
       }
       final sticker = StickerData(
         path: 'custom_${DateTime.now().millisecondsSinceEpoch}',
@@ -202,7 +248,9 @@ class _EmojiPanelState extends State<EmojiPanel> {
           'category': 'Custom',
         },
         operationDate: DateTime.now(),
-        snapshotPath: kIsWeb ? null : '${Directory.systemTemp.path}/sticker_${DateTime.now().millisecondsSinceEpoch}.png',
+        snapshotPath: kIsWeb
+            ? null
+            : '${Directory.systemTemp.path}/sticker_${DateTime.now().millisecondsSinceEpoch}.png',
         snapshotBytes: kIsWeb ? bytes : null,
       );
       final db = MagicMomentDatabase.instance;
@@ -230,11 +278,13 @@ class _EmojiPanelState extends State<EmojiPanel> {
         _selectedCategory = 'Custom';
         debugPrint('Custom sticker added: ${sticker.path}, ID: $stickerId');
       });
-    } catch (e) {
-      debugPrint('Error picking image: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Error picking image: $e\n$stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)?.errorPickImage ?? 'Failed to pick image: $e')),
+          SnackBar(
+              content: Text(AppLocalizations.of(context)?.errorPickImage ??
+                  'Failed to pick image: $e')),
         );
       }
     } finally {
@@ -246,24 +296,25 @@ class _EmojiPanelState extends State<EmojiPanel> {
     if (_isProcessing || !_isInitialized) return;
     setState(() {
       _isProcessing = true;
-      _selectedSticker = null;
-    });
+      _selectedSticker = null;},);
 
     try {
+
       await Future.delayed(const Duration(milliseconds: 16));
       final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
       }
-
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
       if (byteData == null) {
         throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
       }
-
       final pngBytes = byteData.buffer.asUint8List();
-      debugPrint('Changes applied with ${_addedStickers.length} stickers');
+      if (pngBytes.isEmpty) {
+        throw Exception('Empty image bytes after cropping');
+      }
 
       final history = EditHistory(
         imageId: widget.imageId,
@@ -273,9 +324,12 @@ class _EmojiPanelState extends State<EmojiPanel> {
           'category': _selectedCategory,
         },
         operationDate: DateTime.now(),
+        snapshotBytes: kIsWeb ? pngBytes : null,
       );
       final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
+
+      if (!mounted) return;
 
       setState(() {
         if (_historyIndex < _history.length - 1) {
@@ -291,6 +345,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
           },
         });
         _historyIndex++;
+        _selectedSticker = null; // Deselect sticker but keep panel open
       });
 
       await _updateImage(
@@ -304,11 +359,11 @@ class _EmojiPanelState extends State<EmojiPanel> {
       );
 
       widget.onApply(pngBytes);
-    } catch (e) {
-      _handleError('Error applying stickers: $e');
+    } catch (e, stackTrace) {
+      _handleError('Error applying stickers: $e\n$stackTrace');
     } finally {
       setState(() => _isProcessing = false);
-      widget.onCancel();
+      // Remove widget.onCancel() to allow re-editing
     }
   }
 
@@ -316,21 +371,24 @@ class _EmojiPanelState extends State<EmojiPanel> {
     try {
       final objectDao = dao.ObjectDao();
       final saved = await objectDao.getStickers(widget.imageId);
-      debugPrint('Loaded ${saved.length} stickers from DB for imageId: ${widget.imageId}');
+      debugPrint(
+          'Loaded ${saved.length} stickers from DB for imageId: ${widget.imageId}');
 
-      final newStickers = saved.map((s) => StickerData(
-        id: s.id,
-        path: s.path,
-        position: Offset(s.positionX, s.positionY),
-        size: s.scale,
-        isAsset: s.isAsset,
-      )).toList();
+      final newStickers = saved
+          .map((s) => StickerData(
+                id: s.id,
+                path: s.path,
+                position: Offset(s.positionX, s.positionY),
+                size: s.scale,
+                isAsset: s.isAsset,
+              ))
+          .toList();
 
       if (mounted) {
         setState(() => _addedStickers.addAll(newStickers));
       }
-    } catch (e) {
-      _handleError('Failed to load stickers: $e');
+    } catch (e, stackTrace) {
+      _handleError('Failed to load stickers: $e\n$stackTrace');
     }
   }
 
@@ -341,15 +399,18 @@ class _EmojiPanelState extends State<EmojiPanel> {
     required Map<String, dynamic> parameters,
   }) async {
     try {
+      if (newImage.isEmpty) {
+        throw Exception('Empty image bytes');
+      }
       await widget.onUpdateImage(
         newImage,
         action: action,
         operationType: operationType,
         parameters: parameters,
       );
-      debugPrint('Image updated: $action');
-    } catch (e) {
-      _handleError('Failed to update image: $e');
+      debugPrint('Image updated: $action, size: ${newImage.length} bytes');
+    } catch (e, stackTrace) {
+      _handleError('Failed to update image: $e\n$stackTrace');
       rethrow;
     }
   }
@@ -359,6 +420,10 @@ class _EmojiPanelState extends State<EmojiPanel> {
     setState(() => _isProcessing = true);
 
     try {
+      final previousImage = _history[_historyIndex]['image'] as Uint8List?;
+      if (previousImage == null || previousImage.isEmpty) {
+        throw Exception('Invalid history image data');
+      }
       setState(() {
         _historyIndex--;
         _addedStickers.clear();
@@ -366,7 +431,7 @@ class _EmojiPanelState extends State<EmojiPanel> {
       });
 
       await _updateImage(
-        newImage: _history[_historyIndex]['image'],
+        newImage: previousImage,
         action: 'Undo stickers',
         operationType: 'undo',
         parameters: {
@@ -374,8 +439,8 @@ class _EmojiPanelState extends State<EmojiPanel> {
         },
       );
       debugPrint('Undo performed, history index: $_historyIndex');
-    } catch (e) {
-      _handleError('Failed to undo: $e');
+    } catch (e, stackTrace) {
+      _handleError('Failed to undo: $e\n$stackTrace');
     } finally {
       setState(() => _isProcessing = false);
     }
@@ -402,33 +467,38 @@ class _EmojiPanelState extends State<EmojiPanel> {
               children: [
                 _buildAppBar(localizations),
                 Expanded(
-                  child: _isInitialized
+                  child: _isInitialized && _imageAspectRatio != null
                       ? GestureDetector(
-                    onTap: () => setState(() => _selectedSticker = null),
-                    child: RepaintBoundary(
-                      key: _imageKey,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
-                          ..._addedStickers.map(_buildStickerWidget),
-                        ],
-                      ),
-                    ),
-                  )
+                          onTap: () => setState(() => _selectedSticker = null),
+                          child: AspectRatio(
+                            aspectRatio: _imageAspectRatio!,
+                            child: RepaintBoundary(
+                              key: _imageKey,
+                              child: Stack(
+                                children: [
+                                  Center(
+                                      child: Image.memory(widget.image,
+                                          fit: BoxFit.contain)),
+                                  ..._addedStickers.map(_buildStickerWidget),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
                       : Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: Colors.white),
-                        const SizedBox(height: 16),
-                        Text(
-                          localizations?.loading ?? 'Loading...',
-                          style: const TextStyle(color: Colors.white),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(
+                                  color: Colors.white),
+                              const SizedBox(height: 16),
+                              Text(
+                                localizations?.loading ?? 'Loading...',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
                 ),
                 _buildBottomPanel(localizations),
               ],
@@ -436,7 +506,8 @@ class _EmojiPanelState extends State<EmojiPanel> {
             if (_isProcessing)
               Container(
                 color: Colors.black.withOpacity(0.5),
-                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+                child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white)),
               ),
           ],
         ),
@@ -453,10 +524,14 @@ class _EmojiPanelState extends State<EmojiPanel> {
         onPressed: widget.onCancel,
         tooltip: localizations?.cancel ?? 'Cancel',
       ),
-      title: Text(localizations?.emoji ?? 'Emoji', style: const TextStyle(color: Colors.white)),
+      title: Text(localizations?.emoji ?? 'Emoji',
+          style: const TextStyle(color: Colors.white)),
       actions: [
         IconButton(
-          icon: Icon(Icons.undo, color: _historyIndex > 0 && _isInitialized ? Colors.white : Colors.grey),
+          icon: Icon(Icons.undo,
+              color: _historyIndex > 0 && _isInitialized
+                  ? Colors.white
+                  : Colors.grey),
           onPressed: _historyIndex > 0 && _isInitialized ? _undo : null,
           tooltip: localizations?.undo ?? 'Undo',
         ),
@@ -493,25 +568,29 @@ class _EmojiPanelState extends State<EmojiPanel> {
           children: [
             sticker.isAsset
                 ? Image.asset(
-              sticker.path,
-              width: sticker.size,
-              height: sticker.size,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                debugPrint('Error loading asset sticker: ${sticker.path}, $error');
-                return const Icon(Icons.error, color: Colors.red, size: 30);
-              },
-            )
+                    sticker.path,
+                    width: sticker.size,
+                    height: sticker.size,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      debugPrint(
+                          'Error loading asset sticker: ${sticker.path}, $error');
+                      return const Icon(Icons.error,
+                          color: Colors.red, size: 30);
+                    },
+                  )
                 : Image.memory(
-              sticker.bytes!,
-              width: sticker.size,
-              height: sticker.size,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                debugPrint('Error loading gallery sticker: ${sticker.path}, $error');
-                return const Icon(Icons.error, color: Colors.red, size: 30);
-              },
-            ),
+                    sticker.bytes!,
+                    width: sticker.size,
+                    height: sticker.size,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      debugPrint(
+                          'Error loading gallery sticker: ${sticker.path}, $error');
+                      return const Icon(Icons.error,
+                          color: Colors.red, size: 30);
+                    },
+                  ),
             if (isSelected)
               GestureDetector(
                 onTap: () => _confirmDeleteSticker(sticker),
@@ -533,7 +612,8 @@ class _EmojiPanelState extends State<EmojiPanel> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(localizations?.confirmDelete ?? 'Delete Sticker'),
-        content: Text(localizations?.confirmDeleteMessage ?? 'Are you sure you want to delete this sticker?'),
+        content: Text(localizations?.confirmDeleteMessage ??
+            'Are you sure you want to delete this sticker?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -541,7 +621,8 @@ class _EmojiPanelState extends State<EmojiPanel> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(localizations?.delete ?? 'Delete', style: const TextStyle(color: Colors.red)),
+            child: Text(localizations?.delete ?? 'Delete',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -558,8 +639,8 @@ class _EmojiPanelState extends State<EmojiPanel> {
           await objectDao.softDeleteSticker(sticker.id!);
           debugPrint('Sticker deleted: ${sticker.path}');
         }
-      } catch (e) {
-        _handleError('Failed to delete sticker: $e');
+      } catch (e, stackTrace) {
+        _handleError('Failed to delete sticker: $e\n$stackTrace');
       }
     }
   }
@@ -629,24 +710,26 @@ class _EmojiPanelState extends State<EmojiPanel> {
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: ListView(
+      child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        children: _stickerCategories.keys.map((category) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: ChoiceChip(
-              label: Text(categoryNames[category] ?? category),
-              selected: _selectedCategory == category,
-              selectedColor: Colors.blue.withOpacity(0.3),
-              onSelected: (selected) {
-                setState(() {
-                  _selectedCategory = category;
-                  debugPrint('Category selected: $category');
-                });
-              },
-            ),
-          );
-        }).toList(),
+        child: Row(
+          children: _stickerCategories.keys.map((category) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: ChoiceChip(
+                label: Text(categoryNames[category] ?? category),
+                selected: _selectedCategory == category,
+                selectedColor: Colors.blue.withOpacity(0.3),
+                onSelected: (selected) {
+                  setState(() {
+                    _selectedCategory = category;
+                    debugPrint('Category selected: $category');
+                  });
+                },
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -654,12 +737,13 @@ class _EmojiPanelState extends State<EmojiPanel> {
   Widget _buildStickerGrid(AppLocalizations? localizations) {
     final stickers = _stickerCategories[_selectedCategory]!;
     return Container(
-      height: 150,
+      height: ResponsiveUtils.getResponsiveHeight(context, 0.18),
+      constraints: BoxConstraints(maxHeight: ResponsiveUtils.isDesktop(context) ? 180 : 150),
       color: Colors.black.withOpacity(0.5),
-      padding: const EdgeInsets.all(8),
+      padding: ResponsiveUtils.getResponsivePadding(context),
       child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 5,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: ResponsiveUtils.getGridCrossAxisCount(context),
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
         ),

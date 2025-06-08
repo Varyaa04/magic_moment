@@ -10,6 +10,7 @@ class ResizablePhotoWidget extends StatefulWidget {
   final Function(double) onScaleChanged;
   final Function(double) onRotationChanged;
   final VoidCallback? onTap;
+  final Rect bounds;
 
   const ResizablePhotoWidget({
     Key? key,
@@ -22,6 +23,7 @@ class ResizablePhotoWidget extends StatefulWidget {
     required this.onScaleChanged,
     required this.onRotationChanged,
     this.onTap,
+    required this.bounds,
   }) : assert(imagePath != null || imageProvider != null, 'Either imagePath or imageProvider must be provided'),
         super(key: key);
 
@@ -33,10 +35,8 @@ class _ResizablePhotoWidgetState extends State<ResizablePhotoWidget> {
   late double _scale;
   late Offset _position;
   late double _rotation;
-  Offset _startingFocalPoint = Offset.zero;
-  Offset _previousOffset = Offset.zero;
   double _previousScale = 1.0;
-  double _previousRotation = 0.0;
+  Offset _startFocalPoint = Offset.zero;
 
   @override
   void initState() {
@@ -47,46 +47,61 @@ class _ResizablePhotoWidgetState extends State<ResizablePhotoWidget> {
   }
 
   @override
+  void didUpdateWidget(ResizablePhotoWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialScale != widget.initialScale) _scale = widget.initialScale;
+    if (oldWidget.initialPosition != widget.initialPosition) _position = widget.initialPosition;
+    if (oldWidget.initialRotation != widget.initialRotation) _rotation = widget.initialRotation;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: GestureDetector(
-        onTap: widget.onTap,
-        onScaleStart: (details) {
-          _startingFocalPoint = details.focalPoint;
-          _previousOffset = _position;
-          _previousScale = _scale;
-          _previousRotation = _rotation;
-        },
-        onScaleUpdate: (details) {
-          final newScale = (_previousScale * details.scale).clamp(0.5, 2.0);
-          final newRotation = _previousRotation + details.rotation;
-
-          final delta = details.focalPoint - _startingFocalPoint;
-          var newPosition = _previousOffset + delta;
-
-          // Apply constraints based on scale and widget size
-          final maxDx = ((context.size?.width ?? 0) * (newScale - 1) / 2) / newScale;
-          final maxDy = ((context.size?.height ?? 0) * (newScale - 1) / 2) / newScale;
-
-          newPosition = Offset(
-            newPosition.dx.clamp(-maxDx, maxDx),
-            newPosition.dy.clamp(-maxDy, maxDy),
-          );
-
-          setState(() {
-            _scale = newScale;
-            _rotation = newRotation;
-            _position = newPosition;
-          });
-
+    return GestureDetector(
+      onTap: widget.onTap,
+      onScaleStart: (details) {
+        _previousScale = _scale;
+        _startFocalPoint = details.focalPoint;
+      },
+      onScaleUpdate: (details) {
+        if (widget.bounds.width < 1.0 || widget.bounds.height < 1.0) return; // Skip if bounds are invalid
+        setState(() {
+          _scale = (_previousScale * details.scale).clamp(0.5, 2.0);
           widget.onScaleChanged(_scale);
-          widget.onRotationChanged(_rotation);
-          widget.onPositionChanged(_position / 100);
-        },
+
+          final delta = details.focalPoint - _startFocalPoint;
+          final newPosition = _position +
+              Offset(
+                delta.dx / widget.bounds.width,
+                delta.dy / widget.bounds.height,
+              );
+
+          final imageWidth = widget.bounds.width * _scale;
+          final imageHeight = widget.bounds.height * _scale;
+          final maxOffsetX = (imageWidth - widget.bounds.width) / (2 * imageWidth);
+          final maxOffsetY = (imageHeight - widget.bounds.height) / (2 * imageHeight);
+
+          _position = Offset(
+            newPosition.dx.clamp(-maxOffsetX, maxOffsetX),
+            newPosition.dy.clamp(-maxOffsetY, maxOffsetY),
+          );
+          widget.onPositionChanged(_position);
+
+          if (details.rotation != 0) {
+            _rotation = widget.initialRotation + details.rotation;
+            widget.onRotationChanged(_rotation);
+          }
+
+          _startFocalPoint = details.focalPoint;
+        });
+      },
+      child: ClipRect(
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           transform: Matrix4.identity()
-            ..translate(_position.dx, _position.dy)
+            ..translate(
+              _position.dx * (context.size?.width ?? 0),
+              _position.dy * (context.size?.height ?? 0),
+            )
             ..rotateZ(_rotation)
             ..scale(_scale),
           child: widget.imageProvider != null

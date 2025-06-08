@@ -27,6 +27,11 @@ class ToolsPanel extends StatelessWidget {
             tool: 'crop',
           ),
           _buildToolButton(
+            icon: FluentIcons.arrow_rotate_clockwise_24_regular,
+            label: appLocalizations?.rotate ?? 'Rotate',
+            tool: 'rotate',
+          ),
+          _buildToolButton(
             icon: FluentIcons.brightness_high_24_filled,
             label: appLocalizations?.adjust ?? 'Adjust',
             tool: 'adjust',

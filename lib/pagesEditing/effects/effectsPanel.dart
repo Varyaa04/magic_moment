@@ -1,33 +1,51 @@
-import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:image/image.dart' as img;
-import 'package:MagicMoment/database/editHistory.dart';
-import 'package:MagicMoment/database/magicMomentDatabase.dart';
+import 'package:image/image.dart' as image;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'effectsUtils.dart';
 
+// Утилиты для адаптивного дизайна
+class ResponsiveUtils {
+  static double getResponsiveWidth(BuildContext context, double percentage) {
+    return MediaQuery.of(context).size.width * percentage;
+  }
+
+  static double getResponsiveHeight(BuildContext context, double percentage) {
+    return MediaQuery.of(context).size.height * percentage;
+  }
+
+  static double getResponsiveFontSize(BuildContext context, double baseSize) {
+    final width = MediaQuery.of(context).size.width;
+    return baseSize * (width / 600).clamp(0.8, 1.5);
+  }
+
+  static bool isDesktop(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return width > 800;
+  }
+
+  static EdgeInsets getResponsivePadding(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return EdgeInsets.symmetric(
+      horizontal: width * 0.02,
+      vertical: width * 0.01,
+    );
+  }
+}
+
 class EffectsPanel extends StatefulWidget {
   final Uint8List image;
-  final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
-  final Future<void> Function(
-      Uint8List, {
-      required String action,
-      required String operationType,
-      required Map<String, dynamic> parameters,
-      })? onUpdateImage;
+  final int imageId;
 
   const EffectsPanel({
     required this.image,
-    required this.imageId,
     required this.onCancel,
     required this.onApply,
-    this.onUpdateImage,
+    required this.imageId,
     super.key,
   });
 
@@ -39,15 +57,12 @@ class _EffectsPanelState extends State<EffectsPanel> {
   bool _isInitialized = false;
   bool _isProcessing = false;
   late Uint8List _currentImageBytes;
-  img.Image? _decodedImage;
+  image.Image? _decodedImage;
   Effect? _selectedEffect;
   final GlobalKey _imageKey = GlobalKey();
   final Map<String, double> _effectParams = {};
-  Timer? _debounceTimer;
+  final Completer<void> _initCompleter = Completer<void>();
   final Map<String, Uint8List> _previewCache = {};
-  final _thumbnailWidth = 80;
-  final List<Map<String, dynamic>> _history = [];
-  int _historyIndex = -1;
 
   @override
   void initState() {
@@ -58,261 +73,212 @@ class _EffectsPanelState extends State<EffectsPanel> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
+    _decodedImage = null;
+    _selectedEffect = null;
     _previewCache.clear();
-    _decodedImage = null; // Освобождаем ресурс
+    debugPrint('Disposing EffectsPanel');
     super.dispose();
   }
 
   Future<void> _initialize() async {
     try {
-      _decodedImage = await decodeImage(widget.image);
+      if (widget.image.isEmpty) {
+        throw Exception('Входное изображение пустое');
+      }
+      debugPrint('Initializing EffectsPanel with image size: ${widget.image.length} bytes');
+      _decodedImage = await compute(decodeImage, widget.image);
       if (_decodedImage == null) {
-        throw Exception(AppLocalizations.of(context)?.invalidImage ?? 'Failed to decode image');
+        throw Exception('Не удалось декодировать изображение');
       }
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-          _selectedEffect = effects.isNotEmpty ? effects.first : null;
-          if (_selectedEffect != null) {
-            _effectParams.addAll(_selectedEffect!.defaultParams);
-          }
-        });
-        if (_selectedEffect != null) {
-          await _applyEffect(_selectedEffect!, _effectParams, force: true);
+      if (!mounted) {
+        _initCompleter.completeError(Exception('Widget disposed during initialization'));
+        return;
+      }
+      setState(() {
+        _isInitialized = true;
+        if (effects.isEmpty) {
+          debugPrint('No effects available');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)?.no ?? 'Нет доступных эффектов',
+                style: const TextStyle(color: Colors.white),
+              ),
+              backgroundColor: Colors.red[700],
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          widget.onCancel();
+          return;
         }
-        _history.add({
-          'image': widget.image,
-          'action': AppLocalizations.of(context)?.filters ?? 'Initial image',
-          'operationType': 'init',
-          'parameters': {},
-        });
-        _historyIndex = 0;
-      }
-    } catch (e) {
-      debugPrint('Initialization error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${AppLocalizations.of(context)?.error ?? 'Error'}: $e'),
-            backgroundColor: Colors.red[700],
-          ),
-        );
-        widget.onCancel();
-      }
-    }
-  }
-
-  Future<void> _generatePreview(Effect effect) async {
-    if (_previewCache.containsKey(effect.name) || _decodedImage == null) return;
-    try {
-      final thumbnail = img.copyResize(_decodedImage!, width: _thumbnailWidth);
-      final processedImage = await effect.apply(thumbnail, effect.defaultParams);
-      final previewBytes = await encodeImage(processedImage);
-      if (mounted) {
-        setState(() {
-          _previewCache[effect.name] = previewBytes;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error generating preview for ${effect.name}: $e');
+        _selectedEffect = effects.first;
+        _effectParams.addAll(_selectedEffect!.defaultParams);
+      });
+      await _applyEffect(_selectedEffect!, Map.from(_selectedEffect!.defaultParams));
+      _initCompleter.complete();
+      debugPrint('EffectsPanel initialization completed');
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка инициализации изображения: $e\n$stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${AppLocalizations.of(context)?.error ?? 'Error'}: Error generating preview for ${effect.name}',
+              AppLocalizations.of(context)?.invalidImage ?? 'Неверный формат изображения',
+              style: const TextStyle(color: Colors.white),
             ),
             backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 3),
           ),
         );
+        widget.onCancel();
       }
+      _initCompleter.completeError(e);
     }
   }
 
-  Future<void> _applyEffect(Effect effect, Map<String, double> params, {bool force = false}) async {
-    if (_isProcessing && !force) return;
-
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 200), () async {
-      setState(() => _isProcessing = true);
-      try {
-        if (_decodedImage == null) {
-          throw Exception(AppLocalizations.of(context)?.invalidImage ?? 'Image not decoded');
-        }
-        final processedImage = await effect.apply(_decodedImage!, params);
-        final processedBytes = await encodeImage(processedImage);
-        if (mounted) {
-          setState(() {
-            _currentImageBytes = processedBytes;
-            _selectedEffect = effect;
-            _effectParams.clear();
-            _effectParams.addAll(params);
-          });
-        }
-      } catch (e) {
-        debugPrint('Error applying effect ${effect.name}: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${AppLocalizations.of(context)?.errorApplyEffect ?? 'Error applying effect'}: ${effect.name}',
-              ),
-              backgroundColor: Colors.red[700],
-            ),
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _isProcessing = false);
+  Future<Uint8List> _generateEffectPreview(Effect effect) async {
+    await _initCompleter.future; // Wait for initialization
+    if (!_isInitialized || _decodedImage == null) {
+      debugPrint('Cannot generate preview for ${effect.name}: image not decoded or not initialized');
+      return Uint8List(0);
+    }
+    final cacheKey = effect.name;
+    if (_previewCache.containsKey(cacheKey)) {
+      return _previewCache[cacheKey]!;
+    }
+    try {
+      debugPrint('Generating preview for effect: ${effect.name}');
+      final previewData = await compute(_processPreview, {
+        'image': _decodedImage!,
+        'effect': effect,
+      });
+      if (previewData.isEmpty) {
+        throw Exception('Empty preview data for ${effect.name}');
       }
-    });
+      _previewCache[cacheKey] = previewData;
+      return previewData;
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка генерации превью для ${effect.name}: $e\n$stackTrace');
+      return Uint8List(0);
+    }
   }
 
-  Future<void> _updateImage(
-      Uint8List newImage, {
-        required String action,
-        required String operationType,
-        required Map<String, dynamic> parameters,
-      }) async {
+  static Future<Uint8List> _processPreview(Map<String, dynamic> data) async {
+    final image.Image decodedImage = data['image'] as image.Image;
+    final Effect effect = data['effect'] as Effect;
+    final image.Image thumbnail = image.copyResize(
+      decodedImage,
+      width: 100,
+      interpolation: image.Interpolation.linear,
+    );
+    final image.Image processedImage = await effect.apply(thumbnail, effect.defaultParams);
+    final result = await encodeImage(processedImage);
+    return result.isEmpty ? Uint8List(0) : result;
+  }
+
+  Future<void> _applyEffect(Effect effect, Map<String, double> params) async {
+    await _initCompleter.future;
+    if (_isProcessing || _decodedImage == null || !mounted) {
+      debugPrint('Cannot apply effect ${effect.name}: processing, no image, or disposed');
+      return;
+    }
+
+    setState(() => _isProcessing = true);
     try {
-      if (widget.onUpdateImage != null) {
-        await widget.onUpdateImage!(newImage, action: action, operationType: operationType, parameters: parameters);
+      debugPrint('Applying effect: ${effect.name} with params: $params');
+      final processedBytes = await compute(_processEffect, {
+        'image': _decodedImage!,
+        'effect': effect,
+        'params': params,
+      });
+      if (processedBytes.isEmpty) {
+        throw Exception('Empty processed bytes for effect ${effect.name}');
       }
-    } catch (e) {
-      debugPrint('Error in onUpdateImage: $e');
+      if (mounted) {
+        setState(() {
+          _currentImageBytes = processedBytes;
+          _selectedEffect = effect;
+          _effectParams.clear();
+          _effectParams.addAll(params);
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка применения эффекта ${effect.name}: $e\n$stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${AppLocalizations.of(context)?.error ?? 'Error'}: $e'),
+            content: Text(
+              '${AppLocalizations.of(context)?.errorApplyEffect ?? 'Не удалось применить эффект'}: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 3),
           ),
         );
       }
-      rethrow;
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
+  }
+
+  static Future<Uint8List> _processEffect(Map<String, dynamic> data) async {
+    final image.Image decodedImage = data['image'] as image.Image;
+    final Effect effect = data['effect'] as Effect;
+    final Map<String, double> params = data['params'] as Map<String, double>;
+    final image.Image processedImage = await effect.apply(decodedImage, params);
+    final result = await encodeImage(processedImage);
+    return result.isEmpty ? Uint8List(0) : result;
   }
 
   Future<void> _saveChanges() async {
-    if (_isProcessing || _selectedEffect == null || _decodedImage == null) return;
-
-    setState(() => _isProcessing = true);
-    final localizations = AppLocalizations.of(context);
-    try {
-      final processedImage = await _selectedEffect!.apply(_decodedImage!, _effectParams);
-      final processedBytes = await encodeImage(processedImage);
-      if (!mounted) return;
-
-      String? snapshotPath;
-      List<int>? snapshotBytes;
-      if (!kIsWeb) {
-        final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath = '${tempDir.path}/effect_${DateTime.now().millisecondsSinceEpoch}.png';
-        final file = File(snapshotPath);
-        await file.writeAsBytes(processedBytes);
-      } else {
-        snapshotBytes = processedBytes;
-      }
-
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'effect',
-        operationParameters: {
-          'effect_name': _selectedEffect!.name,
-          ..._effectParams,
-        },
-        operationDate: DateTime.now(),
-        snapshotPath: snapshotPath,
-        snapshotBytes: snapshotBytes,
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-
-      setState(() {
-        if (_historyIndex < _history.length - 1) {
-          _history.removeRange(_historyIndex + 1, _history.length);
-        }
-        _history.add({
-          'image': processedBytes,
-          'action': '${localizations?.applyEffect ?? 'Applied effect'}: ${_selectedEffect!.name}',
-          'operationType': 'effect',
-          'parameters': {
-            'effect_name': _selectedEffect!.name,
-            'historyId': historyId,
-            ..._effectParams,
-          },
-        });
-        _historyIndex++;
-      });
-
-      await _updateImage(
-        processedBytes,
-        action: '${localizations?.applyEffect ?? 'Applied effect'}: ${_selectedEffect!.name}',
-        operationType: 'effect',
-        parameters: {
-          'effect_name': _selectedEffect!.name,
-          'historyId': historyId,
-          ..._effectParams,
-        },
-      );
-
-      widget.onApply(processedBytes);
-    } catch (e) {
-      debugPrint('Error saving effect: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${localizations?.errorApplyEffect ?? 'Error saving effect'}: $e'),
-            backgroundColor: Colors.red[700],
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
+    await _initCompleter.future;
+    if (_isProcessing || _selectedEffect == null || _decodedImage == null || !mounted) {
+      debugPrint('Cannot save changes: processing, no effect, no image, or disposed');
+      return;
     }
-  }
-
-  Future<void> _undo() async {
-    if (_isProcessing || _historyIndex <= 0) return;
 
     setState(() => _isProcessing = true);
-    final localizations = AppLocalizations.of(context);
     try {
-      if (mounted) {
-        setState(() {
-          _historyIndex--;
-          _currentImageBytes = _history[_historyIndex]['image'];
-          _selectedEffect = null;
-          _effectParams.clear();
-        });
+      debugPrint('Saving effect: ${_selectedEffect!.name} with params: $_effectParams');
+      final processedBytes = await compute(_processEffect, {
+        'image': _decodedImage!,
+        'effect': _selectedEffect!,
+        'params': _effectParams,
+      });
+      if (processedBytes.isEmpty) {
+        throw Exception('Empty processed bytes for effect ${_selectedEffect!.name}');
       }
-
-      await _updateImage(
-        _currentImageBytes,
-        action: localizations?.undo ?? 'Undo effect',
-        operationType: 'undo',
-        parameters: {
-          'previous_action': _history[_historyIndex + 1]['action'],
-        },
-      );
-      debugPrint('Undo effect, history index: $_historyIndex');
-    } catch (e) {
-      debugPrint('Error undoing effect: $e');
+      if (mounted) {
+        widget.onApply(processedBytes);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка сохранения эффекта ${_selectedEffect?.name}: $e\n$stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${localizations?.error ?? 'Error'}: $e'),
+            content: Text(
+              '${AppLocalizations.of(context)?.errorApplyEffect ?? 'Не удалось сохранить эффект'}: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context);
+    final appLocalizations = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final isDesktop = ResponsiveUtils.isDesktop(context);
 
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(0.8),
@@ -321,29 +287,53 @@ class _EffectsPanelState extends State<EffectsPanel> {
           children: [
             Column(
               children: [
-                _buildAppBar(theme, localizations),
+                _buildAppBar(appLocalizations, theme, isDesktop),
                 Expanded(
-                  child: _isInitialized
-                      ? RepaintBoundary(
-                    key: _imageKey,
-                    child: Image.memory(
-                      _currentImageBytes,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        debugPrint('Image display error: $error');
-                        return Center(
-                          child: Text(
-                            localizations?.invalidImage ?? 'Failed to load image',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        );
-                      },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? 24 : 8,
+                      vertical: isDesktop ? 16 : 8,
                     ),
-                  )
-                      : const Center(child: CircularProgressIndicator(color: Colors.white)),
+                    child: _isInitialized
+                        ? RepaintBoundary(
+                      key: _imageKey,
+                      child: Image.memory(
+                        _currentImageBytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          debugPrint('Error displaying image: $error\n$stackTrace');
+                          return Center(
+                            child: Text(
+                              appLocalizations?.invalidImage ?? 'Не удалось загрузить изображение',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                        : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const CircularProgressIndicator(color: Colors.white),
+                          const SizedBox(height: 16),
+                          Text(
+                            appLocalizations?.loading ?? 'Загрузка...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-                if (_selectedEffect != null) _buildEffectControls(localizations, theme),
-                _buildEffectList(theme),
+                _buildEffectControls(appLocalizations, theme, isDesktop),
+                _buildEffectList(theme, isDesktop),
               ],
             ),
             if (_isProcessing)
@@ -356,8 +346,11 @@ class _EffectsPanelState extends State<EffectsPanel> {
                       const CircularProgressIndicator(color: Colors.white),
                       const SizedBox(height: 16),
                       Text(
-                        localizations?.processingEffect ?? 'Processing effect...',
-                        style: const TextStyle(color: Colors.white),
+                        appLocalizations?.processingEffect ?? 'Обработка эффекта...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14),
+                        ),
                       ),
                     ],
                   ),
@@ -369,137 +362,191 @@ class _EffectsPanelState extends State<EffectsPanel> {
     );
   }
 
-  Widget _buildAppBar(ThemeData theme, AppLocalizations? localizations) {
+  Widget _buildAppBar(AppLocalizations? appLocalizations, ThemeData theme, bool isDesktop) {
     return AppBar(
       backgroundColor: Colors.black.withOpacity(0.7),
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.close, color: Colors.white),
+        icon: Icon(Icons.close, color: Colors.redAccent, size: isDesktop ? 28 : 24),
         onPressed: widget.onCancel,
-        tooltip: localizations?.cancel ?? 'Cancel',
+        tooltip: appLocalizations?.cancel ?? 'Отмена',
+      ),
+      title: Text(
+        appLocalizations?.effects ?? 'Эффекты',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: isDesktop ? 20 : 16,
+        ),
       ),
       actions: [
         IconButton(
-          icon: Icon(Icons.undo, color: _historyIndex > 0 ? Colors.white : Colors.grey[700]),
-          onPressed: _historyIndex > 0 && !_isProcessing ? _undo : null,
-          tooltip: localizations?.undo ?? 'Undo',
-        ),
-        IconButton(
-          icon: const Icon(Icons.check, color: Colors.green),
+          icon: Icon(
+            Icons.check,
+            color: _isProcessing || _selectedEffect == null ? Colors.grey[700] : Colors.green,
+            size: isDesktop ? 28 : 24,
+          ),
           onPressed: _isProcessing || _selectedEffect == null ? null : _saveChanges,
-          tooltip: localizations?.applyEffect ?? 'Apply Effect',
+          tooltip: appLocalizations?.applyEffect ?? 'Применить эффект',
         ),
       ],
     );
   }
 
-  Widget _buildEffectControls(AppLocalizations? localizations, ThemeData theme) {
+  Widget _buildEffectControls(AppLocalizations? appLocalizations, ThemeData theme, bool isDesktop) {
     if (_selectedEffect == null || _selectedEffect!.params.isEmpty) {
       return const SizedBox.shrink();
     }
 
+    final fontSize = isDesktop ? 14.0 : 12.0;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 24 : 12,
+        vertical: isDesktop ? 12 : 8,
+      ),
       color: Colors.black.withOpacity(0.7),
-      child: Column(
-        children: _selectedEffect!.params.map((param) {
-          return Row(
-            children: [
-              SizedBox(
-                width: 80,
-                child: Text(
-                  param.name,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  overflow: TextOverflow.ellipsis,
-                ),
+      child: SingleChildScrollView(
+        child: Column(
+          children: _selectedEffect!.params.map((param) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: isDesktop ? 120 : 80,
+                    child: Text(
+                      param.name,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: fontSize,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Slider(
+                      value: _effectParams[param.name] ?? param.defaultValue,
+                      min: param.minValue,
+                      max: param.maxValue,
+                      divisions: ((param.maxValue - param.minValue) / param.step).round(),
+                      activeColor: theme.primaryColor,
+                      inactiveColor: theme.disabledColor,
+                      label: (_effectParams[param.name] ?? param.defaultValue).toStringAsFixed(1),
+                      onChanged: _isProcessing
+                          ? null
+                          : (value) {
+                        setState(() {
+                          _effectParams[param.name] = value;
+                        });
+                        _applyEffect(_selectedEffect!, _effectParams);
+                      },
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Slider(
-                  value: _effectParams[param.name] ?? param.defaultValue,
-                  min: param.minValue,
-                  max: param.maxValue,
-                  divisions: ((param.maxValue - param.minValue) / param.step).round(),
-                  activeColor: theme.primaryColor,
-                  inactiveColor: theme.disabledColor,
-                  label: (_effectParams[param.name] ?? param.defaultValue).toStringAsFixed(1),
-                  onChanged: (value) {
-                    setState(() {
-                      _effectParams[param.name] = value;
-                    });
-                    _applyEffect(_selectedEffect!, _effectParams);
-                  },
-                ),
-              ),
-            ],
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
-  Widget _buildEffectList(ThemeData theme) {
+  Widget _buildEffectList(ThemeData theme, bool isDesktop) {
+    final previewSize = isDesktop ? 100.0 : 80.0;
+    final fontSize = isDesktop ? 12.0 : 10.0;
+
+    if (!_isInitialized) {
+      return Container(
+        height: isDesktop ? 140 : 120,
+        color: Colors.black.withOpacity(0.7),
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+        ),
+      );
+    }
+
     return Container(
-      height: 100,
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      color: Colors.black.withOpacity(0.7),
+      height: isDesktop ? 140 : 120,
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 16 : 8,
+        vertical: isDesktop ? 12 : 8,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: effects.length,
         itemBuilder: (context, index) {
           final effect = effects[index];
-          return FutureBuilder<void>(
-            future: _generatePreview(effect),
-            builder: (context, snapshot) {
-              final previewBytes = _previewCache[effect.name];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: GestureDetector(
-                  onTap: () {
-                    if (!_isProcessing) {
-                      _applyEffect(effect, Map.from(effect.defaultParams));
-                    }
-                  },
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: _selectedEffect == effect ? Colors.blue : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: previewBytes != null
-                              ? Image.memory(
-                            previewBytes,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              debugPrint('Preview load error for ${effect.name}: $error');
-                              return const Icon(Icons.error, color: Colors.red, size: 30);
-                            },
-                          )
-                              : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                        ),
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: GestureDetector(
+              onTap: _isProcessing
+                  ? null
+                  : () {
+                if (mounted) {
+                  setState(() {
+                    _selectedEffect = effect;
+                    _effectParams.clear();
+                    _effectParams.addAll(effect.defaultParams);
+                  });
+                  _applyEffect(effect, Map.from(effect.defaultParams));
+                }
+              },
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: previewSize,
+                    height: previewSize,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedEffect == effect ? Colors.blue : Colors.transparent,
+                        width: 2,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        effect.name,
-                        style: TextStyle(
-                          color: _selectedEffect == effect ? Colors.blue : Colors.white,
-                          fontSize: 10,
-                        ),
-                        textAlign: TextAlign.center,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: FutureBuilder<Uint8List>(
+                        future: _generateEffectPreview(effect),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                            return Image.memory(
+                              snapshot.data!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                debugPrint('Ошибка загрузки превью для ${effect.name}: $error\n$stackTrace');
+                                return const Center(
+                                  child: Icon(Icons.error, color: Colors.red, size: 24),
+                                );
+                              },
+                            );
+                          }
+                          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                        },
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: previewSize,
+                    child: Text(
+                      effect.name,
+                      style: TextStyle(
+                        color: _selectedEffect == effect ? Colors.blue : Colors.white,
+                        fontSize: fontSize,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           );
         },
       ),

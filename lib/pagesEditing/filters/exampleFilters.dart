@@ -190,28 +190,24 @@ const List<double> calmWaves = [
   0, 0, 1, 0, 0,
   0, 0, 0, 1, 0
 ];
-
 const List<double> vibrantLife = [
   1.2, 0, 0, 0, -0.1,
   0, 1.2, 0, 0, -0.1,
   0, 0, 1.2, 0, -0.1,
   0, 0, 0, 1, 0
 ];
-
 const List<double> mistyMorning = [
   0.8, 0, 0, 0, 0,
   0, 0.8, 0, 0, 0,
   0, 0, 0.9, 0, 0,
   0, 0, 0, 1, 0
 ];
-
 const List<double> sunlitGrove = [
   1.1, 0, 0, 0, 0,
   0, 1.1, 0, 0, 0,
   0, 0, 1.1, 0, 0,
   0, 0, 0, 1, 0
 ];
-
 const List<double> twilightShadows = [
   0.7, 0, 0, 0, 0,
   0, 0.7, 0, 0, 0,

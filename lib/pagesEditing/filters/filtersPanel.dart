@@ -1,26 +1,49 @@
-import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:MagicMoment/database/editHistory.dart';
-import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'exampleFilters.dart';
 
+class ResponsiveUtils {
+  static double getResponsiveWidth(BuildContext context, double percentage) {
+    return MediaQuery.of(context).size.width * percentage;
+  }
+
+  static double getResponsiveHeight(BuildContext context, double percentage) {
+    return MediaQuery.of(context).size.height * percentage;
+  }
+
+  static double getResponsiveFontSize(BuildContext context, double baseSize) {
+    final width = MediaQuery.of(context).size.width;
+    return baseSize * (width / 600).clamp(0.8, 1.5);
+  }
+
+  static bool isDesktop(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return width > 800;
+  }
+
+  static EdgeInsets getResponsivePadding(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return EdgeInsets.symmetric(
+      horizontal: width * 0.02,
+      vertical: width * 0.01,
+    );
+  }
+}
+
 class FiltersPanel extends StatefulWidget {
   final Uint8List imageBytes;
-  final int imageId; // Добавлено для привязки к базе данных
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
+  final int imageId;
   final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
 
   const FiltersPanel({
     required this.imageBytes,
-    required this.imageId,
     required this.onCancel,
     required this.onApply,
+    required this.imageId,
     required this.onUpdateImage,
     super.key,
   });
@@ -30,360 +53,92 @@ class FiltersPanel extends StatefulWidget {
 }
 
 class _FiltersPanelState extends State<FiltersPanel> {
-  late Uint8List _originalImageBytes;
-  late Uint8List _previewImageBytes;
+  late Uint8List _currentImageBytes;
+  double _scaleFactor = 1.0;
+  final ValueNotifier<double> _filterStrength = ValueNotifier(1.0);
   bool _isProcessing = false;
+  List<double> _currentFilter = [
+    1.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 1.0, 0.0,
+  ];
   String? _currentFilterName;
-  List<double>? _pendingFilter;
-  final Map<String, Uint8List> _previewCache = {};
-  final int _maxCacheSize = 10;
-  final ScrollController _scrollController = ScrollController();
-  final List<Map<String, dynamic>> _history = [];
-  int _historyIndex = -1;
+  String _currentFilterGroup = 'Basic'; // Текущая группа фильтров
 
-  final Map<String, List<MapEntry<String, List<double>>>> _filterCategories = {
-    // ... без изменений ...
+  final List<double> _identityMatrix = [
+    1.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 1.0, 0.0,
+  ];
+
+  // Группы фильтров
+  final Map<String, Map<String, List<double>>> _filterGroups = {
+    'Basic': {
+      'Original': [
+        1.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 1.0, 0.0,
+      ],
+      'Black & White': bw,
+      'Sepia': sepium,
+      'Contrast': contrast,
+      'Vintage': vintage,
+    },
+    'Color': {
+      'Purple': purple,
+      'Yellow': yellow,
+      'Cyan': cyan,
+      'Cool Blue': coolBlue,
+      'Warm Sunset': warmSunset,
+      'Fresh Mint': freshMint,
+    },
+    'Mood': {
+      'Old Times': oldTimes,
+      'Cold Life': coldLife,
+      'Warmth': warmth,
+      'Ice': ice,
+      'Sadness': sadness,
+      'Bright Day': brightDay,
+    },
+    'Artistic': {
+      'Retro': retro,
+      'Shades': shades,
+      'Misty': misty,
+      'Heatwave': heatwave,
+      'Graphite': graphite,
+      'Anxiety': anxiety,
+    },
+    'Special': {
+      'Milk': milk,
+      'Shining': shining,
+      'Shadow': shadow,
+      'Mushroom': mushroom,
+      'Cold Light': coldLight,
+      'Serenity': serenity,
+    }
   };
 
   @override
   void initState() {
     super.initState();
-    _initialize();
+    _currentImageBytes = widget.imageBytes;
+    _verifyImage(widget.imageBytes);
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
-    _previewCache.clear();
+    _filterStrength.dispose();
     super.dispose();
-  }
-
-  Future<void> _initialize() async {
-    try {
-      _originalImageBytes = widget.imageBytes;
-      _previewImageBytes = widget.imageBytes;
-      await _verifyImage(widget.imageBytes);
-      if (mounted) {
-        setState(() {
-          _history.add({
-            'image': widget.imageBytes,
-            'action': AppLocalizations.of(context)?.filters ?? 'Filters',
-            'operationType': 'init',
-            'parameters': {},
-          });
-          _historyIndex = 0;
-        });
-      }
-    } catch (e) {
-      _handleError(AppLocalizations.of(context)?.error ?? 'Error', 'Initialization error: $e');
-      if (mounted) widget.onCancel();
-    }
-  }
-
-  Future<void> _verifyImage(Uint8List bytes) async {
-    try {
-      if (bytes.isEmpty) {
-        throw Exception(AppLocalizations.of(context)?.noImages ?? 'No image provided');
-      }
-      final image = await _loadImage(bytes);
-      final byteData = await image.toByteData();
-      image.dispose(); // Освобождаем ресурс
-      if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.invalidImage ?? 'Invalid image format');
-      }
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> _resetFilters() async {
-    final localizations = AppLocalizations.of(context);
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(localizations?.warning ?? 'Warning'),
-        content: Text(localizations?.unsavedChangesWarning ?? 'Reset all filters?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(localizations?.cancel ?? 'Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(localizations?.yes ?? 'Yes', style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true && mounted) {
-      setState(() {
-        _previewImageBytes = widget.imageBytes;
-        _pendingFilter = null;
-        _currentFilterName = null;
-        _previewCache.clear();
-      });
-      await widget.onUpdateImage(
-        widget.imageBytes,
-        action: localizations?.reset ?? 'Reset filters',
-        operationType: 'reset',
-        parameters: {},
-      );
-      debugPrint('Filters reset');
-    }
-  }
-
-  Future<void> _undo() async {
-    if (_isProcessing || _historyIndex <= 0) return;
-
-    setState(() => _isProcessing = true);
-    final localizations = AppLocalizations.of(context);
-    try {
-      if (mounted) {
-        setState(() {
-          _historyIndex--;
-          _previewImageBytes = _history[_historyIndex]['image'];
-          _pendingFilter = null;
-          _currentFilterName = null;
-        });
-      }
-
-      await widget.onUpdateImage(
-        _previewImageBytes,
-        action: localizations?.undo ?? 'Undo filter',
-        operationType: 'undo',
-        parameters: {
-          'previous_action': _history[_historyIndex + 1]['action'],
-        },
-      );
-      debugPrint('Undo filter, history index: $_historyIndex');
-    } catch (e) {
-      _handleError(localizations?.error ?? 'Error', 'Undo error: $e');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  Future<void> _applyCurrentFilter() async {
-    if (_pendingFilter == null || _isProcessing) return;
-
-    setState(() => _isProcessing = true);
-    final localizations = AppLocalizations.of(context);
-    try {
-      final filteredBytes = _currentFilterName == 'Original'
-          ? _originalImageBytes
-          : await _applyFilterToImage(_originalImageBytes, _pendingFilter!);
-
-      String? snapshotPath;
-      List<int>? snapshotBytes;
-      if (!kIsWeb) {
-        final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath = '${tempDir.path}/filter_${DateTime.now().millisecondsSinceEpoch}.png';
-        final file = File(snapshotPath);
-        await file.writeAsBytes(filteredBytes);
-      } else {
-        snapshotBytes = filteredBytes;
-      }
-
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'filter',
-        operationParameters: {'filter_name': _currentFilterName},
-        operationDate: DateTime.now(),
-        snapshotPath: snapshotPath,
-        snapshotBytes: snapshotBytes,
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-
-      if (mounted) {
-        setState(() {
-          if (_historyIndex < _history.length - 1) {
-            _history.removeRange(_historyIndex + 1, _history.length);
-          }
-          _history.add({
-            'image': filteredBytes,
-            'action': _currentFilterName == 'Original'
-                ? (localizations?.reset ?? 'Reset to Original')
-                : '${localizations?.filters ?? 'Filters'}: $_currentFilterName',
-            'operationType': 'filter',
-            'parameters': {'filter_name': _currentFilterName, 'historyId': historyId},
-          });
-          _historyIndex++;
-          _pendingFilter = null;
-          _currentFilterName = null;
-        });
-
-        await widget.onUpdateImage(
-          filteredBytes,
-          action: _currentFilterName == 'Original'
-              ? (localizations?.reset ?? 'Reset to Original')
-              : '${localizations?.filters ?? 'Filters'}: $_currentFilterName',
-          operationType: 'filter',
-          parameters: {'filter_name': _currentFilterName, 'historyId': historyId},
-        );
-
-        widget.onApply(filteredBytes);
-      }
-    } catch (e) {
-      _handleError(localizations?.errorApplyFilter ?? 'Error applying filter', 'Error: $e');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  void _resetPreview() {
-    if (mounted) {
-      setState(() {
-        _previewImageBytes = _history[_historyIndex]['image'];
-        _pendingFilter = null;
-        _currentFilterName = null;
-      });
-      debugPrint('Preview reset');
-    }
-  }
-
-  Future<Uint8List> _generateFilterPreview(Uint8List bytes, List<double> matrix) async {
-    ui.Image? image;
-    ui.PictureRecorder? recorder;
-    try {
-      if (!_isValidMatrix(matrix)) {
-        throw Exception(AppLocalizations.of(context)?.invalidFilter ?? 'Invalid filter matrix');
-      }
-      image = await _loadImage(bytes);
-      recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final paint = Paint()
-        ..colorFilter = ColorFilter.matrix(matrix)
-        ..filterQuality = FilterQuality.high;
-
-      final scale = 80 / image.width;
-      canvas.drawImageRect(
-        image,
-        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-        Rect.fromLTWH(0, 0, image.width * scale, image.height * scale),
-        paint,
-      );
-      final picture = recorder.endRecording();
-      final previewImage = await picture.toImage(80, (image.height * scale).round());
-      final byteData = await previewImage.toByteData(format: ui.ImageByteFormat.png);
-      previewImage.dispose();
-      if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.invalidImage ?? 'Failed to convert preview');
-      }
-      return byteData.buffer.asUint8List();
-    } catch (e) {
-      _handleError(AppLocalizations.of(context)?.error ?? 'Error', 'Error generating filter preview: $e');
-      rethrow;
-    } finally {
-      image?.dispose();
-      recorder?.endRecording();
-    }
-  }
-
-  Future<void> _previewFilter(String name, List<double> matrix) async {
-    if (_isProcessing) return;
-
-    setState(() => _isProcessing = true);
-    try {
-      final previewBytes = name == 'Original'
-          ? _originalImageBytes
-          : await _applyFilterToImage(_originalImageBytes, matrix);
-      if (mounted) {
-        setState(() {
-          _previewImageBytes = previewBytes;
-          _currentFilterName = name;
-          _pendingFilter = name == 'Original' ? null : matrix;
-        });
-        debugPrint('Filter preview applied: $name');
-      }
-    } catch (e) {
-      _handleError(AppLocalizations.of(context)?.error ?? 'Error', 'Error previewing filter $name: $e');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  Future<Uint8List> _applyFilterToImage(Uint8List bytes, List<double> matrix) async {
-    ui.Image? image;
-    ui.PictureRecorder? recorder;
-    try {
-      if (!_isValidMatrix(matrix)) {
-        throw Exception(AppLocalizations.of(context)?.invalidFilter ?? 'Invalid filter matrix');
-      }
-      image = await _loadImage(bytes);
-      recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final paint = Paint()
-        ..colorFilter = ColorFilter.matrix(matrix)
-        ..filterQuality = FilterQuality.high;
-
-      canvas.drawImage(image, Offset.zero, paint);
-      final picture = recorder.endRecording();
-      final filteredImage = await picture.toImage(image.width, image.height);
-      final byteData = await filteredImage.toByteData(format: ui.ImageByteFormat.png);
-      filteredImage.dispose();
-      if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.invalidImage ?? 'Failed to convert image');
-      }
-      return byteData.buffer.asUint8List();
-    } catch (e) {
-      _handleError(AppLocalizations.of(context)?.errorApplyFilter ?? 'Error applying filter', 'Error: $e');
-      rethrow;
-    } finally {
-      image?.dispose();
-      recorder?.endRecording();
-    }
-  }
-
-  Future<ui.Image> _loadImage(Uint8List bytes) async {
-    try {
-      if (bytes.isEmpty) {
-        throw Exception(AppLocalizations.of(context)?.noImages ?? 'No image provided');
-      }
-      final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: 1024,
-      );
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
-      codec.dispose();
-      return image;
-    } catch (e) {
-      _handleError(AppLocalizations.of(context)?.error ?? 'Error', 'Error loading image: $e');
-      throw Exception(AppLocalizations.of(context)?.invalidImage ?? 'Failed to load image');
-    }
-  }
-
-  bool _isValidMatrix(List<double> matrix) {
-    if (matrix.length != 20) {
-      debugPrint('Invalid matrix length: ${matrix.length}');
-      return false;
-    }
-    for (var value in matrix) {
-      if (value.isNaN || value.isInfinite) {
-        debugPrint('Invalid matrix value: $value');
-        return false;
-      }
-    }
-    return true;
-  }
-
-  void _handleError(String title, String message) {
-    debugPrint(message);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$title: $message'),
-          backgroundColor: Colors.red[700],
-        ),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context);
+    final appLocalizations = AppLocalizations.of(context);
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(0.8),
       body: SafeArea(
@@ -391,21 +146,29 @@ class _FiltersPanelState extends State<FiltersPanel> {
           children: [
             Column(
               children: [
-                _buildAppBar(localizations),
+                _buildAppBar(appLocalizations, isDesktop),
+                _buildFilterStrengthSlider(isDesktop),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: RepaintBoundary(
-                      key: ValueKey(_previewImageBytes),
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 3.0,
+                    onInteractionUpdate: (details) {
+                      setState(() {
+                        _scaleFactor = details.scale;
+                      });
+                    },
+                    child: Center(
                       child: Image.memory(
-                        _previewImageBytes,
+                        _currentImageBytes,
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
-                          debugPrint('Error displaying image: $error');
                           return Center(
                             child: Text(
-                              localizations?.invalidImage ?? 'Failed to load image',
-                              style: const TextStyle(color: Colors.white),
+                              appLocalizations?.invalidImage ?? 'Failed to load image',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14),
+                              ),
                             ),
                           );
                         },
@@ -413,7 +176,8 @@ class _FiltersPanelState extends State<FiltersPanel> {
                     ),
                   ),
                 ),
-                _buildFilterList(localizations),
+                _buildFilterGroupTabs(isDesktop), // Moved filter group tabs here
+                _buildFilterList(isDesktop),
               ],
             ),
             if (_isProcessing)
@@ -423,11 +187,14 @@ class _FiltersPanelState extends State<FiltersPanel> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const CircularProgressIndicator(color: Colors.blueAccent),
+                      const CircularProgressIndicator(color: Colors.white),
                       const SizedBox(height: 16),
                       Text(
-                        localizations?.processingFilter ?? 'Processing filter...',
-                        style: const TextStyle(color: Colors.white),
+                        appLocalizations?.processingFilter ?? 'Processing filter...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14),
+                        ),
                       ),
                     ],
                   ),
@@ -439,153 +206,259 @@ class _FiltersPanelState extends State<FiltersPanel> {
     );
   }
 
-  Widget _buildAppBar(AppLocalizations? localizations) {
+  // Метод для отображения вкладок групп фильтров
+  Widget _buildFilterGroupTabs(bool isDesktop) {
+    return Container(
+      height: isDesktop ? 50 : 40,
+      color: Colors.black.withOpacity(0.7),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _filterGroups.length,
+        itemBuilder: (context, index) {
+          final groupName = _filterGroups.keys.elementAt(index);
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChoiceChip(
+              label: Text(
+                groupName,
+                style: TextStyle(
+                  color: _currentFilterGroup == groupName ? Colors.white : Colors.white70,
+                  fontSize: ResponsiveUtils.getResponsiveFontSize(context, 12),
+                ),
+              ),
+              selected: _currentFilterGroup == groupName,
+              onSelected: (selected) {
+                setState(() {
+                  _currentFilterGroup = groupName;
+                });
+              },
+              selectedColor: Colors.blueAccent,
+              backgroundColor: Colors.grey[800],
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 16 : 12,
+                vertical: isDesktop ? 8 : 4,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Метод для отображения списка фильтров
+  Widget _buildFilterList(bool isDesktop) {
+    final previewSize = isDesktop ? 100.0 : 80.0;
+    final currentGroupFilters = _filterGroups[_currentFilterGroup] ?? {};
+
+    return Container(
+      height: isDesktop ? 140 : 120,
+      padding: EdgeInsets.symmetric(vertical: isDesktop ? 8 : 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: ResponsiveUtils.getResponsivePadding(context),
+        itemCount: currentGroupFilters.length,
+        itemBuilder: (context, index) {
+          final entry = currentGroupFilters.entries.elementAt(index);
+          return _buildFilterPreview(entry.key, entry.value, previewSize);
+        },
+      ),
+    );
+  }
+
+  Future<void> _verifyImage(Uint8List bytes) async {
+    try {
+      final image = await _loadImage(bytes);
+      final byteData = await image.toByteData();
+      if (byteData == null) {
+        throw Exception('Invalid image format');
+      }
+    } catch (e) {
+      debugPrint('Image verification failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)?.invalidImage ?? 'Invalid image format',
+            ),
+          ),
+        );
+        widget.onCancel();
+      }
+    }
+  }
+
+  List<double> _blendFilterMatrix(List<double> filterMatrix, double strength) {
+    // Interpolate between identity matrix and filter matrix
+    return List.generate(20, (i) {
+      return _identityMatrix[i] + (filterMatrix[i] - _identityMatrix[i]) * strength;
+    });
+  }
+
+  Widget _buildAppBar(AppLocalizations? appLocalizations, bool isDesktop) {
     return AppBar(
       backgroundColor: Colors.black.withOpacity(0.7),
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.close, color: Colors.redAccent),
+        icon: Icon(Icons.close, color: Colors.redAccent, size: isDesktop ? 28 : 24),
         onPressed: widget.onCancel,
-        tooltip: localizations?.cancel ?? 'Cancel',
+        tooltip: appLocalizations?.cancel ?? 'Cancel',
       ),
       title: Text(
-        _currentFilterName ?? (localizations?.filters ?? 'Filters'),
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        appLocalizations?.filters ?? 'Filters',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: isDesktop ? 20 : 16,
+        ),
       ),
       actions: [
         IconButton(
-          icon: Icon(Icons.undo, color: _historyIndex > 0 ? Colors.white : Colors.grey[700]),
-          onPressed: _historyIndex > 0 && !_isProcessing ? _undo : null,
-          tooltip: localizations?.undo ?? 'Undo',
-        ),
-        IconButton(
-          icon: const Icon(Icons.restart_alt, color: Colors.white),
-          onPressed: _isProcessing ? null : _resetFilters,
-          tooltip: localizations?.reset ?? 'Reset',
-        ),
-        if (_pendingFilter != null)
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: _resetPreview,
-            tooltip: localizations?.cancelPreview ?? 'Cancel preview',
-          ),
-        IconButton(
-          icon: const Icon(Icons.check, color: Colors.green),
-          onPressed: _pendingFilter != null && !_isProcessing ? _applyCurrentFilter : null,
-          tooltip: localizations?.applyFilter ?? 'Apply Filter',
+          icon: Icon(Icons.check,
+              color: _isProcessing ? Colors.grey[700] : Colors.green,
+              size: isDesktop ? 28 : 24),
+          onPressed: _isProcessing
+              ? null
+              : () async {
+            setState(() => _isProcessing = true);
+            try {
+              final blendedMatrix = _blendFilterMatrix(_currentFilter, _filterStrength.value);
+              final filteredBytes = await _applyFilterToOriginal(blendedMatrix);
+              widget.onApply(filteredBytes);
+              widget.onUpdateImage(
+                filteredBytes,
+                operationType: 'Filter',
+                parameters: {
+                  'filterName': _currentFilterName ?? 'Unknown',
+                  'strength': _filterStrength.value,
+                },
+              );
+            } catch (e) {
+              debugPrint('Error applying filter: $e');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '${appLocalizations?.errorApplyFilter ?? 'Failed to apply filter'}: $e',
+                    ),
+                  ),
+                );
+              }
+            } finally {
+              if (mounted) setState(() => _isProcessing = false);
+            }
+          },
+          tooltip: appLocalizations?.applyFilter ?? 'Apply Filter',
         ),
       ],
     );
   }
 
-  Widget _buildFilterList(AppLocalizations? localizations) {
+  Widget _buildFilterStrengthSlider(bool isDesktop) {
     return Container(
-      height: 180,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: DefaultTabController(
-        length: _filterCategories.length,
-        child: Column(
-          children: [
-            TabBar(
-              isScrollable: true,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.grey[700],
-              indicatorColor: Colors.blueAccent,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-              tabs: _filterCategories.keys.map((category) => Tab(text: category)).toList(),
+      padding: EdgeInsets.symmetric(horizontal: isDesktop ? 16 : 8, vertical: isDesktop ? 8 : 4),
+      color: Colors.black.withOpacity(0.6),
+      child: Row(
+        children: [
+          Text(
+            '${AppLocalizations.of(context)?.filterStrength ?? 'Filter Strength'}:',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: ResponsiveUtils.getResponsiveFontSize(context, 12),
             ),
-            Expanded(
-              child: TabBarView(
-                children: _filterCategories.entries.map((category) {
-                  return ListView.builder(
-                    controller: _scrollController,
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    itemCount: category.value.length,
-                    itemBuilder: (context, index) {
-                      final entry = category.value[index];
-                      return _buildFilterPreview(entry.key, entry.value, localizations);
-                    },
-                  );
-                }).toList(),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ValueListenableBuilder<double>(
+              valueListenable: _filterStrength,
+              builder: (context, strength, _) {
+                return Slider(
+                  value: strength,
+                  min: 0.0,
+                  max: 1.0,
+                  divisions: 100,
+                  activeColor: Colors.blueAccent,
+                  inactiveColor: Colors.grey.withOpacity(0.5),
+                  label: (strength * 100).round().toString(),
+                  onChanged: _isProcessing
+                      ? null
+                      : (value) async {
+                    _filterStrength.value = value;
+                    if (_currentFilterName != 'Original') {
+                      setState(() => _isProcessing = true);
+                      try {
+                        final blendedMatrix = _blendFilterMatrix(_currentFilter, value);
+                        final filteredBytes = await _applyFilterToOriginal(blendedMatrix);
+                        setState(() {
+                          _currentImageBytes = filteredBytes;
+                        });
+                      } catch (e) {
+                        debugPrint('Error adjusting filter strength: $e');
+                      } finally {
+                        setState(() => _isProcessing = false);
+                      }
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+          Text(
+            (_filterStrength.value * 100).round().toString(),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: ResponsiveUtils.getResponsiveFontSize(context, 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: _isProcessing
+                ? null
+                : () {
+              _filterStrength.value = 1.0;
+              if (_currentFilterName != 'Original') {
+                _applyFilter(_currentFilter, _currentFilterName!);
+              }
+            },
+            child: Text(
+              AppLocalizations.of(context)?.reset ?? 'Reset',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 12),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildFilterPreview(String name, List<double> matrix, AppLocalizations? localizations) {
+  Widget _buildFilterPreview(String name, List<double> matrix, double previewSize) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
-        children: [
-          GestureDetector(
-            onTap: () => _previewFilter(name, matrix),
-            onDoubleTap: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text(localizations?.filters ?? 'Filters'),
-                  content: Text(
-                    '${localizations?.filter ?? 'Filter'}: $name\n'
-                        '${localizations?.description ?? 'Description'}: $name',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(localizations?.ok ?? 'OK'),
-                    ),
-                  ],
-                ),
-              );
-            },
-            child: Container(
-              width: 80,
-              height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: GestureDetector(
+        onTap: _isProcessing ? null : () => _applyFilter(matrix, name),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: previewSize,
+              height: previewSize,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: _currentFilterName == name ? Colors.blueAccent : Colors.transparent,
-                  width: 3,
+                  color: _currentFilter == matrix ? Colors.blue : Colors.transparent,
+                  width: 2,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: name == 'Original'
-                    ? Image.memory(
-                  _originalImageBytes,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    debugPrint('Error loading original preview: $error');
-                    return const Center(
-                      child: Icon(Icons.error, color: Colors.red, size: 24),
-                    );
-                  },
-                )
-                    : FutureBuilder<Uint8List>(
-                  future: _getCachedPreview(name, matrix),
+                borderRadius: BorderRadius.circular(6),
+                child: FutureBuilder<Uint8List>(
+                  future: _generateFilterPreview(widget.imageBytes, matrix),
                   builder: (context, snapshot) {
-                    if (snapshot.hasData) {
+                    if (snapshot.hasData && snapshot.data!.isNotEmpty) {
                       return Image.memory(
                         snapshot.data!,
                         fit: BoxFit.cover,
@@ -597,44 +470,191 @@ class _FiltersPanelState extends State<FiltersPanel> {
                         },
                       );
                     }
-                    if (snapshot.hasError) {
-                      debugPrint('Snapshot error for $name: ${snapshot.error}');
-                      return const Center(
-                        child: Icon(Icons.error, color: Colors.red, size: 24),
-                      );
-                    }
-                    return const Center(child: CircularProgressIndicator(color: Colors.blueAccent));
+                    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
                   },
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            name,
-            style: TextStyle(
-              color: _currentFilterName == name ? Colors.blueAccent : Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+            const SizedBox(height: 4),
+            SizedBox(
+              width: previewSize,
+              child: Text(
+                name,
+                style: TextStyle(
+                  color: _currentFilter == matrix ? Colors.blue : Colors.white,
+                  fontSize: ResponsiveUtils.getResponsiveFontSize(context, 10),
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Future<Uint8List> _getCachedPreview(String name, List<double> matrix) async {
-    if (_previewCache.containsKey(name)) {
-      return _previewCache[name]!;
+  Future<Uint8List> _generateFilterPreview(Uint8List bytes, List<double> matrix) async {
+    try {
+      final blendedMatrix = _blendFilterMatrix(matrix, _filterStrength.value);
+      final image = await _loadImage(bytes, targetWidth: 100);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final paint = Paint()
+        ..colorFilter = ColorFilter.matrix(blendedMatrix)
+        ..filterQuality = FilterQuality.medium;
+
+      final imageWidth = image.width.toDouble();
+      final imageHeight = image.height.toDouble();
+      const previewSize = 100.0;
+      final aspectRatio = imageHeight / imageWidth;
+      final destHeight = previewSize * aspectRatio;
+
+      final destRect = Rect.fromLTWH(0, 0, previewSize, destHeight.clamp(1.0, 1000.0));
+      final srcRect = Rect.fromLTWH(0, 0, imageWidth, imageHeight);
+
+      canvas.drawImageRect(image, srcRect, destRect, paint);
+      final picture = recorder.endRecording();
+      final previewImage = await picture.toImage(
+        previewSize.toInt(),
+        destHeight.toInt().clamp(1, 1000),
+      );
+      final byteData = await previewImage.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      previewImage.dispose();
+      picture.dispose();
+
+      if (byteData == null || byteData.lengthInBytes == 0) {
+        throw Exception('Failed to generate filter preview');
+      }
+      return byteData.buffer.asUint8List();
+    } catch (e) {
+      debugPrint('Error generating filter preview: $e');
+      return Uint8List(0);
     }
-    final preview = await _generateFilterPreview(_originalImageBytes, matrix);
-    if (_previewCache.length >= _maxCacheSize) {
-      _previewCache.remove(_previewCache.keys.first);
+  }
+
+  Future<void> _applyFilter(List<double> matrix, String filterName) async {
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+      _currentFilter = matrix;
+      _currentFilterName = filterName;
+      _filterStrength.value = 1.0; // Reset strength when changing filters
+    });
+
+    try {
+      final blendedMatrix = _blendFilterMatrix(matrix, _filterStrength.value);
+      final filteredBytes = await _applyFilterToOriginal(blendedMatrix);
+      debugPrint('Filter applied: $filterName with strength ${_filterStrength.value}');
+      if (mounted) {
+        setState(() {
+          _currentImageBytes = filteredBytes;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error applying filter: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${AppLocalizations.of(context)?.errorApplyFilter ?? 'Failed to apply filter'}: $e',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
-    _previewCache[name] = preview;
-    return preview;
+  }
+
+  Future<Uint8List> _applyFilterToOriginal(List<double> matrix) async {
+    try {
+      final image = await _loadImage(widget.imageBytes);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final paint = Paint()
+        ..colorFilter = ColorFilter.matrix(matrix)
+        ..filterQuality = FilterQuality.high;
+
+      canvas.drawImage(image, Offset.zero, paint);
+      final picture = recorder.endRecording();
+      final filteredImage = await picture.toImage(image.width, image.height);
+      final byteData = await filteredImage.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      filteredImage.dispose();
+      picture.dispose();
+
+      if (byteData == null || byteData.lengthInBytes == 0) {
+        throw Exception('Failed to apply filter to original image');
+      }
+
+      var filteredPixels = byteData.buffer.asUint8List();
+      if (_scaleFactor != 1.0) {
+        filteredPixels = await _applyScale(filteredPixels, image.width, image.height, _scaleFactor);
+      }
+
+      return filteredPixels;
+    } catch (e) {
+      debugPrint('Error applying filter to original: $e');
+      throw Exception('Failed to apply filter: $e');
+    }
+  }
+
+  Future<ui.Image> _loadImage(Uint8List bytes, {int? targetWidth}) async {
+    try {
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: targetWidth,
+      );
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      codec.dispose();
+      return image;
+    } catch (e) {
+      debugPrint('Error loading image: $e');
+      throw Exception('Failed to load image: $e');
+    }
+  }
+
+  Future<Uint8List> _applyScale(Uint8List pixels, int width, int height, double scale) async {
+    if (scale == 1.0) return pixels;
+
+    try {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final paint = Paint()..filterQuality = FilterQuality.high;
+
+      final codec = await ui.instantiateImageCodec(pixels);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+
+      final newWidth = (width * scale).round();
+      final newHeight = (height * scale).round();
+
+      canvas.drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+        Rect.fromLTWH(0, 0, newWidth.toDouble(), newHeight.toDouble()),
+        paint,
+      );
+
+      final picture = recorder.endRecording();
+      final scaledImage = await picture.toImage(newWidth, newHeight);
+      final byteData = await scaledImage.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      scaledImage.dispose();
+      picture.dispose();
+
+      if (byteData == null) {
+        throw Exception('Failed to convert scaled image to bytes');
+      }
+      return byteData.buffer.asUint8List();
+    } catch (e) {
+      debugPrint('Error applying scale: $e');
+      throw Exception('Failed to apply scale: $e');
+    }
   }
 }

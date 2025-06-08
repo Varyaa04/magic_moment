@@ -1,24 +1,29 @@
-import 'dart:convert';
 import 'package:hive/hive.dart';
 
 part 'editHistory.g.dart';
 
 @HiveType(typeId: 0)
-class EditHistory {
+class EditHistory extends HiveObject {
   @HiveField(0)
-  final int? historyId;
+  int? historyId;
+
   @HiveField(1)
-  final int imageId;
+  int imageId;
+
   @HiveField(2)
-  final String operationType;
+  String operationType;
+
   @HiveField(3)
-  final Map<String, dynamic> operationParameters;
+  Map<String, dynamic> operationParameters;
+
   @HiveField(4)
-  final DateTime operationDate;
+  DateTime operationDate;
+
   @HiveField(5)
-  final String? snapshotPath; // Для Android
+  String? snapshotPath; // Deprecated
+
   @HiveField(6)
-  final List<int>? snapshotBytes; // Для веба
+  List<int>? snapshotBytes;
 
   EditHistory({
     this.historyId,
@@ -29,30 +34,6 @@ class EditHistory {
     this.snapshotPath,
     this.snapshotBytes,
   });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'history_id': historyId,
-      'image_id': imageId,
-      'operation_type': operationType,
-      'operation_parameters': jsonEncode(operationParameters),
-      'operation_date': operationDate.toIso8601String(),
-      'snapshot_path': snapshotPath,
-      'snapshot_bytes': snapshotBytes,
-    };
-  }
-
-  factory EditHistory.fromMap(Map<String, dynamic> map) {
-    return EditHistory(
-      historyId: map['history_id'] as int?,
-      imageId: map['image_id'] as int,
-      operationType: map['operation_type'] as String,
-      operationParameters: Map<String, dynamic>.from(jsonDecode(map['operation_parameters'] as String)),
-      operationDate: DateTime.parse(map['operation_date'] as String),
-      snapshotPath: map['snapshot_path'] as String?,
-      snapshotBytes: map['snapshot_bytes'] as List<int>?,
-    );
-  }
 
   EditHistory copyWith({
     int? historyId,
@@ -73,4 +54,18 @@ class EditHistory {
       snapshotBytes: snapshotBytes ?? this.snapshotBytes,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'historyId': historyId,
+      'imageId': imageId,
+      'operationType': operationType,
+      'operationParameters': operationParameters,
+      'operationDate': operationDate.toIso8601String(),
+      'snapshotPath': snapshotPath,
+      'snapshotBytes': snapshotBytes,
+    };
+  }
+
+
 }

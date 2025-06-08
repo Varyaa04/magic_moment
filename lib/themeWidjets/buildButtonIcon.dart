@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/theme_provider.dart';
 
 class CustomButton extends StatelessWidget {
   final VoidCallback onPressed;
@@ -20,12 +18,11 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final double buttonHeight = isSmall ? 50 : 60;
-    final double buttonWidth = isSmall ? 130 : 150;
+    final double buttonHeight = isSmall ? 60 : 60;
+    final double buttonWidth = isSmall ? 150 : 150;
     final iconSize = isSmall ? 18.0 : 24.0;
     final textSize = isSmall ? 12.0 : 14.0;
     final padding = isSmall

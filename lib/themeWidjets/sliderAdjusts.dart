@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// Компонент строки со слайдером для настройки параметров изображения
 class SliderRow extends StatelessWidget {
   final IconData icon;
   final double value;
@@ -28,27 +29,36 @@ class SliderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+    // Адаптивные размеры для слайдера
+    final trackHeight = isDesktop ? 6.0 : 5.0;
+    final thumbRadius = isDesktop ? 10.0 : 8.0;
+    final overlayRadius = isDesktop ? 20.0 : 16.0;
+
     return Row(
       children: [
         Icon(
           icon,
           color: Colors.white70,
-          size: 20,
+          size: isDesktop ? 24.0 : 20.0,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 12),
         Expanded(
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              trackHeight: trackHeight,
+              thumbShape: RoundSliderThumbShape(enabledThumbRadius: thumbRadius),
+              overlayShape: RoundSliderOverlayShape(overlayRadius: overlayRadius),
               valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
               activeTrackColor: activeColor,
-              inactiveTrackColor: inactiveColor,
+              inactiveTrackColor: inactiveColor.withOpacity(0.5),
               thumbColor: activeColor,
               overlayColor: activeColor.withOpacity(0.3),
-              valueIndicatorColor: activeColor,
-              valueIndicatorTextStyle: const TextStyle(color: Colors.white),
+              valueIndicatorColor: activeColor.withOpacity(0.8),
+              valueIndicatorTextStyle: TextStyle(
+                color: Colors.white,
+                fontSize: isDesktop ? 14.0 : 12.0,
+              ),
             ),
             child: Slider(
               value: value,

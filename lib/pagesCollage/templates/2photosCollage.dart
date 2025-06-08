@@ -1,191 +1,142 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
-import 'dart:math' as math;
-import 'resizable_photo_widget.dart';
+import 'base_collage.dart';
 
-class TwoPhotosCollage extends StatefulWidget {
-  final List<ImageProvider> images;
-  final int layoutIndex;
-  final Color borderColor;
-  final List<Offset> positions;
-  final List<double> scales;
-  final List<double> rotations;
-  final Function(int, Offset) onPositionChanged;
-  final Function(int, double) onScaleChanged;
-  final Function(int, double) onRotationChanged;
-  final Function(int)? onImageTapped;
-  final int? selectedImageIndex;
-  final BoxDecoration? Function(int) selectedImageDecoration;
+class TwoPhotosCollage extends BaseCollage {
+  final Widget? placeholder;
 
   const TwoPhotosCollage({
     Key? key,
-    required this.images,
-    required this.layoutIndex,
-    required this.borderColor,
-    required this.positions,
-    required this.scales,
-    required this.rotations,
-    required this.onPositionChanged,
-    required this.onScaleChanged,
-    required this.onRotationChanged,
-    this.onImageTapped,
-    this.selectedImageIndex,
-    required this.selectedImageDecoration,
-  }) : super(key: key);
+    required super.images,
+    required int layoutIndex,
+    required super.borderColor,
+    required super.positions,
+    required super.scales,
+    required super.rotations,
+    required super.onPositionChanged,
+    required super.onScaleChanged,
+    required super.onRotationChanged,
+    super.onImageTapped,
+    super.selectedImageIndex,
+    super.selectedImageDecoration,
+    required super.borderWidth,
+    this.placeholder,
+  }) : super(key: key, templateIndex: layoutIndex);
 
   @override
-  _TwoPhotosCollageState createState() => _TwoPhotosCollageState();
-}
+  Widget buildLayout(Size size) {
+    if (images.length < 2) {
+      return const Center(
+        child: Text(
+          'Need at least 2 photos',
+          style: TextStyle(color: Colors.red, fontSize: 16),
+        ),
+      );
+    }
 
-class _TwoPhotosCollageState extends State<TwoPhotosCollage> {
-  final _debouncer = Debouncer(milliseconds: 16);
+    final width = size.width;
+    final height = size.height;
+    final halfWidth = (width - borderWidth) / 2;
+    final halfHeight = (height - borderWidth) / 2;
+    final thirdWidth = (width - 2 * borderWidth) / 3;
+    final thirdHeight = (height - 2 * borderWidth) / 3;
 
-  @override
-  void dispose() {
-    _debouncer.dispose();
-    super.dispose();
-  }
+    List<Rect> getBounds(int layoutIndex) {
+      switch (layoutIndex) {
+        case 0: // Vertical split
+          return [
+            Rect.fromLTWH(0, 0, halfWidth, height),
+            Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, height),
+          ];
+        case 1: // Horizontal split
+          return [
+            Rect.fromLTWH(0, 0, width, halfHeight),
+            Rect.fromLTWH(0, halfHeight + borderWidth, width, halfHeight),
+          ];
+        case 2: // 2:1 vertical
+          return [
+            Rect.fromLTWH(0, 0, 2 * thirdWidth + borderWidth, height),
+            Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth, 0, thirdWidth, height),
+          ];
+        case 3: // 2:1 horizontal
+          return [
+            Rect.fromLTWH(0, 0, width, 2 * thirdHeight + borderWidth),
+            Rect.fromLTWH(0, 2 * thirdHeight + 2 * borderWidth, width, thirdHeight),
+          ];
+        case 4: // Diagonal split
+          return [
+            Rect.fromLTWH(0, 0, halfWidth, halfHeight),
+            Rect.fromLTWH(halfWidth + borderWidth, halfHeight + borderWidth, halfWidth, halfHeight),
+          ];
+        case 5: // Small top, large bottom
+          return [
+            Rect.fromLTWH(0, 0, width, thirdHeight),
+            Rect.fromLTWH(0, thirdHeight + borderWidth, width, 2 * thirdHeight + borderWidth),
+          ];
+        case 6: // Large left, small right
+          return [
+            Rect.fromLTWH(0, 0, 2 * thirdWidth + borderWidth, height),
+            Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth, 0, thirdWidth, height),
+          ];
+        case 7: // Small overlay
+          return [
+            Rect.fromLTWH(0, 0, width, height),
+            Rect.fromLTWH(width / 4, height / 4, width / 2, height / 2),
+          ];
+        case 8: // Corner overlay
+          return [
+            Rect.fromLTWH(0, 0, width, height),
+            Rect.fromLTWH(borderWidth, borderWidth, width / 3, height / 3),
+          ];
+        case 9: // Large bottom, small top
+          return [
+            Rect.fromLTWH(0, thirdHeight + borderWidth, width, 2 * thirdHeight + borderWidth),
+            Rect.fromLTWH(0, 0, width, thirdHeight),
+          ];
+        default:
+          return [
+            Rect.fromLTWH(0, 0, halfWidth, height),
+            Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, height),
+          ];
+      }
+    }
 
-  Widget _buildImage(int index) {
-    return Container(
-      decoration: widget.selectedImageDecoration(index),
-      child: ResizablePhotoWidget(
-        imageProvider: widget.images[index],
-        initialScale: widget.scales[index],
-        initialPosition: widget.positions[index] * 100,
-        initialRotation: widget.rotations[index],
-        onPositionChanged: (offset) => widget.onPositionChanged(index, offset),
-        onScaleChanged: (scale) => widget.onScaleChanged(index, scale),
-        onRotationChanged: (rotation) => widget.onRotationChanged(index, rotation),
-        onTap: () => widget.onImageTapped?.call(index),
+    final bounds = getBounds(templateIndex);
+
+    for (var i = 0; i < bounds.length; i++) {
+      if (bounds[i].width <= 0 || bounds[i].height <= 0) {
+        debugPrint('Invalid bounds at index $i for template $templateIndex: ${bounds[i]}');
+        return const Center(
+          child: Text(
+            'Invalid template bounds',
+            style: TextStyle(color: Colors.red, fontSize: 16),
+          ),
+        );
+      }
+    }
+
+    final defaultPlaceholder = Container(
+      color: Colors.grey[600],
+      child: const Center(
+        child: Icon(Icons.image, color: Colors.white, size: 24),
       ),
     );
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = math.min(constraints.maxWidth, constraints.maxHeight);
-        return SizedBox(
-          width: size,
-          height: size,
-          child: switch (widget.layoutIndex) {
-            0 => Row(
-              children: [
-                Expanded(child: _buildImage(0)),
-                Container(width: 4, color: widget.borderColor),
-                Expanded(child: _buildImage(1)),
-              ],
-            ),
-            1 => Column(
-              children: [
-                Expanded(child: _buildImage(0)),
-                Container(height: 4, color: widget.borderColor),
-                Expanded(child: _buildImage(1)),
-              ],
-            ),
-            2 => Stack(
-              children: [
-                Positioned.fill(child: _buildImage(0)),
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: SizedBox(
-                    width: size / 3,
-                    height: size / 3,
-                    child: _buildImage(1),
-                  ),
-                ),
-              ],
-            ),
-            3 => Column(
-              children: [
-                Expanded(flex: 2, child: _buildImage(0)),
-                Container(height: 4, color: widget.borderColor),
-                Expanded(flex: 1, child: _buildImage(1)),
-              ],
-            ),
-            4 => Row(
-              children: [
-                Expanded(flex: 2, child: _buildImage(0)),
-                Container(width: 4, color: widget.borderColor),
-                Expanded(flex: 1, child: _buildImage(1)),
-              ],
-            ),
-            5 => GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _buildImage(0),
-                _buildImage(1),
-              ],
-            ),
-            6 => Column(
-              children: [
-                Expanded(child: _buildImage(0)),
-                Container(height: 4, color: widget.borderColor),
-                Expanded(child: _buildImage(1)),
-              ],
-            ),
-            7 => Row(
-              children: [
-                Expanded(child: _buildImage(0)),
-                Container(width: 4, color: widget.borderColor),
-                Expanded(child: _buildImage(1)),
-              ],
-            ),
-            8 => Stack(
-              children: [
-                Positioned.fill(child: _buildImage(0)),
-                Center(
-                  child: Container(
-                    width: size / 2,
-                    height: size / 2,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: widget.borderColor, width: 4),
-                    ),
-                    child: _buildImage(1),
-                  ),
-                ),
-              ],
-            ),
-            9 => Stack(
-              children: [
-                Positioned.fill(child: _buildImage(0)),
-                Align(
-                  alignment: Alignment.topLeft,
-                  child: Container(
-                    width: size / 3,
-                    height: size / 3,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: widget.borderColor),
-                    ),
-                    child: _buildImage(1),
-                  ),
-                ),
-              ],
-            ),
-            _ => const Center(child: Text('Invalid template index')),
-          },
-        );
-      },
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
+        for (int i = 0; i < 2; i++)
+          Positioned.fromRect(
+            rect: bounds[i],
+            child: images[i] is MemoryImage && (images[i] as MemoryImage).bytes.isEmpty
+                ? Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: borderColor, width: borderWidth),
+              ),
+              child: placeholder ?? defaultPlaceholder,
+            )
+                : buildImage(i, bounds[i]),
+          ),
+      ],
     );
-  }
-}
-
-class Debouncer {
-  final int milliseconds;
-  Timer? _timer;
-
-  Debouncer({required this.milliseconds});
-
-  void run(VoidCallback action) {
-    _timer?.cancel();
-    _timer = Timer(Duration(milliseconds: milliseconds), action);
-  }
-
-  void dispose() {
-    _timer?.cancel();
   }
 }

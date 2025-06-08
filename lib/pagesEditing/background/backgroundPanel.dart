@@ -1,21 +1,18 @@
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:MagicMoment/pagesEditing/background/removeBackground.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:MagicMoment/database/editHistory.dart';
-import 'package:MagicMoment/database/magicMomentDatabase.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
-
-import 'blurBackground.dart';
-import 'changeBackground.dart';
+import 'package:MagicMoment/pagesEditing/background/removeBackground.dart';
+import 'package:MagicMoment/pagesEditing/background/changeBackground.dart';
+import 'package:MagicMoment/pagesEditing/background/blurBackground.dart';
+import '../../pagesSettings/classesSettings/app_localizations.dart';
 
 class BackgroundPanel extends StatefulWidget {
   final Uint8List image;
   final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
-  final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
+  final Function(Uint8List,
+      {String? action, String? operationType, Map<String, dynamic>? parameters})
+  onUpdateImage;
 
   const BackgroundPanel({
     required this.image,
@@ -27,159 +24,244 @@ class BackgroundPanel extends StatefulWidget {
   });
 
   @override
-  _BackgroundPanelState createState() => _BackgroundPanelState();
+  State<BackgroundPanel> createState() => _BackgroundPanelState();
 }
 
 class _BackgroundPanelState extends State<BackgroundPanel> {
-  Uint8List? _currentImage;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentImage = widget.image;
-  }
-
-  void _navigateToPage(Widget page) async {
-    try {
-      if (mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => page),
-        );
-      }
-    } catch (e) {
-      final localizations = AppLocalizations.of(context);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${localizations?.error ?? 'Error'}: $e'),
-            backgroundColor: Colors.red[700],
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context);
-
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(0.8),
       body: SafeArea(
         child: Column(
           children: [
-            _buildAppBar(localizations),
+            _buildAppBar(),
             Expanded(
               child: Center(
-                child: _currentImage != null
-                    ? Image.memory(_currentImage!, fit: BoxFit.contain)
-                    : Text(
-                  localizations?.noImages ?? 'No image provided',
-                  style: const TextStyle(color: Colors.white),
+                child: Image.memory(
+                  widget.image,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    debugPrint('Error displaying image: $error');
+                    return Center(
+                      child: Text(
+                        AppLocalizations.of(context)?.invalidImage ??
+                            'Failed to load image',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
-            _buildOptions(localizations),
+            _buildBottomPanel(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAppBar(AppLocalizations? localizations) {
+  Widget _buildAppBar() {
+    final localizations = AppLocalizations.of(context);
+    final isDesktop = MediaQuery.of(context).size.width > 600;
     return AppBar(
       backgroundColor: Colors.black.withOpacity(0.7),
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.close, color: Colors.redAccent),
+        icon: Icon(
+          Icons.close,
+          color: Colors.redAccent,
+          size: isDesktop ? 28 : 24,
+        ),
         onPressed: widget.onCancel,
         tooltip: localizations?.cancel ?? 'Cancel',
       ),
       title: Text(
-        localizations?.backgroundEditing ?? 'Background Editing',
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        localizations?.background ?? 'Background',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: isDesktop ? 20 : 16,
+        ),
       ),
     );
   }
 
-  Widget _buildOptions(AppLocalizations? localizations) {
+  Widget _buildBottomPanel() {
+    final localizations = AppLocalizations.of(context);
+    final isDesktop = MediaQuery.of(context).size.width > 600;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      color: Colors.grey[900],
-      child: Column(
+      height: isDesktop ? 100 : 80,
+      padding: EdgeInsets.symmetric(
+        vertical: isDesktop ? 12 : 6,
+        horizontal: isDesktop ? 24 : 16,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _buildOptionButton(
-            localizations?.removeBackground ?? 'Remove Background',
-            Icons.delete,
-                () => _navigateToPage(
-              RemoveBackgroundPage(
-                image: widget.image,
-                imageId: widget.imageId,
-                onCancel: () => Navigator.pop(context),
-                onApply: (newImage) {
-                  setState(() => _currentImage = newImage);
-                  widget.onApply(newImage);
-                  Navigator.pop(context);
-                },
-                onUpdateImage: widget.onUpdateImage,
-              ),
-            ),
+            icon: Icons.delete,
+            label: localizations?.removeBackground ?? 'Remove',
+            onTap: () async {
+              if (!mounted) return;
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => RemoveBackgroundPage(
+                    image: widget.image,
+                    imageId: widget.imageId,
+                    onCancel: () => Navigator.pop(context),
+                    onApply: (image) {
+                      Navigator.pop(context, image);
+                    },
+                    onUpdateImage: widget.onUpdateImage,
+                  ),
+                ),
+              );
+              if (!mounted || result == null || (result as Uint8List).isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          localizations?.error ?? 'Error processing image'),
+                      backgroundColor: Colors.red[700],
+                    ),
+                  );
+                }
+                return;
+              }
+              await widget.onUpdateImage(
+                result,
+                action: localizations?.removeBackground ?? 'Remove Background',
+                operationType: 'remove_bg',
+                parameters: {},
+              );
+              widget.onApply(result);
+            },
           ),
-          const SizedBox(height: 12),
           _buildOptionButton(
-            localizations?.blurBackground ?? 'Blur Background',
-            Icons.blur_on,
-                () => _navigateToPage(
-              BlurBackgroundPage(
-                image: widget.image,
-                imageId: widget.imageId,
-                onCancel: () => Navigator.pop(context),
-                onApply: (newImage) {
-                  setState(() => _currentImage = newImage);
-                  widget.onApply(newImage);
-                  Navigator.pop(context);
-                },
-                onUpdateImage: widget.onUpdateImage,
-              ),
-            ),
+            icon: Icons.image,
+            label: localizations?.changeBackground ?? 'Change',
+            onTap: () async {
+              if (!mounted) return;
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChangeBackgroundPage(
+                    image: widget.image,
+                    imageId: widget.imageId,
+                    onCancel: () => Navigator.pop(context),
+                    onApply: (image) {
+                      Navigator.pop(context, image);
+                    },
+                    onUpdateImage: widget.onUpdateImage,
+                  ),
+                ),
+              );
+              if (!mounted || result == null || (result as Uint8List).isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          localizations?.error ?? 'Error processing image'),
+                      backgroundColor: Colors.red[700],
+                    ),
+                  );
+                }
+                return;
+              }
+              await widget.onUpdateImage(
+                result,
+                action: localizations?.changeBackground ?? 'Change Background',
+                operationType: 'change_bg',
+                parameters: {},
+              );
+              widget.onApply(result);
+            },
           ),
-          const SizedBox(height: 12),
           _buildOptionButton(
-            localizations?.changeBackground ?? 'Change Background',
-            Icons.image,
-                () => _navigateToPage(
-              ChangeBackgroundPage(
-                image: widget.image,
-                imageId: widget.imageId,
-                onCancel: () => Navigator.pop(context),
-                onApply: (newImage) {
-                  setState(() => _currentImage = newImage);
-                  widget.onApply(newImage);
-                  Navigator.pop(context);
-                },
-                onUpdateImage: widget.onUpdateImage,
-              ),
-            ),
+            icon: Icons.blur_on,
+            label: localizations?.blurBackground ?? 'Blur',
+            onTap: () async {
+              if (!mounted) return;
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => BlurBackgroundPage(
+                    image: widget.image,
+                    imageId: widget.imageId,
+                    onCancel: () => Navigator.pop(context),
+                    onApply: (image) {
+                      Navigator.pop(context, image);
+                    },
+                    onUpdateImage: widget.onUpdateImage,
+                  ),
+                ),
+              );
+              if (!mounted || result == null || (result as Uint8List).isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          localizations?.error ?? 'Error processing image'),
+                      backgroundColor: Colors.red[700],
+                    ),
+                  );
+                }
+                return;
+              }
+              await widget.onUpdateImage(
+                result,
+                action: localizations?.blurBackground ?? 'Blur Background',
+                operationType: 'blur_bg',
+                parameters: {},
+              );
+              widget.onApply(result);
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildOptionButton(String title, IconData icon, VoidCallback onPressed) {
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, color: Colors.white),
-      label: Text(
-        title,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blueAccent,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        minimumSize: const Size(double.infinity, 48),
+  Widget _buildOptionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+    return InkWell(
+      onTap: () {
+        if (!mounted) return;
+        onTap();
+      },
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: Colors.white,
+            size: isDesktop ? 32 : 24,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: isDesktop ? 14 : 12,
+            ),
+          ),
+        ],
       ),
     );
   }

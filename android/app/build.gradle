@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "fedorova.varvara.magic_moment"
-    compileSdkVersion = 35
+    compileSdkVersion = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

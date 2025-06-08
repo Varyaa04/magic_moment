@@ -10,38 +10,82 @@ class MagicMomentDatabase {
 
   MagicMomentDatabase._init();
 
-  Future<void> init() async {
+  Future<void> initBasic() async {
     try {
       await Hive.initFlutter();
-      // Регистрация адаптеров
+      // Register all adapters upfront to avoid adapter errors
       Hive.registerAdapter(EditHistoryAdapter());
+      Hive.registerAdapter(ImageDataAdapter());
+      Hive.registerAdapter(CurrentStateAdapter());
       Hive.registerAdapter(DrawingAdapter());
       Hive.registerAdapter(StickerAdapter());
       Hive.registerAdapter(TextObjectAdapter());
-      Hive.registerAdapter(ImageDataAdapter());
       Hive.registerAdapter(FilterDataAdapter());
       Hive.registerAdapter(CollageDataAdapter());
       Hive.registerAdapter(CollageImageAdapter());
-      Hive.registerAdapter(CurrentStateAdapter());
       Hive.registerAdapter(AdjustSettingsAdapter());
 
-      // Открытие коробок
+      // Open basic boxes
       await Hive.openBox<EditHistory>('edit_history');
-      await Hive.openBox<Sticker>('stickers');
-      await Hive.openBox<Drawing>('drawings');
-      await Hive.openBox<TextObject>('texts');
       await Hive.openBox<ImageData>('image');
-      await Hive.openBox<FilterData>('filter');
-      await Hive.openBox<CollageData>('collage');
-      await Hive.openBox<CollageImage>('collage_images');
       await Hive.openBox<CurrentState>('current_state');
-      debugPrint('Hive initialized and boxes opened');
+      debugPrint('Hive basic initialization completed');
     } catch (e, stackTrace) {
-      debugPrint('Error initializing Hive: $e\n$stackTrace');
-      throw Exception('Failed to initialize database: $e');
+      debugPrint('Error during basic Hive initialization: $e\n$stackTrace');
+      throw Exception('Failed basic database initialization: $e');
     }
   }
-  // Access to Hive boxes (public getters)
+
+  Future<void> initComplete() async {
+    try {
+      // Open remaining boxes
+      await Future.wait([
+        Hive.openBox<Sticker>('stickers'),
+        Hive.openBox<Drawing>('drawings'),
+        Hive.openBox<TextObject>('texts'),
+        Hive.openBox<FilterData>('filter'),
+        Hive.openBox<CollageData>('collage'),
+        Hive.openBox<CollageImage>('collage_images'),
+      ]);
+      debugPrint('Hive complete initialization finished');
+    } catch (e, stackTrace) {
+      debugPrint('Error during complete Hive initialization: $e\n$stackTrace');
+    }
+  }
+
+  @Deprecated('Use initBasic() and initComplete() instead')
+  Future<void> init() async {
+    await initBasic();
+    await initComplete();
+  }
+
+  Future<void> ensureBoxesOpen() async {
+    try {
+      if (!Hive.isBoxOpen('stickers')) {
+        await Hive.openBox<Sticker>('stickers');
+      }
+      if (!Hive.isBoxOpen('drawings')) {
+        await Hive.openBox<Drawing>('drawings');
+      }
+      if (!Hive.isBoxOpen('texts')) {
+        await Hive.openBox<TextObject>('texts');
+      }
+      if (!Hive.isBoxOpen('filter')) {
+        await Hive.openBox<FilterData>('filter');
+      }
+      if (!Hive.isBoxOpen('collage')) {
+        await Hive.openBox<CollageData>('collage');
+      }
+      if (!Hive.isBoxOpen('collage_images')) {
+        await Hive.openBox<CollageImage>('collage_images');
+      }
+      debugPrint('Ensured all necessary boxes are open');
+    } catch (e, stackTrace) {
+      debugPrint('Error ensuring boxes open: $e\n$stackTrace');
+      throw Exception('Failed to open Hive boxes: $e');
+    }
+  }
+
   Box<EditHistory> get editHistoryBox => Hive.box<EditHistory>('edit_history');
   Box<Sticker> get stickersBox => Hive.box<Sticker>('stickers');
   Box<Drawing> get drawingsBox => Hive.box<Drawing>('drawings');
@@ -54,13 +98,12 @@ class MagicMomentDatabase {
 
   Future<void> migrateImageIds(BuildContext context) async {
     try {
-      // Update stickers
       for (var sticker in stickersBox.values.where((s) => s.imageId == 0)) {
         final history = editHistoryBox.values.firstWhere(
               (h) => h.historyId == sticker.historyId,
           orElse: () {
             debugPrint('History not found for sticker ${sticker.id}');
-            return null as EditHistory; // Explicit null as EditHistory
+            return null as EditHistory;
           },
         );
         if (history == null) continue;
@@ -80,13 +123,12 @@ class MagicMomentDatabase {
         await stickersBox.put(sticker.id, updatedSticker);
       }
 
-      // Update drawings
       for (var drawing in drawingsBox.values.where((d) => d.imageId == 0)) {
         final history = editHistoryBox.values.firstWhere(
               (h) => h.historyId == drawing.historyId,
           orElse: () {
             debugPrint('History not found for drawing ${drawing.id}');
-            return null as EditHistory; // Explicit null as EditHistory
+            return null as EditHistory;
           },
         );
         if (history == null) continue;
@@ -103,13 +145,12 @@ class MagicMomentDatabase {
         await drawingsBox.put(drawing.id, updatedDrawing);
       }
 
-      // Update texts
       for (var text in textsBox.values.where((t) => t.imageId == 0)) {
         final history = editHistoryBox.values.firstWhere(
               (h) => h.historyId == text.historyId,
           orElse: () {
             debugPrint('History not found for text ${text.id}');
-            return null as EditHistory; // Explicit null as EditHistory
+            return null as EditHistory;
           },
         );
         if (history == null) continue;
@@ -146,40 +187,14 @@ class MagicMomentDatabase {
     debugPrint('All Hive boxes closed');
   }
 
-  Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
-    try {
-      final histories = editHistoryBox.values
-          .where((entry) => entry.imageId == imageId)
-          .toList()
-        ..sort((a, b) => a.operationDate.compareTo(b.operationDate));
-      debugPrint('Retrieved ${histories.length} history entries for imageId: $imageId');
-      return histories;
-    } catch (e, stackTrace) {
-      debugPrint('Error getting history for image $imageId: $e\n$stackTrace');
-      return [];
-    }
-  }
-
-  Future<int> insertHistory(EditHistory history) async {
-    try {
-      final key = await editHistoryBox.add(history);
-      debugPrint('Inserted history entry with key: $key');
-      return key;
-    } catch (e, stackTrace) {
-      debugPrint('Error inserting history: $e\n$stackTrace');
-      throw Exception('Failed to insert history: $e');
-    }
-  }
-
-  Future<int> updateCurrentState(int imageId, int lastHistoryId, String? snapshotPath, List<int>? snapshotBytes) async {
+  Future<int> updateCurrentState(int imageId, int lastHistoryId, List<int>? snapshotBytes) async {
     try {
       final state = CurrentState(
         imageId: imageId,
         lastHistoryId: lastHistoryId,
-        currentSnapshotPath: snapshotPath,
         currentSnapshotBytes: snapshotBytes,
       );
-      await currentStateBox.put('state_$imageId', state); // Используем строковый ключ
+      await currentStateBox.put('state_$imageId', state);
       debugPrint('Updated current state for imageId: $imageId, historyId: $lastHistoryId');
       return 1;
     } catch (e, stackTrace) {
@@ -201,7 +216,7 @@ class MagicMomentDatabase {
 
   Future<Map<String, dynamic>?> getCurrentState(int imageId) async {
     try {
-      final state = currentStateBox.get('state_$imageId'); // Используем строковый ключ
+      final state = currentStateBox.get('state_$imageId');
       debugPrint('Retrieved current state for imageId: $imageId');
       return state?.toMap();
     } catch (e, stackTrace) {
@@ -223,6 +238,7 @@ class MagicMomentDatabase {
       throw Exception('Failed to insert image: $e');
     }
   }
+
   Future<List<ImageData>> getAllImages() async {
     try {
       final images = imagesBox.values.toList();
@@ -471,6 +487,20 @@ class MagicMomentDatabase {
       debugPrint('Error inserting collage image: $e\n$stackTrace');
       throw Exception('Failed to insert collage image: $e');
     }
+  }
+
+  Future<int> insertHistory(EditHistory history) async {
+    final box = await Hive.openBox<EditHistory>('edit_history');
+    final key = await box.add(history);
+    debugPrint('Inserted history entry with key: $key');
+    return key;
+  }
+
+  Future<List<EditHistory>> getAllHistoryForImage(int imageId) async {
+    final box = await Hive.openBox<EditHistory>('edit_history');
+    final entries = box.values.where((entry) => entry.imageId == imageId).toList();
+    debugPrint('Retrieved ${entries.length} history entries for imageId: $imageId');
+    return entries;
   }
 
   Future<List<CollageImage>> getCollageImages(int collageId) async {

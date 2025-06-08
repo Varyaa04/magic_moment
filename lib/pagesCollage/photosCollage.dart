@@ -1,5 +1,9 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:MagicMoment/pagesCollage/templates/2photosCollage.dart';
+import 'package:MagicMoment/pagesCollage/templates/3photosCollage.dart';
+import 'package:MagicMoment/pagesCollage/templates/4photosCollage.dart';
+import 'package:MagicMoment/pagesCollage/templates/5photosCollage.dart';
+import 'package:MagicMoment/pagesCollage/templates/6photosCollage.dart';
 
 class EditablePhotoWidget extends StatefulWidget {
   final ImageProvider imageProvider;
@@ -12,6 +16,7 @@ class EditablePhotoWidget extends StatefulWidget {
   final Function(double) onRotationChanged;
   final VoidCallback? onTap;
   final BoxDecoration? decoration;
+  final double borderWidth;
 
   const EditablePhotoWidget({
     Key? key,
@@ -25,18 +30,23 @@ class EditablePhotoWidget extends StatefulWidget {
     required this.onRotationChanged,
     this.onTap,
     this.decoration,
+    this.borderWidth = 2.0,
   }) : super(key: key);
 
   @override
   _EditablePhotoWidgetState createState() => _EditablePhotoWidgetState();
 }
 
-class _EditablePhotoWidgetState extends State<EditablePhotoWidget> {
+class _EditablePhotoWidgetState extends State<EditablePhotoWidget>
+    with SingleTickerProviderStateMixin {
   late double _scale;
   late Offset _position;
   late double _rotation;
   double _previousScale = 1.0;
   Offset _startFocalPoint = Offset.zero;
+  late AnimationController _animationController;
+  late Animation<Offset> _flingAnimation;
+  Offset _velocity = Offset.zero;
 
   @override
   void initState() {
@@ -44,38 +54,99 @@ class _EditablePhotoWidgetState extends State<EditablePhotoWidget> {
     _scale = widget.initialScale;
     _position = widget.initialPosition;
     _rotation = widget.initialRotation;
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _flingAnimation = Tween<Offset>(begin: _position, end: _position).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    )..addListener(() {
+      setState(() {
+        _position = _flingAnimation.value;
+        widget.onPositionChanged(_position);
+      });
+    });
   }
 
   @override
   void didUpdateWidget(EditablePhotoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialScale != widget.initialScale) _scale = widget.initialScale;
-    if (oldWidget.initialPosition != widget.initialPosition) _position = widget.initialPosition;
-    if (oldWidget.initialRotation != widget.initialRotation) _rotation = widget.initialRotation;
+    _scale = widget.initialScale;
+    _position = widget.initialPosition;
+    _rotation = widget.initialRotation;
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  bool _isOutOfBounds(Offset position, double scale) {
+    final imageWidth = widget.bounds.width * scale;
+    final imageHeight = widget.bounds.height * scale;
+    final offsetX = position.dx * widget.bounds.width;
+    final offsetY = position.dy * widget.bounds.height;
+
+    final left = offsetX - imageWidth / 2;
+    final right = offsetX + imageWidth / 2;
+    final top = offsetY - imageHeight / 2;
+    final bottom = offsetY + imageHeight / 2;
+
+    return left > widget.bounds.width / 2 ||
+        right < -widget.bounds.width / 2 ||
+        top > widget.bounds.height / 2 ||
+        bottom < -widget.bounds.height / 2;
+  }
+
+  void _startFlingAnimation(Offset velocity) {
+    final imageWidth = widget.bounds.width * _scale;
+    final imageHeight = widget.bounds.height * _scale;
+    final maxOffsetX = (imageWidth - widget.bounds.width) / (2 * imageWidth);
+    final maxOffsetY = (imageHeight - widget.bounds.height) / (2 * imageHeight);
+
+    final endPosition = Offset(
+      (_position.dx + velocity.dx / 1000).clamp(-maxOffsetX, maxOffsetX),
+      (_position.dy + velocity.dy / 1000).clamp(-maxOffsetY, maxOffsetY),
+    );
+
+    _flingAnimation = Tween<Offset>(begin: _position, end: endPosition).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+    _animationController.reset();
+    _animationController.forward();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.bounds.width <= 0 || widget.bounds.height <= 0) {
+      debugPrint('Invalid bounds: ${widget.bounds}');
+      return const SizedBox.shrink();
+    }
+
+    final shouldClip = _rotation != 0 || _scale > 1.5 || _isOutOfBounds(_position, _scale);
+
     return GestureDetector(
       onTap: widget.onTap,
       onScaleStart: (details) {
         _previousScale = _scale;
         _startFocalPoint = details.focalPoint;
+        _animationController.stop();
       },
       onScaleUpdate: (details) {
+        if (widget.bounds.width < 1.0 || widget.bounds.height < 1.0) return;
+
         setState(() {
-          // Update scale
           _scale = (_previousScale * details.scale).clamp(0.5, 2.0);
           widget.onScaleChanged(_scale);
 
-          // Update position with boundary constraints
           final delta = details.focalPoint - _startFocalPoint;
-          final newPosition = _position + Offset(
-            delta.dx / widget.bounds.width,
-            delta.dy / widget.bounds.height,
-          );
+          final newPosition = _position +
+              Offset(
+                delta.dx / widget.bounds.width,
+                delta.dy / widget.bounds.height,
+              );
 
-          // Calculate maximum offsets to keep image within bounds
           final imageWidth = widget.bounds.width * _scale;
           final imageHeight = widget.bounds.height * _scale;
           final maxOffsetX = (imageWidth - widget.bounds.width) / (2 * imageWidth);
@@ -87,21 +158,35 @@ class _EditablePhotoWidgetState extends State<EditablePhotoWidget> {
           );
           widget.onPositionChanged(_position);
 
-          // Update rotation
           if (details.rotation != 0) {
             _rotation = widget.initialRotation + details.rotation;
             widget.onRotationChanged(_rotation);
           }
+
+          _startFocalPoint = details.focalPoint;
         });
       },
-      child: ClipRect(
-        clipper: _CellClipper(widget.bounds),
-        child: Container(
-          width: widget.bounds.width,
-          height: widget.bounds.height,
-          decoration: widget.decoration,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+      onScaleEnd: (details) {
+        _velocity = details.velocity.pixelsPerSecond;
+        if (_velocity.distance > 200) {
+          _startFlingAnimation(_velocity);
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: widget.decoration?.copyWith(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              spreadRadius: 2,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRect(
+          clipper: shouldClip ? _CellClipper(widget.bounds.inflate(widget.borderWidth)) : null,
+          child: Transform(
             transform: Matrix4.identity()
               ..translate(
                 _position.dx * widget.bounds.width,
@@ -109,11 +194,13 @@ class _EditablePhotoWidgetState extends State<EditablePhotoWidget> {
               )
               ..rotateZ(_rotation)
               ..scale(_scale),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image(
-                image: widget.imageProvider,
-                fit: BoxFit.cover,
+            alignment: Alignment.center,
+            child: Image(
+              image: widget.imageProvider,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                color: Colors.grey[600],
+                child: const Center(child: Icon(Icons.error, color: Colors.red, size: 24)),
               ),
             ),
           ),
@@ -125,21 +212,18 @@ class _EditablePhotoWidgetState extends State<EditablePhotoWidget> {
 
 class _CellClipper extends CustomClipper<Rect> {
   final Rect bounds;
-
   _CellClipper(this.bounds);
-
   @override
   Rect getClip(Size size) => bounds;
-
   @override
   bool shouldReclip(_CellClipper oldClipper) => oldClipper.bounds != bounds;
 }
 
-class PhotosCollage extends StatefulWidget {
+class PhotosCollage extends StatelessWidget {
   final List<ImageProvider> images;
   final int templateIndex;
   final int imageCount;
-  final ValueNotifier<Color> borderColor;
+  final Color borderColor;
   final List<Offset> positions;
   final List<double> scales;
   final List<double> rotations;
@@ -148,7 +232,8 @@ class PhotosCollage extends StatefulWidget {
   final Function(int, double) onRotationChanged;
   final Function(int)? onImageTapped;
   final ValueNotifier<int?> selectedImageIndex;
-  final BoxDecoration? Function(int) selectedImageDecoration;
+  final BoxDecoration? Function(int)? selectedImageDecoration;
+  final double borderWidth;
 
   const PhotosCollage({
     Key? key,
@@ -164,119 +249,112 @@ class PhotosCollage extends StatefulWidget {
     required this.onRotationChanged,
     this.onImageTapped,
     required this.selectedImageIndex,
-    required this.selectedImageDecoration,
+    this.selectedImageDecoration,
+    this.borderWidth = 2.0,
   }) : super(key: key);
 
   @override
-  _PhotosCollageState createState() => _PhotosCollageState();
-}
-
-class _PhotosCollageState extends State<PhotosCollage> {
-  @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (widget.images.isEmpty || widget.imageCount < 1) {
-          return const Center(
-            child: Text(
-              'No photos available',
-              style: TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-          );
-        }
-        if (widget.imageCount != widget.images.length ||
-            widget.imageCount != widget.positions.length ||
-            widget.imageCount != widget.scales.length ||
-            widget.imageCount != widget.rotations.length) {
-          debugPrint(
-              'Invalid collage state: images=${widget.images.length}, '
-                  'imageCount=${widget.imageCount}, '
-                  'positions=${widget.positions.length}, '
-                  'scales=${widget.scales.length}, '
-                  'rotations=${widget.rotations.length}');
-          return const Center(
-            child: Text(
-              'Error: Invalid collage configuration',
-              style: TextStyle(color: Colors.red, fontSize: 16),
-            ),
-          );
-        }
-
-        final size = math.min(constraints.maxWidth, constraints.maxHeight);
-        final Map<int, Rect> cellBounds = {};
-
-        List<Widget> buildChildren(int templateIndex) {
-          if (widget.imageCount < 2) {
-            return [
-              const Center(
-                child: Text(
-                  'Add at least 2 photos',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                ),
-              ),
-            ];
-          }
-
-          Widget buildImage(int index) {
-            return AnimatedOpacity(
-              opacity: widget.selectedImageIndex.value == index ? 1.0 : 0.9,
-              duration: const Duration(milliseconds: 200),
-              child: EditablePhotoWidget(
-                imageProvider: widget.images[index],
-                initialScale: widget.scales[index],
-                initialPosition: widget.positions[index],
-                initialRotation: widget.rotations[index],
-                bounds: cellBounds[index] ?? Rect.fromLTWH(0, 0, size, size),
-                onPositionChanged: (offset) => widget.onPositionChanged(index, offset),
-                onScaleChanged: (scale) => widget.onScaleChanged(index, scale),
-                onRotationChanged: (rotation) => widget.onRotationChanged(index, rotation),
-                onTap: () => widget.onImageTapped?.call(index),
-                decoration: widget.selectedImageDecoration(index),
-              ),
-            );
-          }
-
-          final validTemplateIndex = templateIndex.clamp(0, 9);
-          // Template definitions remain the same as in the original file
-          // (omitted for brevity, but keep the switch-case block from the original)
-          switch (validTemplateIndex) {
-            case 0:
-              final crossAxisCount = math.max(2, math.sqrt(widget.imageCount).ceil());
-              return List.generate(widget.imageCount, (i) {
-                final row = i ~/ crossAxisCount;
-                final col = i % crossAxisCount;
-                final cellWidth = size / crossAxisCount;
-                final cellHeight = size / crossAxisCount;
-                cellBounds[i] = Rect.fromLTWH(col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-                return Positioned(
-                  left: col * cellWidth,
-                  top: row * cellHeight,
-                  width: cellWidth,
-                  height: cellHeight,
-                  child: buildImage(i),
-                );
-              });
-          // Add cases 1-9 as in the original file
-            default:
-              return [
-                const Center(
-                  child: Text(
-                    'Invalid template index',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ),
-              ];
-          }
-        }
-
-        return SizedBox(
-          width: size,
-          height: size,
-          child: Stack(
-            clipBehavior: Clip.hardEdge,
-            children: buildChildren(widget.templateIndex),
+    Widget collage;
+    switch (imageCount) {
+      case 2:
+        collage = TwoPhotosCollage(
+          images: images,
+          layoutIndex: templateIndex,
+          borderColor: borderColor,
+          positions: positions,
+          scales: scales,
+          rotations: rotations,
+          onPositionChanged: onPositionChanged,
+          onScaleChanged: onScaleChanged,
+          onRotationChanged: onRotationChanged,
+          onImageTapped: onImageTapped,
+          selectedImageIndex: selectedImageIndex.value,
+          selectedImageDecoration: selectedImageDecoration,
+          borderWidth: borderWidth,
+        );
+        break;
+      case 3:
+        collage = ThreePhotosCollage(
+          images: images,
+          layoutIndex: templateIndex,
+          borderColor: borderColor,
+          positions: positions,
+          scales: scales,
+          rotations: rotations,
+          onPositionChanged: onPositionChanged,
+          onScaleChanged: onScaleChanged,
+          onRotationChanged: onRotationChanged,
+          onImageTapped: onImageTapped,
+          selectedImageIndex: selectedImageIndex.value,
+          selectedImageDecoration: selectedImageDecoration,
+          borderWidth: borderWidth,
+        );
+        break;
+      case 4:
+        collage = FourPhotosCollage(
+          images: images,
+          layoutIndex: templateIndex,
+          borderColor: borderColor,
+          positions: positions,
+          scales: scales,
+          rotations: rotations,
+          onPositionChanged: onPositionChanged,
+          onScaleChanged: onScaleChanged,
+          onRotationChanged: onRotationChanged,
+          onImageTapped: onImageTapped,
+          selectedImageIndex: selectedImageIndex.value,
+          selectedImageDecoration: selectedImageDecoration,
+          borderWidth: borderWidth,
+        );
+        break;
+      case 5:
+        collage = FivePhotosCollage(
+          images: images,
+          layoutIndex: templateIndex,
+          borderColor: borderColor,
+          positions: positions,
+          scales: scales,
+          rotations: rotations,
+          onPositionChanged: onPositionChanged,
+          onScaleChanged: onScaleChanged,
+          onRotationChanged: onRotationChanged,
+          onImageTapped: onImageTapped,
+          selectedImageIndex: selectedImageIndex.value,
+          selectedImageDecoration: selectedImageDecoration,
+          borderWidth: borderWidth,
+        );
+        break;
+      case 6:
+        collage = SixPhotosCollage(
+          images: images,
+          layoutIndex: templateIndex,
+          borderColor: borderColor,
+          positions: positions,
+          scales: scales,
+          rotations: rotations,
+          onPositionChanged: onPositionChanged,
+          onScaleChanged: onScaleChanged,
+          onRotationChanged: onRotationChanged,
+          onImageTapped: onImageTapped,
+          selectedImageIndex: selectedImageIndex.value,
+          selectedImageDecoration: selectedImageDecoration,
+          borderWidth: borderWidth,
+        );
+        break;
+      default:
+        collage = const Center(
+          child: Text(
+            'Unsupported image count',
+            style: TextStyle(color: Colors.red, fontSize: 16),
           ),
         );
+    }
+
+    return ValueListenableBuilder<int?>(
+      valueListenable: selectedImageIndex,
+      builder: (context, selectedIndex, child) {
+        return collage;
       },
     );
   }

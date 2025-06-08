@@ -6,12 +6,14 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart'; // Новый импорт для выбора цвета
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import '../../database/editHistory.dart';
 import '../../database/objectDao.dart' as dao;
 import '../../database/objectsModels.dart';
 import '../../database/magicMomentDatabase.dart';
-import '../../themeWidjets/colorPicker.dart';
+import 'ResponsiveUtils.dart';
+import 'package:universal_html/html.dart' as html if (dart.library.io) 'dart:io';
 
 class TextEditorPanel extends StatefulWidget {
   final Uint8List image;
@@ -50,18 +52,11 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
   TextAlign _currentAlignment = TextAlign.left;
   double _currentScale = 1.0;
   double _currentRotation = 0.0;
-  final GlobalKey _renderKey = GlobalKey();
   final TextEditingController _textController = TextEditingController();
-  TextItem? _selectedTextItem;
   Color _textBackgroundColor = Colors.transparent;
-  Color _textColor = Colors.white;
-  double _textSize = 24.0;
-  String _fontFamily = 'Roboto';
-  bool _isBold = false;
-  bool _isItalic = false;
   bool _hasShadow = true;
-  TextAlign _textAlign = TextAlign.center;
   late TabController _tabController;
+  double? _imageAspectRatio;
 
   @override
   void initState() {
@@ -69,6 +64,7 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     _tabController = TabController(length: 2, vsync: this);
     _initialize();
   }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -76,10 +72,9 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     super.dispose();
   }
 
-
   Future<void> _initialize() async {
     try {
-      await _loadTextFromDb();
+      _imageAspectRatio = await _getImageAspectRatio();
       _history.add({
         'image': widget.image,
         'action': 'Initial image',
@@ -90,9 +85,42 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       if (mounted) {
         setState(() => _isInitialized = true);
       }
-    } catch (e) {
-      _handleError('Initialization failed: $e');
+    } catch (e, stackTrace) {
+      _handleError('Initialization failed: $e\n$stackTrace');
     }
+  }
+
+  Future<double> _getImageAspectRatio() async {
+    final codec = await ui.instantiateImageCodec(widget.image);
+    final frame = await codec.getNextFrame();
+    final width = frame.image.width.toDouble();
+    final height = frame.image.height.toDouble();
+    frame.image.dispose();
+    return width / height;
+  }
+
+  Future<Uint8List> _cropToImageBounds(Uint8List inputBytes, int targetWidth, int targetHeight) async {
+    final codec = await ui.instantiateImageCodec(inputBytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
+      Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
+      Paint(),
+    );
+
+    final croppedImage = await recorder.endRecording().toImage(targetWidth, targetHeight);
+    final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    croppedImage.dispose();
+    if (byteData == null) {
+      throw Exception('Failed to encode cropped image');
+    }
+    return byteData.buffer.asUint8List();
   }
 
   Future<void> _addText() async {
@@ -115,17 +143,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
         hasShadow: _hasShadow,
       );
 
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'text',
-        operationParameters: {
-          'text': newTextItem.text,
-          'fontSize': newTextItem.fontSize,
-        },
-        operationDate: DateTime.now(),
-      );
+
       final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
 
       final objectDao = dao.ObjectDao();
       final textId = await objectDao.insertText(TextObject(
@@ -145,21 +164,23 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
         fontFamily: newTextItem.fontFamily,
         scale: newTextItem.scale,
         rotation: newTextItem.rotation,
-        historyId: historyId,
       ));
+
+      if (!mounted) return;
 
       setState(() {
         newTextItem.id = textId;
         _textItems.add(newTextItem);
-        _selectedText = newTextItem;
         _textController.clear();
         _currentText = '';
         debugPrint('Text added: ${newTextItem.text}, ID: $textId');
       });
-    } catch (e) {
-      _handleError('Failed to add text: $e');
+    } catch (e, stackTrace) {
+      _handleError('Failed to add text: $e\n$stackTrace');
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -176,16 +197,16 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       if (boundary == null) {
         throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
       }
-
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose(); // Освобождаем изображение
+      image.dispose();
       if (byteData == null) {
         throw Exception(AppLocalizations.of(context)?.errorEncode ?? 'Image conversion error');
       }
-
       final pngBytes = byteData.buffer.asUint8List();
-      debugPrint('Changes applied with ${_textItems.length} texts');
+      if (pngBytes.isEmpty) {
+        throw Exception('Empty image bytes after cropping');
+      }
 
       final history = EditHistory(
         historyId: null,
@@ -195,7 +216,6 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
           'texts_count': _textItems.length,
         },
         operationDate: DateTime.now(),
-        snapshotPath: kIsWeb ? null : '${Directory.systemTemp.path}/text_${DateTime.now().millisecondsSinceEpoch}.png',
         snapshotBytes: kIsWeb ? pngBytes : null,
       );
       final db = MagicMomentDatabase.instance;
@@ -209,9 +229,13 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
           positionX: text.position.dx,
           positionY: text.position.dy,
           fontSize: text.fontSize,
-          fontWeight: text.fontWeight.toString(),
-          fontStyle: text.fontStyle.toString(),
-          alignment: text.alignment.toString(),
+          fontWeight: text.fontWeight == FontWeight.bold ? 'bold' : 'normal',
+          fontStyle: text.fontStyle == FontStyle.italic ? 'italic' : 'normal',
+          alignment: text.alignment == TextAlign.center
+              ? 'center'
+              : text.alignment == TextAlign.right
+              ? 'right'
+              : 'left',
           color: '#${text.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
           fontFamily: text.fontFamily,
           scale: text.scale,
@@ -247,16 +271,11 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       );
 
       widget.onApply(pngBytes);
-    } catch (e) {
-      debugPrint('Error applying text: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocalizations.of(context)?.error ?? 'Error'}: $e')),
-        );
-      }
+    } catch (e, stackTrace) {
+      _handleError('Error applying text: $e\n$stackTrace');
     } finally {
       setState(() => _isProcessing = false);
-      widget.onCancel();
+      // Remove widget.onCancel() to allow re-editing
     }
   }
 
@@ -289,8 +308,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       if (mounted) {
         setState(() => _textItems.addAll(newTexts));
       }
-    } catch (e) {
-      _handleError('Failed to load texts: $e');
+    } catch (e, stackTrace) {
+      _handleError('Failed to load texts: $e\n$stackTrace');
     }
   }
 
@@ -301,15 +320,18 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     required Map<String, dynamic> parameters,
   }) async {
     try {
+      if (newImage.isEmpty) {
+        throw Exception('Empty image bytes');
+      }
       await widget.onUpdateImage(
         newImage,
         action: action,
         operationType: operationType,
         parameters: parameters,
       );
-      debugPrint('Image updated: $action');
-    } catch (e) {
-      _handleError('Failed to update image: $e');
+      debugPrint('Image updated: $action, size: ${newImage.length} bytes');
+    } catch (e, stackTrace) {
+      _handleError('Failed to update image: $e\n$stackTrace');
       rethrow;
     }
   }
@@ -319,6 +341,10 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     setState(() => _isProcessing = true);
 
     try {
+      final previousImage = _history[_historyIndex]['image'] as Uint8List?;
+      if (previousImage == null || previousImage.isEmpty) {
+        throw Exception('Invalid history image data');
+      }
       setState(() {
         _historyIndex--;
         _textItems.clear();
@@ -326,7 +352,7 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       });
 
       await _updateImage(
-        newImage: _history[_historyIndex]['image'],
+        newImage: previousImage,
         action: 'Undo text',
         operationType: 'undo',
         parameters: {
@@ -334,10 +360,12 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
         },
       );
       debugPrint('Undo performed, history index: $_historyIndex');
-    } catch (e) {
-      _handleError('Failed to undo: $e');
+    } catch (e, stackTrace) {
+      _handleError('Failed to undo: $e\n$stackTrace');
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -401,17 +429,19 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
               children: [
                 _buildAppBar(localizations),
                 Expanded(
-                  child: _isInitialized
+                  child: _isInitialized && _imageAspectRatio != null
                       ? GestureDetector(
                     onTap: () => setState(() => _selectedText = null),
-                    child: RepaintBoundary(
-                      key: _imageKey,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
-                          ..._textItems.map(_buildTextWidget),
-                        ],
+                    child: AspectRatio(
+                      aspectRatio: _imageAspectRatio!,
+                      child: RepaintBoundary(
+                        key: _imageKey,
+                        child: Stack(
+                          children: [
+                            Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
+                            ..._textItems.map(_buildTextWidget),
+                          ],
+                        ),
                       ),
                     ),
                   )
@@ -583,8 +613,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
           await objectDao.softDeleteText(textItem.id!);
           debugPrint('Text deleted: ${textItem.text}');
         }
-      } catch (e) {
-        _handleError('Failed to delete text: $e');
+      } catch (e, stackTrace) {
+        _handleError('Failed to delete text: $e\n$stackTrace');
       }
     }
   }
@@ -613,10 +643,11 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
             labelColor: Colors.white,
             unselectedLabelColor: Colors.grey,
             indicatorColor: Colors.blue,
+            labelStyle: TextStyle(fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14)),
           ),
           Container(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.4,
+              maxHeight: ResponsiveUtils.getResponsiveHeight(context, ResponsiveUtils.isDesktop(context) ? 0.45 : 0.35),
             ),
             child: TabBarView(
               controller: _tabController,
@@ -631,27 +662,18 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     );
   }
 
-  Widget _buildTabBar(AppLocalizations? localizations) {
-    return TabBar(
-      tabs: [
-        Tab(text: localizations?.input ?? 'Input'),
-        Tab(text: localizations?.style ?? 'Style'),
-      ],
-      labelColor: Colors.white,
-      unselectedLabelColor: Colors.grey,
-      indicatorColor: Colors.blue,
-    );
-  }
-
   Widget _buildTextInput(AppLocalizations? localizations) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: ResponsiveUtils.getResponsivePadding(context),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: _textController,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 16),
+              ),
               decoration: InputDecoration(
                 hintText: localizations?.enterText ?? 'Enter text',
                 hintStyle: TextStyle(color: Colors.grey[600]),
@@ -672,7 +694,11 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
+            icon: Icon(
+              Icons.add,
+              color: Colors.white,
+              size: ResponsiveUtils.getResponsiveFontSize(context, 24),
+            ),
             onPressed: _addText,
             tooltip: localizations?.addText ?? 'Add Text',
           ),
@@ -684,176 +710,230 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
   Widget _buildStylePanel(AppLocalizations? localizations) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                '${localizations?.color ?? 'Color'}:',
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () async {
-                  final color = await showDialog<Color>(
-                    context: context,
-                    builder: (context) => ColorPickerDialog(initialColor: _currentColor),
-                  );
-                  if (color != null) {
-                    _updateTextProperties(color: color);
-                  }
-                },
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: _currentColor,
-                    border: Border.all(color: Colors.white, width: 1),
-                    borderRadius: BorderRadius.circular(4),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '${localizations?.color ?? 'Color'}:',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () async {
+                    debugPrint('Text color picker tapped');
+                    final color = await showDialog<Color>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text(localizations?.color ?? 'Pick a color'),
+                        content: SingleChildScrollView(
+                          child: BlockPicker(
+                            pickerColor: _currentColor,
+                            onColorChanged: (color) {
+                              Navigator.pop(context, color);
+                            },
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(localizations?.cancel ?? 'Cancel'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (color != null && mounted) {
+                      setState(() => _updateTextProperties(color: color));
+                      debugPrint('Text color changed to: $color');
+                    }
+                  },
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: _currentColor,
+                      border: Border.all(color: Colors.white, width: 1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                '${localizations?.size ?? 'Size'}:',
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Slider(
-                  value: _currentFontSize,
-                  min: 10,
-                  max: 50,
-                  divisions: 40,
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  '${localizations?.size ?? 'Size'}:',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Slider(
+                    value: _currentFontSize,
+                    min: 10,
+                    max: 50,
+                    divisions: 40,
+                    activeColor: Colors.blue,
+                    inactiveColor: Colors.grey[700],
+                    label: _currentFontSize.round().toString(),
+                    onChanged: (value) => _updateTextProperties(fontSize: value),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  '${localizations?.font ?? 'Font'}:',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _currentFontFamily,
+                  dropdownColor: Colors.grey[900],
+                  style: const TextStyle(color: Colors.white),
+                  items: [
+                    'Roboto',
+                    'Arial',
+                    'Oi-Regular',
+                    'LilitaOne-Regular',
+                    'Comfortaa',
+                    'PTSansNarrow-Regular',
+                    'Courier',
+                    'Times New Roman',
+                    'Verdana',
+                    'Impact',
+                    'Comic Sans MS',
+                    'Helvetica',
+                    'Georgia',
+                    'Trebuchet MS',
+                  ].map((font) {
+                    return DropdownMenuItem(
+                      value: font,
+                      child: Text(font),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      _updateTextProperties(fontFamily: value);
+                    }
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.format_bold,
+                    color: _currentFontWeight == FontWeight.bold ? Colors.blue : Colors.white,
+                  ),
+                  onPressed: () => _updateTextProperties(
+                    fontWeight: _currentFontWeight == FontWeight.bold ? FontWeight.normal : FontWeight.bold,
+                  ),
+                  tooltip: localizations?.bold ?? 'Bold',
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.format_italic,
+                    color: _currentFontStyle == FontStyle.italic ? Colors.blue : Colors.white,
+                  ),
+                  onPressed: () => _updateTextProperties(
+                    fontStyle: _currentFontStyle == FontStyle.italic ? FontStyle.normal : FontStyle.italic,
+                  ),
+                  tooltip: localizations?.italic ?? 'Italic',
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.format_align_left,
+                    color: _currentAlignment == TextAlign.left ? Colors.blue : Colors.white,
+                  ),
+                  onPressed: () => _updateTextProperties(alignment: TextAlign.left),
+                  tooltip: localizations?.alignLeft ?? 'Align Left',
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.format_align_center,
+                    color: _currentAlignment == TextAlign.center ? Colors.blue : Colors.white,
+                  ),
+                  onPressed: () => _updateTextProperties(alignment: TextAlign.center),
+                  tooltip: localizations?.alignCenter ?? 'Align Center',
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.format_align_right,
+                    color: _currentAlignment == TextAlign.right ? Colors.blue : Colors.white,
+                  ),
+                  onPressed: () => _updateTextProperties(alignment: TextAlign.right),
+                  tooltip: localizations?.alignRight ?? 'Align Right',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  '${localizations?.background ?? 'Background'}:',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () async {
+                    debugPrint('Background color picker tapped');
+                    final color = await showDialog<Color>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text(localizations?.color ?? 'Pick a color'),
+                        content: SingleChildScrollView(
+                          child: BlockPicker(
+                            pickerColor: _textBackgroundColor,
+                            onColorChanged: (color) {
+                              Navigator.pop(context, color);
+                            },
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(localizations?.cancel ?? 'Cancel'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (color != null && mounted) {
+                      setState(() => _updateTextProperties(backgroundColor: color));
+                      debugPrint('Background color changed to: $color');
+                    }
+                  },
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: _textBackgroundColor,
+                      border: Border.all(color: Colors.white, width: 1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Checkbox(
+                  value: _hasShadow,
                   activeColor: Colors.blue,
-                  inactiveColor: Colors.grey[700],
-                  label: _currentFontSize.round().toString(),
-                  onChanged: (value) => _updateTextProperties(fontSize: value),
+                  onChanged: (value) => _updateTextProperties(hasShadow: value ?? false),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                '${localizations?.font ?? 'Font'}:',
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<String>(
-                value: _currentFontFamily,
-                dropdownColor: Colors.grey[900],
-                style: const TextStyle(color: Colors.white),
-                items: ['Roboto', 'Arial', 'Times New Roman', 'Courier New'].map((font) {
-                  return DropdownMenuItem(
-                    value: font,
-                    child: Text(font),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    _updateTextProperties(fontFamily: value);
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: Icon(
-                  Icons.format_bold,
-                  color: _currentFontWeight == FontWeight.bold ? Colors.blue : Colors.white,
+                Text(
+                  localizations?.shadow ?? 'Shadow',
+                  style: const TextStyle(color: Colors.white),
                 ),
-                onPressed: () => _updateTextProperties(
-                  fontWeight: _currentFontWeight == FontWeight.bold ? FontWeight.normal : FontWeight.bold,
-                ),
-                tooltip: localizations?.bold ?? 'Bold',
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.format_italic,
-                  color: _currentFontStyle == FontStyle.italic ? Colors.blue : Colors.white,
-                ),
-                onPressed: () => _updateTextProperties(
-                  fontStyle: _currentFontStyle == FontStyle.italic ? FontStyle.normal : FontStyle.italic,
-                ),
-                tooltip: localizations?.italic ?? 'Italic',
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.format_align_left,
-                  color: _currentAlignment == TextAlign.left ? Colors.blue : Colors.white,
-                ),
-                onPressed: () => _updateTextProperties(alignment: TextAlign.left),
-                tooltip: localizations?.alignLeft ?? 'Align Left',
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.format_align_center,
-                  color: _currentAlignment == TextAlign.center ? Colors.blue : Colors.white,
-                ),
-                onPressed: () => _updateTextProperties(alignment: TextAlign.center),
-                tooltip: localizations?.alignCenter ?? 'Align Center',
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.format_align_right,
-                  color: _currentAlignment == TextAlign.right ? Colors.blue : Colors.white,
-                ),
-                onPressed: () => _updateTextProperties(alignment: TextAlign.right),
-                tooltip: localizations?.alignRight ?? 'Align Right',
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                '${localizations?.background ?? 'Background'}:',
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () async {
-                  final color = await showDialog<Color>(
-                    context: context,
-                    builder: (context) => ColorPickerDialog(initialColor: _textBackgroundColor),
-                  );
-                  if (color != null) {
-                    _updateTextProperties(backgroundColor: color);
-                  }
-                },
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: _textBackgroundColor,
-                    border: Border.all(color: Colors.white, width: 1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Checkbox(
-                value: _hasShadow,
-                activeColor: Colors.blue,
-                onChanged: (value) => _updateTextProperties(hasShadow: value ?? false),
-              ),
-              Text(
-                localizations?.shadow ?? 'Shadow',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -889,29 +969,4 @@ class TextItem {
     required this.backgroundColor,
     required this.hasShadow,
   });
-}
-
-class ColorPickerDialog extends StatelessWidget {
-  final Color initialColor;
-
-  const ColorPickerDialog({required this.initialColor, super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Pick a color'),
-      content: SingleChildScrollView(
-        child: ColorPicker(
-          pickerColor: initialColor,
-          onColorChanged: (color) => Navigator.pop(context, color)
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-      ],
-    );
-  }
 }

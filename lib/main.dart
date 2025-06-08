@@ -1,19 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'startPage.dart';
 import 'pagesSettings/classesSettings/app_localizations.dart';
 import 'pagesSettings/classesSettings/language_provider.dart';
 import 'pagesSettings/classesSettings/theme_provider.dart';
-import 'database/editHistory.dart';
 import 'database/magicMomentDatabase.dart';
-import 'database/objectsModels.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MagicMomentDatabase.instance.init();
-  await debugImagesBox();
+
+  // Только самое необходимое для показа первого экрана
+  await Future.wait([
+    dotenv.load(fileName: '.env'),
+    MagicMomentDatabase.instance.initBasic(), // Только базовая инициализация
+  ]);
 
   runApp(
     MultiProvider(
@@ -24,7 +27,11 @@ Future<void> main() async {
       child: const MyApp(),
     ),
   );
+
+  // Остальную инициализацию - в фоне
+  void unawaited(Future<void> future) {}
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -51,10 +58,10 @@ class MyApp extends StatelessWidget {
               onPrimary: Colors.pink[100]!,
               primaryContainer: Colors.yellow[100]!,
               secondary: Colors.teal,
-              surface: Colors.black54,
+              surface: Colors.grey[700]!,
               onSurface: Colors.white,
-                onSecondary: Colors.grey[900]!,
-              onInverseSurface: Colors.black26,
+                onSecondary: Colors.grey[600]!,
+              onInverseSurface: Colors.grey[900]!,
             ),
           ),
           themeMode: themeProvider.themeMode,
@@ -76,13 +83,4 @@ class MyApp extends StatelessWidget {
   }
 
 
-}
-Future<void> debugImagesBox() async {
-  final images = await MagicMomentDatabase.instance.getAllImages();
-  for (var image in images) {
-    debugPrint('Image: id=${image.imageId}, filePath=${image.filePath}');
-    if (image.imageId != null && (image.imageId! < 0 || image.imageId! > 0xFFFFFFFF)) {
-      debugPrint('Invalid imageId found: ${image.imageId}');
-    }
-  }
 }

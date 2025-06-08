@@ -203,6 +203,54 @@ class AppLocalizations {
       'rotateRight': 'Rotate Right',
       'replace': 'Replace',
       'borderOptions': 'Border Options',
+      'selectBackgroundSource': 'Select Background Source',
+      'unsplashLibrary': 'Unsplash Library',
+      'deviceGallery': 'Device Gallery',
+      'selectBackground': 'Select Background',
+      'selectImageCount': 'Select Number of Images',
+      'chooseImages': 'How many images for the collage?',
+      'openSettings': 'Open Settings',
+      'image_saved_title': 'Image saved',
+      'share_prompt': 'Would you like to share it in a messenger?',
+      'no': 'No',
+      'share': 'Share',
+      'pexelsLibrary': 'Pexels Library',
+      'templates': 'Templates',
+      'editImage': 'Edit Image',
+      'border': 'Border',
+      'radius': 'Radius',
+      'width': 'Width',
+      'addImage': 'Add Image',
+      'pickColor': 'Pick a color',
+      'rotate': 'Rotate',
+      'select': 'Select',
+      'colorPicker': 'Color Picker',
+      'file': 'File',
+      'retry': 'Retry',
+      'flip': 'Flip',
+      'showBorder': 'Show border',
+      'filterStrength': 'Filter strength',
+      'shareText': 'Check out my edited image from MagicMoment!',
+      'noChanges': 'No changes to save',
+      'imageLimitWarning': 'Collages support 2 to 6 images. You have selected more than 6 images. Only the first 6 will be used.',
+      'collageToolRestriction': 'The Eraser and Background tools are not available for collages',
+      'solidColor': 'Solid Color',
+      'permissionRequired': 'Permission Required',
+      'permissionDeniedMessage': 'Access to' + 'is required. Please enable it in settings.',
+      'permissionError': 'Failed to access' + '. Please try again.',
+      'noSelection': 'No areas selected for removal',
+      'flipHorizontal': 'Flip Horizontal',
+      'flipVertical': 'Flip Vertical',
+      'cropApplied': 'Crop Applied',
+      'rotateClockwise': 'Rotate 90° Clockwise',
+      'rotateCounterClockwise': 'Rotate 90° Counterclockwise',
+      'cameraPermissionTitle': 'Camera Access',
+      'cameraPermissionMessage': 'To take photos directly in the app, we need access to your camera. This allows you to capture moments instantly.',
+      'galleryPermissionTitle': 'Gallery Access',
+      'galleryPermissionMessage': 'To select photos for editing or creating collages, we need access to your gallery. This lets you choose existing photos from your device.',
+      'continueText': 'Continue',
+      'permissionPermanentlyDenied': 'The permission was permanently denied. Please enable it in the app settings.',
+
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -243,7 +291,7 @@ class AppLocalizations {
       'selectedNon': 'Ничего не выбрано',
       'pngText': ' — для графики с прозрачностью',
       'jpegText': ' — для фотографий',
-      'insRigh': 'Недостат ballroomочно прав',
+      'insRigh': 'Недостаточно прав',
       'righText': 'Предоставьте в настройках доступ к вашей камере и галерее!',
       'freeCrop': 'Свободная',
       'portraitCrop': 'Портрет',
@@ -272,7 +320,7 @@ class AppLocalizations {
       'eraser': 'Ластик',
       'brush': 'Кисть',
       'error': 'Ошибка',
-      'clearAll': 'У852брать все',
+      'clearAll': 'Убрать все',
       'permissionDenied': 'Доступ запрещен',
       'undo': 'Назад',
       'redo': 'Вперед',
@@ -393,6 +441,56 @@ class AppLocalizations {
       'rotateRight': 'Повернуть вправо',
       'replace': 'Заменить',
       'borderOptions': 'Параметры границы',
+      'selectBackgroundSource': 'Выберите источник фона',
+      'unsplashLibrary': 'Библиотека Unsplash',
+      'deviceGallery': 'Галерея устройства',
+      'selectBackground': 'Выбрать фон',
+      'selectImageCount': 'Выберите количество изображений',
+      'chooseImages': 'Сколько изображений для коллажа?',
+      'openSettings': 'Открыть настройки',
+      'image_saved_title': 'Изображение сохранено',
+      'share_prompt': 'Хотите поделиться в мессенджере?',
+      'no': 'Нет',
+      'share': 'Поделиться',
+      'pexelsLibrary': 'Библиотека Pexels',
+      'templates': 'Шаблоны',
+      'editImage': 'Редактировать изображение',
+      'border': 'Граница',
+      'radius': 'Радиус',
+      'width': 'Ширина',
+      'addImage': 'Добавить изображение',
+      'pickColor': 'Выбрать цвет',
+      'rotate': 'Повернуть',
+      'select': 'Выбрать',
+      'colorPicker': 'Выбрать цвет',
+      'file': 'Файл',
+      'retry': 'Попробовать снова',
+      'flip': 'Повернуть',
+      'showBorder': 'Показать границы',
+      'filterStrength': 'Интенсивность',
+      'shareText': 'Посмотрите мое отредактированное изображение из MagicMoment!',
+      'noChanges': 'Нет изменений для сохранения',
+      'imageLimitWarning': 'Коллажи поддерживают от 2 до 6 изображений. Вы выбрали больше 6 изображений. Будут использованы только первые 6.',
+      'collageToolRestriction': 'Инструменты "Ластик" и "Фон" недоступны для коллажей',
+      'solidColor': 'Сплошной цвет',
+      'permissionRequired': 'Требуется разрешение',
+      'noPermissions': 'Требуется доступ к камере и галерее. Включите разрешения в настройках.',
+      'permissionDeniedMessage': 'Требуется доступ к «+». Включите его в настройках.',
+      'permissionError': 'Не удалось получить доступ к '+'. Попробуйте еще раз.',
+      'noSelection': 'Не выбрано ни одной области для удаления',
+      'flipHorizontal': 'Отразить по горизонтали',
+      'flipVertical': 'Отразить по вертикали',
+      'cropApplied': 'Обрезка применена',
+      'rotateClockwise': 'Повернуть на 90° по часовой стрелке',
+      'rotateCounterClockwise': 'Повернуть на 90° против часовой стрелки',
+      'cameraPermissionTitle': 'Доступ к камере',
+      'cameraPermissionMessage': 'Для съемки фотографий непосредственно в приложении нам нужен доступ к вашей камере. Это позволит вам мгновенно запечатлевать моменты.',
+      'galleryPermissionTitle': 'Доступ к галерее',
+      'galleryPermissionMessage': 'Для выбора фотографий для редактирования или создания коллажей нам нужен доступ к вашей галерее. Это позволит вам выбирать существующие фотографии с вашего устройства.',
+      'continueText': 'Продолжить',
+      'permissionPermanentlyDenied': 'Доступ был окончательно запрещен. Пожалуйста, включите его в настройках приложения.',
+
+
     },
   };
 
@@ -592,6 +690,54 @@ class AppLocalizations {
   String get rotateRight => _localizedValues[locale.languageCode]!['rotateRight']!;
   String get replace => _localizedValues[locale.languageCode]!['replace']!;
   String get borderOptions => _localizedValues[locale.languageCode]!['borderOptions']!;
+  String get selectBackgroundSource => _localizedValues[locale.languageCode]!['selectBackgroundSource']!;
+  String get unsplashLibrary => _localizedValues[locale.languageCode]!['unsplashLibrary']!;
+  String get deviceGallery => _localizedValues[locale.languageCode]!['deviceGallery']!;
+  String get selectBackground => _localizedValues[locale.languageCode]!['selectBackground']!;
+  String get selectImageCount => _localizedValues[locale.languageCode]!['selectImageCount']!;
+  String get chooseImages => _localizedValues[locale.languageCode]!['chooseImages']!;
+  String get openSettings => _localizedValues[locale.languageCode]!['openSettings']!;
+  String get image_saved_title => _localizedValues[locale.languageCode]!['image_saved_title']!;
+  String get share_prompt => _localizedValues[locale.languageCode]!['share_prompt']!;
+  String get no => _localizedValues[locale.languageCode]!['no']!;
+  String get share => _localizedValues[locale.languageCode]!['share']!;
+  String get pexelsLibrary => _localizedValues[locale.languageCode]!['pexelsLibrary']!;
+  String get templates => _localizedValues[locale.languageCode]!['templates']!;
+  String get editImage => _localizedValues[locale.languageCode]!['editImage']!;
+  String get border => _localizedValues[locale.languageCode]!['border']!;
+  String get radius => _localizedValues[locale.languageCode]!['radius']!;
+  String get width => _localizedValues[locale.languageCode]!['width']!;
+  String get addImage => _localizedValues[locale.languageCode]!['addImage']!;
+  String get pickColor => _localizedValues[locale.languageCode]!['pickColor']!;
+  String get rotate => _localizedValues[locale.languageCode]!['rotate']!;
+  String get select => _localizedValues[locale.languageCode]!['select']!;
+  String get colorPicker => _localizedValues[locale.languageCode]!['colorPicker']!;
+  String get file => _localizedValues[locale.languageCode]!['file']!;
+  String get retry => _localizedValues[locale.languageCode]!['retry']!;
+  String get flip => _localizedValues[locale.languageCode]!['flip']!;
+  String get showBorder => _localizedValues[locale.languageCode]!['showBorder']!;
+  String get filterStrength => _localizedValues[locale.languageCode]!['filterStrength']!;
+  String get shareText => _localizedValues[locale.languageCode]!['shareText']!;
+  String get noChanges => _localizedValues[locale.languageCode]!['noChanges']!;
+  String get imageLimitWarning => _localizedValues[locale.languageCode]!['imageLimitWarning']!;
+  String get collageToolRestriction => _localizedValues[locale.languageCode]!['collageToolRestriction']!;
+  String get solidColor => _localizedValues[locale.languageCode]!['solidColor']!;
+  String get permissionRequired => _localizedValues[locale.languageCode]!['permissionRequired']!;
+  String get noPermissions => _localizedValues[locale.languageCode]!['noPermissions']!;
+  String get permissionDeniedMessage => _localizedValues[locale.languageCode]!['permissionDeniedMessage']!;
+  String get permissionError => _localizedValues[locale.languageCode]!['permissionError']!;
+  String get noSelection => _localizedValues[locale.languageCode]!['noSelection']!;
+  String get flipHorizontal => _localizedValues[locale.languageCode]!['flipHorizontal']!;
+  String get flipVertical => _localizedValues[locale.languageCode]!['flipVertical']!;
+  String get cropApplied => _localizedValues[locale.languageCode]!['cropApplied']!;
+  String get rotateClockwise => _localizedValues[locale.languageCode]!['rotateClockwise']!;
+  String get rotateCounterClockwise => _localizedValues[locale.languageCode]!['rotateCounterClockwise']!;
+  String get cameraPermissionTitle => _localizedValues[locale.languageCode]!['cameraPermissionTitle']!;
+  String get cameraPermissionMessage => _localizedValues[locale.languageCode]!['cameraPermissionMessage']!;
+  String get galleryPermissionTitle => _localizedValues[locale.languageCode]!['galleryPermissionTitle']!;
+  String get galleryPermissionMessage => _localizedValues[locale.languageCode]!['galleryPermissionMessage']!;
+  String get continueText => _localizedValues[locale.languageCode]!['continueText']!;
+  String get permissionPermanentlyDenied => _localizedValues[locale.languageCode]!['permissionPermanentlyDenied']!;
 }
 
 class _AppLocalizationsDelegate

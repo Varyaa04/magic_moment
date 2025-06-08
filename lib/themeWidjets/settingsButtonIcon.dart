@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:MagicMoment/pagesSettings/classesSettings/theme_provider.dart';
+
 class SettingsButton extends StatelessWidget {
   final VoidCallback onPressed;
   final String text;
