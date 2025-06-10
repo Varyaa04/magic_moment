@@ -123,7 +123,7 @@ class _EraserPanelState extends State<EraserPanel> {
   bool _isInitialized = false;
   bool _isObjectRemovalMode = false;
   bool _isProcessing = false;
-  bool _isActive = true; // New flag to track panel activity
+  bool _isActive = true;
   String? _errorMessage;
   String? get _clipDropApiKey => dotenv.env['CLIPDROP_API_KEY'];
   late Size _imageSize;
@@ -192,19 +192,10 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 
   Future<void> _removeObject() async {
-    if (_isProcessing || !_isInitialized || _objectMaskPaths.isEmpty) {
-      if (mounted) {
-        _showError(AppLocalizations.of(context)?.noSelection ??
-            'No areas selected for removal');
-      }
-      return;
-    }
-    if (mounted) {
-      setState(() => _isProcessing = true);
-    }
+    if (_isProcessing || !_isInitialized || _objectMaskPaths.isEmpty || !mounted) return;
+    setState(() => _isProcessing = true);
 
     try {
-// Resize the image
       final resizedImage = await _resizeImage(widget.image, maxWidth: 1024);
       final resizedImageDecoded = img.decodeImage(resizedImage);
       if (resizedImageDecoded == null) {
@@ -212,16 +203,11 @@ class _EraserPanelState extends State<EraserPanel> {
       }
       final resizedWidth = resizedImageDecoded.width;
       final resizedHeight = resizedImageDecoded.height;
-      debugPrint(
-          'Resized image: ${resizedWidth}x${resizedHeight}, ${resizedImage.length} bytes');
 
-// Prepare paths for isolate
       final List<List<Map<String, double>>> serializedPaths = _objectMaskPaths
-          .map((path) =>
-              path.map((offset) => {'dx': offset.dx, 'dy': offset.dy}).toList())
+          .map((path) => path.map((offset) => {'dx': offset.dx, 'dy': offset.dy}).toList())
           .toList();
 
-// Generate mask with resized dimensions
       final maskBytes = await compute(_generateMaskImageIsolate, {
         'width': resizedWidth,
         'height': resizedHeight,
@@ -233,16 +219,12 @@ class _EraserPanelState extends State<EraserPanel> {
       if (maskBytes.isEmpty) {
         throw Exception('Empty mask generated');
       }
-      debugPrint('Mask size: ${maskBytes.length} bytes');
 
-// Call API
-      final resultBytes =
-          await _callObjectRemovalAPI(resizedImage, maskBytes, attempt: 1);
+      final resultBytes = await _callObjectRemovalAPI(resizedImage, maskBytes, attempt: 1);
       if (resultBytes == null || resultBytes.isEmpty) {
         throw Exception('Failed to process object removal');
       }
 
-// Crop result to original dimensions
       final croppedBytes = await compute(_cropToImageBoundsIsolate, {
         'inputBytes': resultBytes,
         'targetWidth': _imageSize.width.toInt(),
@@ -252,19 +234,11 @@ class _EraserPanelState extends State<EraserPanel> {
         throw Exception('Empty bytes after cropping');
       }
 
-      final croppedImage = img.decodeImage(croppedBytes);
-      if (croppedImage == null) {
-        throw Exception('Failed to decode cropped image');
-      }
-      debugPrint('Cropped size: ${croppedImage.width}x${croppedImage.height}');
-
-// Save snapshot
       String? snapshotPath;
       List<int>? snapshotBytes;
       if (!kIsWeb) {
         final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath =
-            '${tempDir.path}/object_removal_${DateTime.now().millisecondsSinceEpoch}.png';
+        snapshotPath = '${tempDir.path}/object_removal_${DateTime.now().millisecondsSinceEpoch}.png';
         final file = File(snapshotPath);
         await file.writeAsBytes(croppedBytes);
         if (!await file.exists()) {
@@ -274,7 +248,6 @@ class _EraserPanelState extends State<EraserPanel> {
         snapshotBytes = croppedBytes;
       }
 
-// Save history
       final history = EditHistory(
         imageId: widget.imageId,
         operationType: 'object_removal',
@@ -289,7 +262,6 @@ class _EraserPanelState extends State<EraserPanel> {
       final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
       if (historyId == null || historyId <= 0) {
-        debugPrint('Failed to save edit history to database');
         throw Exception('Failed to save edit history');
       }
 
@@ -301,8 +273,7 @@ class _EraserPanelState extends State<EraserPanel> {
         }
         _history.add({
           'image': croppedBytes,
-          'action':
-              AppLocalizations.of(context)?.objectRemoval ?? 'Object removal',
+          'action': AppLocalizations.of(context)?.objectRemoval ?? 'Object removal',
           'operationType': 'object_removal',
           'parameters': {
             'strokes': _objectMaskPaths.length,
@@ -314,25 +285,26 @@ class _EraserPanelState extends State<EraserPanel> {
         _objectMaskPaths.clear();
       });
 
-// Apply and update image
+      // Применяем изменения
+      await _updateImage(
+        newImage: croppedBytes,
+        action: AppLocalizations.of(context)?.objectRemoval ?? 'Object removed',
+        operationType: 'object_removal',
+        parameters: {
+          'strokes': _objectMaskPaths.length,
+          'width': _strokeWidth,
+          'historyId': historyId,
+        },
+      );
+
+      // Вызываем onApply
       widget.onApply(croppedBytes);
-      if (_isActive) {
-        await widget.onUpdateImage(
-          croppedBytes,
-          action:
-              AppLocalizations.of(context)?.objectRemoval ?? 'Object removed',
-          operationType: 'object_removal',
-          parameters: {
-            'strokes': _objectMaskPaths.length,
-            'width': _strokeWidth,
-            'historyId': historyId,
-          },
-        );
-        if (mounted) {
-          _isActive = false; // Mark panel as inactive before pop
-          debugPrint('Navigating back from EraserPanel after object removal');
-          widget.onCancel();
-        }
+
+      // Корректный переход: закрываем панель после успешного применения
+      if (mounted) {
+        _isActive = false; // Предотвращаем дальнейшие обновления
+        debugPrint('Navigating back from EraserPanel after object removal');
+        widget.onCancel(); // Закрываем панель
       }
     } catch (e, stackTrace) {
       debugPrint('Object removal error: $e\n$stackTrace');
@@ -384,7 +356,6 @@ class _EraserPanelState extends State<EraserPanel> {
       interpolation: img.Interpolation.cubic,
     );
 
-// Adjust cropping to center the image
     final xOffset =
         ((resized.width - targetWidth) / 2).round().clamp(0, resized.width);
     final yOffset =
@@ -414,7 +385,7 @@ class _EraserPanelState extends State<EraserPanel> {
     final width = params['width'] as int;
     final height = params['height'] as int;
     final paths =
-        params['paths'] as List<List<Map<String, double>>>; // Измененный тип
+        params['paths'] as List<List<Map<String, double>>>;
     final strokeWidth = params['strokeWidth'] as double;
     final originalWidth = params['originalWidth'] as double;
     final originalHeight = params['originalHeight'] as double;
@@ -463,7 +434,6 @@ class _EraserPanelState extends State<EraserPanel> {
       Uint8List imageBytes, Uint8List maskBytes,
       {int attempt = 1, int maxAttempts = 3}) async {
     try {
-// Validate dimensions
       final imageDecoded = img.decodeImage(imageBytes);
       final maskDecoded = img.decodeImage(maskBytes);
       if (imageDecoded == null || maskDecoded == null) {
@@ -536,24 +506,13 @@ class _EraserPanelState extends State<EraserPanel> {
   }
 
   Future<void> _applyEraser() async {
-    if (_isProcessing || !_isInitialized || _eraserPaths.isEmpty) {
-      if (mounted) {
-        _showError(
-            AppLocalizations.of(context)?.noChanges ?? 'No changes to apply');
-      }
-      return;
-    }
-    if (mounted) {
-      setState(() => _isProcessing = true);
-    }
+    if (_isProcessing || !_isInitialized || _eraserPaths.isEmpty || !mounted) return;
+    setState(() => _isProcessing = true);
 
     try {
       final recorder = ui.PictureRecorder();
-      final canvas = Canvas(
-          recorder, Rect.fromLTWH(0, 0, _imageSize.width, _imageSize.height));
-
+      final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, _imageSize.width, _imageSize.height));
       canvas.drawPaint(Paint()..color = Colors.transparent);
-
       if (_backgroundImage == null) {
         throw Exception('Background image is null');
       }
@@ -573,11 +532,8 @@ class _EraserPanelState extends State<EraserPanel> {
       }
 
       final picture = recorder.endRecording();
-      final imgFinal = await picture.toImage(
-          _imageSize.width.toInt(), _imageSize.height.toInt());
-
-      final byteData =
-          await imgFinal.toByteData(format: ui.ImageByteFormat.png);
+      final imgFinal = await picture.toImage(_imageSize.width.toInt(), _imageSize.height.toInt());
+      final byteData = await imgFinal.toByteData(format: ui.ImageByteFormat.png);
       imgFinal.dispose();
       picture.dispose();
 
@@ -594,8 +550,7 @@ class _EraserPanelState extends State<EraserPanel> {
       List<int>? snapshotBytes;
       if (!kIsWeb) {
         final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath =
-            '${tempDir.path}/eraser_${DateTime.now().millisecondsSinceEpoch}.png';
+        snapshotPath = '${tempDir.path}/eraser_${DateTime.now().millisecondsSinceEpoch}.png';
         final file = File(snapshotPath);
         await file.writeAsBytes(pngBytes);
         if (!await file.exists()) {
@@ -619,7 +574,6 @@ class _EraserPanelState extends State<EraserPanel> {
       final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
       if (historyId == null || historyId <= 0) {
-        debugPrint('Failed to save edit history to database');
         throw Exception('Failed to save edit history');
       }
 
@@ -643,6 +597,7 @@ class _EraserPanelState extends State<EraserPanel> {
         _eraserPaths.clear();
       });
 
+      // Применяем изменения
       await _updateImage(
         newImage: pngBytes,
         action: AppLocalizations.of(context)?.eraser ?? 'Area erased',
@@ -654,11 +609,13 @@ class _EraserPanelState extends State<EraserPanel> {
         },
       );
 
+      // Вызываем onApply
       widget.onApply(pngBytes);
+
       if (mounted) {
-        _isActive = false; // Mark panel as inactive before pop
+        _isActive = false; // Предотвращаем дальнейшие обновления
         debugPrint('Navigating back from EraserPanel after eraser application');
-        widget.onCancel();
+        widget.onCancel(); // Закрываем панель
       }
     } catch (e, stackTrace) {
       debugPrint('Eraser application error: $e\n$stackTrace');
@@ -777,7 +734,7 @@ class _EraserPanelState extends State<EraserPanel> {
       _objectMaskPaths.clear();
       _strokeWidth = 20.0;
       _isObjectRemovalMode = false;
-      _isActive = false; // Mark panel as inactive before pop
+      _isActive = false;
     });
     debugPrint('Navigating back from EraserPanel via resetChanges');
     widget.onCancel();
@@ -850,7 +807,6 @@ class _EraserPanelState extends State<EraserPanel> {
         throw Exception('Empty image bytes');
       }
       if (mounted && _isActive) {
-        // Check _isActive to prevent post-navigation updates
         await widget.onUpdateImage(
           newImage,
           action: action,

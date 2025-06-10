@@ -105,6 +105,7 @@ class _DrawPanelState extends State<DrawPanel> {
   }
 
   Future<void> _saveDrawing() async {
+    if (!mounted) return;
     try {
       final boundary = _paintingKey.currentContext?.findRenderObject()
           as RenderRepaintBoundary?;
@@ -114,13 +115,26 @@ class _DrawPanelState extends State<DrawPanel> {
       }
       final image = await boundary.toImage(
           pixelRatio: MediaQuery.of(context).devicePixelRatio);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      // Явно чистый холст с прозрачным цветом
+      canvas.drawColor(Colors.transparent, BlendMode.clear);
+// Нарисовка изображение в начале координат
+      canvas.drawImage(image, Offset.zero, Paint());
+      final finalImage =
+          await recorder.endRecording().toImage(image.width, image.height);
+      final byteData =
+          await finalImage.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
+      finalImage.dispose();
       if (byteData == null) {
         throw Exception(AppLocalizations.of(context)?.errorEncode ??
             'Image conversion error');
       }
       final pngBytes = byteData.buffer.asUint8List();
+      if (pngBytes.isEmpty) {
+        throw Exception('Empty image bytes after rendering');
+      }
 
       debugPrint('Drawing saved with ${_drawingActions.length} actions');
 
@@ -181,6 +195,11 @@ class _DrawPanelState extends State<DrawPanel> {
       );
 
       widget.onApply(pngBytes);
+
+      if (mounted) {
+        debugPrint('Navigating back from DrawPanel after saving drawing');
+        widget.onCancel();
+      }
     } catch (e, stackTrace) {
       debugPrint('Error saving drawing: $e\n$stackTrace');
       if (mounted) {
@@ -428,7 +447,7 @@ class _DrawPanelState extends State<DrawPanel> {
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth > 600; // Assume desktop if width > 600px
+    final isDesktop = screenWidth > 600;
 
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(0.8),
@@ -565,7 +584,7 @@ class _DrawPanelState extends State<DrawPanel> {
       ),
       child: Column(
         mainAxisSize:
-            MainAxisSize.min, // Ensure Column takes only necessary space
+            MainAxisSize.min,
         children: [
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -831,23 +850,6 @@ class _ColorPickerDialogState extends State<ColorPickerDialog> {
                 },
                 enableAlpha: true,
               ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 100,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: _selectedColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Theme.of(context).dividerColor,
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ],
             ),
           ],
         ),

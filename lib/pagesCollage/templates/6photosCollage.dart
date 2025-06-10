@@ -44,7 +44,7 @@ class SixPhotosCollage extends BaseCollage {
 
     List<Rect> getBounds(int layoutIndex) {
       switch (layoutIndex) {
-        case 0: // 3x2 grid
+        case 0: // Сетка 3x2
           return [
             Rect.fromLTWH(0, 0, thirdWidth, halfHeight),
             Rect.fromLTWH(thirdWidth + borderWidth, 0, thirdWidth, halfHeight),
@@ -56,7 +56,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth,
                 halfHeight + borderWidth, thirdWidth, halfHeight),
           ];
-        case 1: // Vertical split
+        case 1: // Вертикальное разделение
           return [
             Rect.fromLTWH(0, 0, sixthWidth, height),
             Rect.fromLTWH(sixthWidth + borderWidth, 0, sixthWidth, height),
@@ -69,7 +69,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(
                 5 * sixthWidth + 5 * borderWidth, 0, sixthWidth, height),
           ];
-        case 2: // Horizontal split
+        case 2: // Горизонтальное разделение
           return [
             Rect.fromLTWH(0, 0, width, sixthHeight),
             Rect.fromLTWH(0, sixthHeight + borderWidth, width, sixthHeight),
@@ -82,7 +82,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(
                 0, 5 * sixthHeight + 5 * borderWidth, width, sixthHeight),
           ];
-        case 3: // Large center, five small
+        case 3: // Большой центр, пять маленьких
           return [
             Rect.fromLTWH(width / 4, height / 4, width / 2, height / 2),
             Rect.fromLTWH(borderWidth, borderWidth, thirdWidth, thirdHeight),
@@ -95,7 +95,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(width / 2 - thirdWidth / 2,
                 height / 2 - thirdHeight / 2, thirdWidth, thirdHeight),
           ];
-        case 4: // 2x3 grid
+        case 4: // Сетка 2x3
           return [
             Rect.fromLTWH(0, 0, halfWidth, thirdHeight),
             Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, thirdHeight),
@@ -107,7 +107,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(halfWidth + borderWidth,
                 2 * thirdHeight + 2 * borderWidth, halfWidth, thirdHeight),
           ];
-        case 5: // Large left, five small right
+        case 5: // Большой слева, пять маленьких справа
           return [
             Rect.fromLTWH(0, 0, halfWidth, height),
             Rect.fromLTWH(
@@ -121,7 +121,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(halfWidth + borderWidth,
                 2 * thirdHeight + 2 * borderWidth, halfWidth, thirdHeight),
           ];
-        case 6: // Large top, five small bottom
+        case 6: // Большой верх, пять маленьких нижние
           return [
             Rect.fromLTWH(0, 0, width, halfHeight),
             Rect.fromLTWH(0, halfHeight + borderWidth, thirdWidth, thirdHeight),
@@ -137,7 +137,7 @@ class SixPhotosCollage extends BaseCollage {
                 halfWidth,
                 thirdHeight),
           ];
-        case 7: // Small overlays
+        case 7: // Маленькие накладки
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(width / 4, height / 4, width / 4, height / 4),
@@ -146,7 +146,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(width / 2, height / 2, width / 4, height / 4),
             Rect.fromLTWH(3 * width / 4, 3 * height / 4, width / 4, height / 4),
           ];
-        case 8: // Corner and center overlays
+        case 8: // Угловые и центральные наложения
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(borderWidth, borderWidth, thirdWidth, thirdHeight),
@@ -159,7 +159,7 @@ class SixPhotosCollage extends BaseCollage {
             Rect.fromLTWH(width / 2 - thirdWidth / 2,
                 height / 2 - thirdHeight / 2, thirdWidth, thirdHeight),
           ];
-        case 9: // Diagonal grid
+        case 9: // Диагональная сетка
           return [
             Rect.fromLTWH(0, 0, thirdWidth, thirdHeight),
             Rect.fromLTWH(thirdWidth + borderWidth, 0, thirdWidth, thirdHeight),

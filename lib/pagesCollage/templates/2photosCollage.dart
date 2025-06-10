@@ -42,52 +42,52 @@ class TwoPhotosCollage extends BaseCollage {
 
     List<Rect> getBounds(int layoutIndex) {
       switch (layoutIndex) {
-        case 0: // Vertical split
+        case 0: // Вертикальное разделение
           return [
             Rect.fromLTWH(0, 0, halfWidth, height),
             Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, height),
           ];
-        case 1: // Horizontal split
+        case 1: // Горизонтальное разделение
           return [
             Rect.fromLTWH(0, 0, width, halfHeight),
             Rect.fromLTWH(0, halfHeight + borderWidth, width, halfHeight),
           ];
-        case 2: // 2:1 vertical
+        case 2: // 1:1 по вертикали
           return [
             Rect.fromLTWH(0, 0, 2 * thirdWidth + borderWidth, height),
             Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth, 0, thirdWidth, height),
           ];
-        case 3: // 2:1 horizontal
+        case 3: // 1:1 по горизонтали
           return [
             Rect.fromLTWH(0, 0, width, 2 * thirdHeight + borderWidth),
             Rect.fromLTWH(0, 2 * thirdHeight + 2 * borderWidth, width, thirdHeight),
           ];
-        case 4: // Diagonal split
+        case 4: // Диагональное разделение
           return [
             Rect.fromLTWH(0, 0, halfWidth, halfHeight),
             Rect.fromLTWH(halfWidth + borderWidth, halfHeight + borderWidth, halfWidth, halfHeight),
           ];
-        case 5: // Small top, large bottom
+        case 5: // Маленький верх, большой низ
           return [
             Rect.fromLTWH(0, 0, width, thirdHeight),
             Rect.fromLTWH(0, thirdHeight + borderWidth, width, 2 * thirdHeight + borderWidth),
           ];
-        case 6: // Large left, small right
+        case 6: // Большой слева, маленький справа
           return [
             Rect.fromLTWH(0, 0, 2 * thirdWidth + borderWidth, height),
             Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth, 0, thirdWidth, height),
           ];
-        case 7: // Small overlay
+        case 7: // Маленькое наложение
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(width / 4, height / 4, width / 2, height / 2),
           ];
-        case 8: // Corner overlay
+        case 8: // Угловое наложение
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(borderWidth, borderWidth, width / 3, height / 3),
           ];
-        case 9: // Large bottom, small top
+        case 9: // Большой низ, маленький верх
           return [
             Rect.fromLTWH(0, thirdHeight + borderWidth, width, 2 * thirdHeight + borderWidth),
             Rect.fromLTWH(0, 0, width, thirdHeight),

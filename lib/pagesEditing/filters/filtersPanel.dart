@@ -176,7 +176,7 @@ class _FiltersPanelState extends State<FiltersPanel> {
                     ),
                   ),
                 ),
-                _buildFilterGroupTabs(isDesktop), // Moved filter group tabs here
+                _buildFilterGroupTabs(isDesktop),
                 _buildFilterList(isDesktop),
               ],
             ),
@@ -292,7 +292,6 @@ class _FiltersPanelState extends State<FiltersPanel> {
   }
 
   List<double> _blendFilterMatrix(List<double> filterMatrix, double strength) {
-    // Interpolate between identity matrix and filter matrix
     return List.generate(20, (i) {
       return _identityMatrix[i] + (filterMatrix[i] - _identityMatrix[i]) * strength;
     });
@@ -542,7 +541,7 @@ class _FiltersPanelState extends State<FiltersPanel> {
       _isProcessing = true;
       _currentFilter = matrix;
       _currentFilterName = filterName;
-      _filterStrength.value = 1.0; // Reset strength when changing filters
+      _filterStrength.value = 1.0;
     });
 
     try {

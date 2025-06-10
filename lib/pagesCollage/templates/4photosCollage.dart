@@ -44,7 +44,7 @@ class FourPhotosCollage extends BaseCollage {
 
     List<Rect> getBounds(int layoutIndex) {
       switch (layoutIndex) {
-        case 0: // 2x2 grid
+        case 0: // Сетка 2x2
           return [
             Rect.fromLTWH(0, 0, halfWidth, halfHeight),
             Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, halfHeight),
@@ -52,7 +52,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(halfWidth + borderWidth, halfHeight + borderWidth,
                 halfWidth, halfHeight),
           ];
-        case 1: // Vertical split
+        case 1: // Вертикальное разделение
           return [
             Rect.fromLTWH(0, 0, quarterWidth, height),
             Rect.fromLTWH(quarterWidth + borderWidth, 0, quarterWidth, height),
@@ -61,7 +61,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(
                 3 * quarterWidth + 3 * borderWidth, 0, quarterWidth, height),
           ];
-        case 2: // Horizontal split
+        case 2:// Горизонтальное разделение
           return [
             Rect.fromLTWH(0, 0, width, quarterHeight),
             Rect.fromLTWH(0, quarterHeight + borderWidth, width, quarterHeight),
@@ -70,7 +70,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(
                 0, 3 * quarterHeight + 3 * borderWidth, width, quarterHeight),
           ];
-        case 3: // Large left, three small right
+        case 3: // Большой слева, три маленьких справа
           return [
             Rect.fromLTWH(0, 0, halfWidth, height),
             Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, thirdHeight),
@@ -79,7 +79,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(halfWidth + borderWidth,
                 2 * thirdHeight + 2 * borderWidth, halfWidth, thirdHeight),
           ];
-        case 4: // Large top, three small bottom
+        case 4: // Большой верх, три маленьких низа
           return [
             Rect.fromLTWH(0, 0, width, halfHeight),
             Rect.fromLTWH(0, halfHeight + borderWidth, thirdWidth, halfHeight),
@@ -88,7 +88,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth,
                 halfHeight + borderWidth, thirdWidth, halfHeight),
           ];
-        case 5: // 3:1 vertical
+        case 5: // 3:1 по вертикали
           return [
             Rect.fromLTWH(0, 0, 3 * quarterWidth + 2 * borderWidth, height),
             Rect.fromLTWH(3 * quarterWidth + 3 * borderWidth, 0, quarterWidth,
@@ -98,7 +98,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(3 * quarterWidth + 3 * borderWidth,
                 2 * thirdHeight + 2 * borderWidth, quarterWidth, thirdHeight),
           ];
-        case 6: // 3:1 horizontal
+        case 6: // 3:1 по горизонтали
           return [
             Rect.fromLTWH(0, 0, width, 3 * quarterHeight + 2 * borderWidth),
             Rect.fromLTWH(0, 3 * quarterHeight + 3 * borderWidth, thirdWidth,
@@ -108,7 +108,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth,
                 3 * quarterHeight + 3 * borderWidth, thirdWidth, quarterHeight),
           ];
-        case 7: // Small overlay
+        case 7: // Маленькое наложение
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(width / 4, height / 4, width / 2, thirdHeight),
@@ -120,7 +120,7 @@ class FourPhotosCollage extends BaseCollage {
                 width / 2,
                 thirdHeight),
           ];
-        case 8: // Corner overlays
+        case 8: // Угловые наложения
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(borderWidth, borderWidth, thirdWidth, thirdHeight),
@@ -129,7 +129,7 @@ class FourPhotosCollage extends BaseCollage {
             Rect.fromLTWH(borderWidth, height - thirdHeight - borderWidth,
                 thirdWidth, thirdHeight),
           ];
-        case 9: // Diagonal grid
+        case 9: // Диагональная сетка
           return [
             Rect.fromLTWH(0, 0, halfWidth, halfHeight),
             Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, halfHeight),

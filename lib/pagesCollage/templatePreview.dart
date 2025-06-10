@@ -21,15 +21,15 @@ class TemplatePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-// Placeholder image provider for preview
+// Поставщик изображений-заполнителей для предварительного просмотра
     final placeholderImage =
-        MemoryImage(Uint8List(0)); // Empty image for preview
+        MemoryImage(Uint8List(0));
     final images = List.generate(imageCount, (_) => placeholderImage);
     final positions = List.generate(imageCount, (_) => Offset.zero);
     final scales = List.generate(imageCount, (_) => 1.0);
     final rotations = List.generate(imageCount, (_) => 0.0);
 
-// Placeholder callback functions
+// Функции обратного вызова заполнителя
     void onPositionChanged(int index, Offset offset) {}
     void onScaleChanged(int index, double scale) {}
     void onRotationChanged(int index, double rotation) {}
@@ -40,7 +40,7 @@ class TemplatePreview extends StatelessWidget {
         collage = TwoPhotosCollage(
           images: images,
           layoutIndex:
-              templateIndex, // Changed from templateIndex to layoutIndex
+              templateIndex,
           borderColor: borderColor,
           positions: positions,
           scales: scales,
@@ -60,7 +60,7 @@ class TemplatePreview extends StatelessWidget {
         collage = ThreePhotosCollage(
           images: images,
           layoutIndex:
-              templateIndex, // Changed from templateIndex to layoutIndex
+              templateIndex,
           borderColor: borderColor,
           positions: positions,
           scales: scales,
@@ -80,7 +80,7 @@ class TemplatePreview extends StatelessWidget {
         collage = FourPhotosCollage(
           images: images,
           layoutIndex:
-              templateIndex, // Changed from templateIndex to layoutIndex
+              templateIndex,
           borderColor: borderColor,
           positions: positions,
           scales: scales,
@@ -100,7 +100,7 @@ class TemplatePreview extends StatelessWidget {
         collage = FivePhotosCollage(
           images: images,
           layoutIndex:
-              templateIndex, // Changed from templateIndex to layoutIndex
+              templateIndex,
           borderColor: borderColor,
           positions: positions,
           scales: scales,
@@ -120,7 +120,7 @@ class TemplatePreview extends StatelessWidget {
         collage = SixPhotosCollage(
           images: images,
           layoutIndex:
-              templateIndex, // Changed from templateIndex to layoutIndex
+              templateIndex,
           borderColor: borderColor,
           positions: positions,
           scales: scales,

@@ -31,7 +31,8 @@ class ChangeBackgroundPage extends BaseBackgroundEditor {
   State<ChangeBackgroundPage> createState() => _ChangeBackgroundPageState();
 }
 
-class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgroundPage> {
+class _ChangeBackgroundPageState
+    extends BaseBackgroundEditorState<ChangeBackgroundPage> {
   Uint8List? _backgroundImage;
   bool _isLoading = false;
   Uint8List? _processedImage;
@@ -54,15 +55,19 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
     super.dispose();
   }
 
-  Future<Uint8List?> _resizeImage(Uint8List imageData, {int maxWidth = 1080, bool preserveTransparency = false}) async {
+  Future<Uint8List?> _resizeImage(Uint8List imageData,
+      {int maxWidth = 1080, bool preserveTransparency = false}) async {
     try {
       final decoded = img.decodeImage(imageData);
       if (decoded == null) {
         debugPrint('Failed to decode image in _resizeImage');
         return null;
       }
-      final resized = img.copyResize(decoded, width: maxWidth, maintainAspect: true);
-      final compressed = preserveTransparency ? img.encodePng(resized, level: 6) : img.encodeJpg(resized, quality: 80);
+      final resized =
+      img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+      final compressed = preserveTransparency
+          ? img.encodePng(resized, level: 6)
+          : img.encodeJpg(resized, quality: 80);
       debugPrint('Resized image: size=${compressed.length} bytes');
       return Uint8List.fromList(compressed);
     } catch (e, stackTrace) {
@@ -72,10 +77,12 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
   }
 
   Future<void> _initialize() async {
-    debugPrint('Initializing ChangeBackgroundPage with image size: ${widget.image.length} bytes');
+    debugPrint(
+        'Initializing ChangeBackgroundPage with image size: ${widget.image.length} bytes');
     try {
       if (widget.image.isEmpty) {
-        throw Exception(AppLocalizations.of(context)?.noImages ?? 'No image provided');
+        throw Exception(
+            AppLocalizations.of(context)?.noImages ?? 'No image provided');
       }
       historyStack.add({
         'image': widget.image,
@@ -112,20 +119,24 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
     return localizations?.changeBackgroundTitle ?? 'Change background';
   }
 
-  Future<Uint8List?> _getBackgroundMask(Uint8List imageBytes, {int attempt = 1, int maxAttempts = 5}) async {
+  Future<Uint8List?> _getBackgroundMask(Uint8List imageBytes,
+      {int attempt = 1, int maxAttempts = 5}) async {
     try {
       final apiKey = dotenv.env['CLIPDROP_API_KEY'];
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('ClipDrop API key is not configured in .env file');
       }
 
-      final resizedImage = await _resizeImage(imageBytes, maxWidth: 1024, preserveTransparency: true);
+      final resizedImage = await _resizeImage(imageBytes,
+          maxWidth: 1024, preserveTransparency: true);
       if (resizedImage == null) {
         throw Exception('Failed to resize image for API call');
       }
 
-      debugPrint('Sending mask request (attempt $attempt) to ${widget.apiEndpoint} with image size: ${resizedImage.length} bytes');
-      final request = http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
+      debugPrint(
+          'Sending mask request (attempt $attempt) to ${widget.apiEndpoint} with image size: ${resizedImage.length} bytes');
+      final request =
+      http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
       request.headers['x-api-key'] = apiKey;
       request.files.add(http.MultipartFile.fromBytes(
         'image_file',
@@ -133,8 +144,10 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
         filename: 'image.png',
       ));
 
-      final response = await request.send().timeout(const Duration(seconds: 30));
-      debugPrint('Mask API response status: ${response.statusCode}, content length: ${response.contentLength}');
+      final response =
+      await request.send().timeout(const Duration(seconds: 30));
+      debugPrint(
+          'Mask API response status: ${response.statusCode}, content length: ${response.contentLength}');
       final responseBody = await http.Response.fromStream(response);
 
       if (response.statusCode == 200) {
@@ -145,15 +158,19 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
       } else if (response.statusCode == 429 && attempt < maxAttempts) {
         debugPrint('Rate limit hit, retrying after ${attempt * 2} seconds...');
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _getBackgroundMask(imageBytes, attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _getBackgroundMask(imageBytes,
+            attempt: attempt + 1, maxAttempts: maxAttempts);
       } else {
-        throw Exception('ClipDrop API error: ${response.statusCode}: ${responseBody.body}');
+        throw Exception(
+            'ClipDrop API error: ${response.statusCode}: ${responseBody.body}');
       }
     } catch (e, stackTrace) {
-      debugPrint('Error getting background mask (attempt $attempt): $e\n$stackTrace');
+      debugPrint(
+          'Error getting background mask (attempt $attempt): $e\n$stackTrace');
       if (attempt < maxAttempts) {
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _getBackgroundMask(imageBytes, attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _getBackgroundMask(imageBytes,
+            attempt: attempt + 1, maxAttempts: maxAttempts);
       }
       rethrow;
     }
@@ -162,12 +179,14 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
   Future<void> _pickBackgroundImage() async {
     if (_isLoading || !_isActive) return;
     try {
-      final bytes = await ImagePickerHelper.pickImage(source: ImageSource.gallery);
+      final bytes =
+      await ImagePickerHelper.pickImage(source: ImageSource.gallery);
       if (bytes == null || bytes.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(AppLocalizations.of(context)?.noImages ?? 'No image selected'),
+              content: Text(AppLocalizations.of(context)?.noImages ??
+                  'No image selected'),
             ),
           );
         }
@@ -186,8 +205,9 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
     }
   }
 
-  static Future<Uint8List> _applyBackgroundIsolate(Map<String, dynamic> params) async {
-    // Decode input data
+  static Future<Uint8List> _applyBackgroundIsolate(
+      Map<String, dynamic> params) async {
+    // Декодируем входные данные
     final originalBytes = params['original'] as Uint8List;
     final maskBytes = params['mask'] as Uint8List;
     final backgroundBytes = params['background'] as Uint8List?;
@@ -196,41 +216,39 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
     final mask = img.decodeImage(maskBytes);
 
     if (original == null || mask == null) {
-      throw Exception('Failed to decode original or mask image');
+      throw Exception('Failed to loosdecode original or mask image');
     }
 
-    // Ensure mask matches original image dimensions
     img.Image resizedMask = mask;
     if (original.width != mask.width || original.height != mask.height) {
-      debugPrint('Resizing mask to match original dimensions: ${original.width}x${original.height}');
-      resizedMask = img.copyResize(mask, width: original.width, height: original.height);
+      debugPrint(
+          'Resizing mask to match original dimensions: ${original.width}x${original.height}');
+      resizedMask =
+          img.copyResize(mask, width: original.width, height: original.height);
     }
 
-    // Create background image
     img.Image background;
     if (backgroundBytes != null) {
       final decodedBackground = img.decodeImage(backgroundBytes);
       if (decodedBackground == null) {
         throw Exception('Failed to decode background image');
       }
-      background = img.copyResize(decodedBackground, width: original.width, height: original.height);
+      background = img.copyResize(decodedBackground,
+          width: original.width, height: original.height);
     } else {
       throw Exception('No background image provided');
     }
 
-    // Create result image
-    final resultImage = img.Image(width: original.width, height: original.height);
+    final resultImage =
+    img.Image(width: original.width, height: original.height);
 
-    // Apply mask
     for (int y = 0; y < original.height; y++) {
       for (int x = 0; x < original.width; x++) {
         final maskPixel = resizedMask.getPixelSafe(x, y);
-        final alpha = maskPixel.a; // Use raw alpha value (0-255)
+        final alpha = maskPixel.a;
         if (alpha > 0) {
-          // Foreground: keep original pixel
           resultImage.setPixel(x, y, original.getPixel(x, y));
         } else {
-          // Background: use background pixel
           resultImage.setPixel(x, y, background.getPixel(x, y));
         }
       }
@@ -239,7 +257,10 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
   }
 
   Future<void> _processImage() async {
-    if (_isLoading || !_isInitialized || !_isActive || _backgroundImage == null) {
+    if (_isLoading ||
+        !_isInitialized ||
+        !_isActive ||
+        _backgroundImage == null) {
       debugPrint('Cannot process image: missing background or not initialized');
       return;
     }
@@ -269,9 +290,12 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
       }
 
       img.Image resizedMask = maskImage;
-      if (originalImage.width != maskImage.width || originalImage.height != maskImage.height) {
-        debugPrint('Mask dimensions (${maskImage.width}x${maskImage.height}) do not match original (${originalImage.width}x${originalImage.height}), resizing mask...');
-        resizedMask = img.copyResize(maskImage, width: originalImage.width, height: originalImage.height);
+      if (originalImage.width != maskImage.width ||
+          originalImage.height != maskImage.height) {
+        debugPrint(
+            'Mask dimensions (${maskImage.width}x${maskImage.height}) do not match original (${originalImage.width}x${originalImage.height}), resizing mask...');
+        resizedMask = img.copyResize(maskImage,
+            width: originalImage.width, height: originalImage.height);
       }
 
       final isolateParams = {
@@ -287,7 +311,8 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
         throw Exception('Failed to decode result image');
       }
 
-      final processedBytes = Uint8List.fromList(img.encodePng(resultImageDecoded));
+      final processedBytes =
+      Uint8List.fromList(img.encodePng(resultImageDecoded));
       if (processedBytes.isEmpty) {
         throw Exception('Failed to encode processed image');
       }
@@ -298,7 +323,8 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
       List<int>? snapshotBytes;
       if (!kIsWeb) {
         final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath = '${tempDir.path}/change_bg_${DateTime.now().millisecondsSinceEpoch}.png';
+        snapshotPath =
+        '${tempDir.path}/change_bg_${DateTime.now().millisecondsSinceEpoch}.png';
         final file = File(snapshotPath);
         await file.writeAsBytes(processedBytes);
         if (!await file.exists()) {
@@ -325,7 +351,8 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
       }
 
       if (!mounted || !_isActive) {
-        debugPrint('ChangeBackgroundPage not mounted or inactive after processing');
+        debugPrint(
+            'ChangeBackgroundPage not mounted or inactive after processing');
         return;
       }
 
@@ -350,7 +377,8 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
           parameters: {'historyId': historyId},
         );
         if (mounted && _isActive) {
-          debugPrint('Navigating back with result: ${processedBytes.length} bytes');
+          debugPrint(
+              'Navigating back with result: ${processedBytes.length} bytes');
           _isActive = false;
           Navigator.pop(context, processedBytes);
         }
@@ -425,7 +453,8 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red[700],
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   child: Text(
                     localizations?.close ?? 'Close',
@@ -453,10 +482,12 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
                     _processedImage!,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      debugPrint('Error displaying processed image: $error');
+                      debugPrint(
+                          'Error displaying processed image: $error');
                       return Center(
                         child: Text(
-                          localizations?.invalidImage ?? 'Failed to load image',
+                          localizations?.invalidImage ??
+                              'Failed to load image',
                           style: const TextStyle(color: Colors.white),
                         ),
                       );
@@ -466,10 +497,12 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
                     widget.image,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      debugPrint('Error displaying original image: $error');
+                      debugPrint(
+                          'Error displaying original image: $error');
                       return Center(
                         child: Text(
-                          localizations?.invalidImage ?? 'Failed to load image',
+                          localizations?.invalidImage ??
+                              'Failed to load image',
                           style: const TextStyle(color: Colors.white),
                         ),
                       );
@@ -514,7 +547,7 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
           size: isDesktop ? 28 : 24,
         ),
         onPressed: () {
-          if (mounted && _isActive)  {
+          if (mounted && _isActive) {
             debugPrint('Navigating back to BackgroundPanel via cancel');
             _isActive = false;
             Navigator.pop(context);
@@ -524,53 +557,54 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
       ),
       title: Text(
         _getActionName(localizations),
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: isDesktop ? 20 : 16,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: isDesktop ? 20 : 16,
+        ),
       ),
-    ),
-    actions: [
-    IconButton(
-    icon: Icon(
-    Icons.undo,
-    color: historyIndex > 0 && !_isLoading ? Colors.white : Colors.grey[700],
-    size: isDesktop ? 28 : 24,
-    ),
-    onPressed: historyIndex > 0 && !_isLoading && _isActive ? undo : null,
-    tooltip: localizations?.undo ?? 'Undo',
-    ),
-    IconButton(
-    icon: Icon(
-    Icons.check,
-    color: _processedImage != null && !_isLoading ? Colors.green : Colors.grey[700],
-    size: isDesktop ? 28 : 24,
-    ),
-    onPressed: _processedImage != null && !_isLoading && mounted && _isActive
-    ? () {
-    if (mounted && _isActive) {
-    debugPrint('Applying processed image');
-    widget.onApply(_processedImage!);
-    _isActive = false;
-    Navigator.pop(context, _processedImage!);
-    }
-    }
-        : null,
-    tooltip: localizations?.apply ?? 'Apply',
-    ),
-    ],
+      actions: [
+        IconButton(
+          icon: Icon(
+            Icons.undo,
+            color: historyIndex > 0 && !_isLoading
+                ? Colors.white
+                : Colors.grey[700],
+            size: isDesktop ? 28 : 24,
+          ),
+          onPressed: historyIndex > 0 && !_isLoading && _isActive ? undo : null,
+          tooltip: localizations?.undo ?? 'Undo',
+        ),
+        IconButton(
+          icon: Icon(
+            Icons.check,
+            color: _processedImage != null && !_isLoading
+                ? Colors.green
+                : Colors.grey[700],
+            size: isDesktop ? 28 : 24,
+          ),
+          onPressed:
+          _processedImage != null && !_isLoading && mounted && _isActive
+              ? () {
+            if (mounted && _isActive) {
+              debugPrint('Applying processed image');
+              widget.onApply(_processedImage!);
+              _isActive = false;
+              Navigator.pop(context, _processedImage!);
+            }
+          }
+              : null,
+          tooltip: localizations?.apply ?? 'Apply',
+        ),
+      ],
     );
-    }
+  }
 
   Widget _buildBottomPanel(ThemeData theme, AppLocalizations? localizations) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
     return Container(
-      constraints: BoxConstraints(
-        minHeight: isDesktop ? 100 : 80,
-        maxHeight: isDesktop ? 100 : 80,
-      ),
       padding: EdgeInsets.symmetric(
         vertical: isDesktop ? 8 : 4,
-        horizontal: isDesktop ? 20 : 12,
+        horizontal: isDesktop ? 16 : 10,
       ),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
@@ -591,7 +625,8 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ElevatedButton.icon(
-                  onPressed: _isLoading || !_isActive ? null : _pickBackgroundImage,
+                  onPressed:
+                  _isLoading || !_isActive ? null : _pickBackgroundImage,
                   icon: Icon(
                     Icons.image,
                     color: Colors.white,
@@ -619,7 +654,9 @@ class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgro
             ),
             const SizedBox(height: 6),
             ElevatedButton.icon(
-              onPressed: _isLoading || !_isActive || _backgroundImage == null ? null : _processImage,
+              onPressed: _isLoading || !_isActive || _backgroundImage == null
+                  ? null
+                  : _processImage,
               icon: Icon(
                 Icons.check,
                 color: Colors.white,

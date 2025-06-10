@@ -6,21 +6,25 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart'; // Новый импорт для выбора цвета
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import '../../database/editHistory.dart';
 import '../../database/objectDao.dart' as dao;
 import '../../database/objectsModels.dart';
 import '../../database/magicMomentDatabase.dart';
 import 'ResponsiveUtils.dart';
-import 'package:universal_html/html.dart' as html if (dart.library.io) 'dart:io';
+import 'package:universal_html/html.dart' as html
+    if (dart.library.io) 'dart:io';
 
 class TextEditorPanel extends StatefulWidget {
   final Uint8List image;
   final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
-  final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
+  final Function(Uint8List,
+      {String? action,
+      String? operationType,
+      Map<String, dynamic>? parameters}) onUpdateImage;
 
   const TextEditorPanel({
     required this.image,
@@ -35,7 +39,8 @@ class TextEditorPanel extends StatefulWidget {
   _TextEditorPanelState createState() => _TextEditorPanelState();
 }
 
-class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProviderStateMixin {
+class _TextEditorPanelState extends State<TextEditorPanel>
+    with SingleTickerProviderStateMixin {
   final List<TextItem> _textItems = [];
   TextItem? _selectedText;
   final List<Map<String, dynamic>> _history = [];
@@ -74,6 +79,7 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
 
   Future<void> _initialize() async {
     try {
+      await _loadTextFromDb();
       _imageAspectRatio = await _getImageAspectRatio();
       _history.add({
         'image': widget.image,
@@ -99,13 +105,16 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     return width / height;
   }
 
-  Future<Uint8List> _cropToImageBounds(Uint8List inputBytes, int targetWidth, int targetHeight) async {
+  Future<Uint8List> _cropToImageBounds(
+      Uint8List inputBytes, int targetWidth, int targetHeight) async {
     final codec = await ui.instantiateImageCodec(inputBytes);
     final frame = await codec.getNextFrame();
     final image = frame.image;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+    canvas.drawColor(Colors.transparent, BlendMode.clear);
+    canvas.drawColor(Colors.transparent, BlendMode.clear);
     canvas.drawImageRect(
       image,
       Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
@@ -113,8 +122,10 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       Paint(),
     );
 
-    final croppedImage = await recorder.endRecording().toImage(targetWidth, targetHeight);
-    final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+    final croppedImage =
+        await recorder.endRecording().toImage(targetWidth, targetHeight);
+    final byteData =
+        await croppedImage.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     croppedImage.dispose();
     if (byteData == null) {
@@ -143,37 +154,14 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
         hasShadow: _hasShadow,
       );
 
-
-      final db = MagicMomentDatabase.instance;
-
-      final objectDao = dao.ObjectDao();
-      final textId = await objectDao.insertText(TextObject(
-        imageId: widget.imageId,
-        text: newTextItem.text,
-        positionX: newTextItem.position.dx,
-        positionY: newTextItem.position.dy,
-        fontSize: newTextItem.fontSize,
-        fontWeight: newTextItem.fontWeight == FontWeight.bold ? 'bold' : 'normal',
-        fontStyle: newTextItem.fontStyle == FontStyle.italic ? 'italic' : 'normal',
-        alignment: newTextItem.alignment == TextAlign.center
-            ? 'center'
-            : newTextItem.alignment == TextAlign.right
-            ? 'right'
-            : 'left',
-        color: '#${newTextItem.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
-        fontFamily: newTextItem.fontFamily,
-        scale: newTextItem.scale,
-        rotation: newTextItem.rotation,
-      ));
-
       if (!mounted) return;
 
       setState(() {
-        newTextItem.id = textId;
         _textItems.add(newTextItem);
         _textController.clear();
         _currentText = '';
-        debugPrint('Text added: ${newTextItem.text}, ID: $textId');
+        _selectedText = newTextItem;
+        debugPrint('Text added to memory: ${newTextItem.text}');
       });
     } catch (e, stackTrace) {
       _handleError('Failed to add text: $e\n$stackTrace');
@@ -185,7 +173,7 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
   }
 
   Future<void> _applyChanges() async {
-    if (_isProcessing || !_isInitialized) return;
+    if (_isProcessing || !_isInitialized || !mounted) return;
     setState(() {
       _isProcessing = true;
       _selectedText = null;
@@ -193,21 +181,34 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
 
     try {
       await Future.delayed(const Duration(milliseconds: 16));
-      final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _imageKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
+        throw Exception(
+            AppLocalizations.of(context)?.error ?? 'Rendering error');
       }
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawColor(Colors.transparent, BlendMode.clear);
+      canvas.drawColor(Colors.transparent, BlendMode.clear);
+      canvas.drawImage(image, Offset.zero, Paint());
+      final finalImage =
+          await recorder.endRecording().toImage(image.width, image.height);
+      final byteData =
+          await finalImage.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
+      finalImage.dispose();
       if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.errorEncode ?? 'Image conversion error');
+        throw Exception(AppLocalizations.of(context)?.errorEncode ??
+            'Image conversion error');
       }
       final pngBytes = byteData.buffer.asUint8List();
       if (pngBytes.isEmpty) {
-        throw Exception('Empty image bytes after cropping');
+        throw Exception('Empty image bytes after rendering');
       }
 
+      final db = MagicMomentDatabase.instance;
       final history = EditHistory(
         historyId: null,
         imageId: widget.imageId,
@@ -218,12 +219,11 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
         operationDate: DateTime.now(),
         snapshotBytes: kIsWeb ? pngBytes : null,
       );
-      final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
 
       final objectDao = dao.ObjectDao();
       for (final text in _textItems) {
-        await objectDao.insertText(TextObject(
+        text.id = await objectDao.insertText(TextObject(
           imageId: widget.imageId,
           text: text.text,
           positionX: text.position.dx,
@@ -234,9 +234,10 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
           alignment: text.alignment == TextAlign.center
               ? 'center'
               : text.alignment == TextAlign.right
-              ? 'right'
-              : 'left',
-          color: '#${text.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+                  ? 'right'
+                  : 'left',
+          color:
+              '#${text.color.value.toRadixString(16).padLeft(8, '0').substring(2)}',
           fontFamily: text.fontFamily,
           scale: text.scale,
           rotation: text.rotation,
@@ -271,11 +272,17 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       );
 
       widget.onApply(pngBytes);
+
+      if (mounted) {
+        debugPrint('Navigating back from TextEditorPanel after applying text');
+        widget.onCancel();
+      }
     } catch (e, stackTrace) {
       _handleError('Error applying text: $e\n$stackTrace');
     } finally {
-      setState(() => _isProcessing = false);
-      // Remove widget.onCancel() to allow re-editing
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -283,27 +290,34 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     try {
       final objectDao = dao.ObjectDao();
       final saved = await objectDao.getTexts(widget.imageId);
-      debugPrint('Loaded ${saved.length} texts from DB for imageId: ${widget.imageId}');
+      debugPrint(
+          'Loaded ${saved.length} texts from DB for imageId: ${widget.imageId}');
 
-      final newTexts = saved.map((t) => TextItem(
-        id: t.id,
-        text: t.text,
-        position: Offset(t.positionX, t.positionY),
-        color: Color(int.parse(t.color.replaceFirst('#', '0xff'))),
-        fontSize: t.fontSize,
-        fontFamily: t.fontFamily,
-        fontWeight: t.fontWeight == 'bold' ? FontWeight.bold : FontWeight.normal,
-        fontStyle: t.fontStyle == 'italic' ? FontStyle.italic : FontStyle.normal,
-        alignment: t.alignment == 'center'
-            ? TextAlign.center
-            : t.alignment == 'right'
-            ? TextAlign.right
-            : TextAlign.left,
-        scale: t.scale,
-        rotation: t.rotation,
-        backgroundColor: Colors.transparent,
-        hasShadow: true,
-      )).toList();
+      final newTexts = saved
+          .map((t) => TextItem(
+                id: t.id,
+                text: t.text,
+                position: Offset(t.positionX, t.positionY),
+                color: Color(int.parse(t.color.replaceFirst('#', '0xff'))),
+                fontSize: t.fontSize,
+                fontFamily: t.fontFamily,
+                fontWeight: t.fontWeight == 'bold'
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                fontStyle: t.fontStyle == 'italic'
+                    ? FontStyle.italic
+                    : FontStyle.normal,
+                alignment: t.alignment == 'center'
+                    ? TextAlign.center
+                    : t.alignment == TextAlign.right
+                        ? TextAlign.right
+                        : TextAlign.left,
+                scale: t.scale,
+                rotation: t.rotation,
+                backgroundColor: Colors.transparent,
+                hasShadow: true,
+              ))
+          .toList();
 
       if (mounted) {
         setState(() => _textItems.addAll(newTexts));
@@ -359,6 +373,7 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
           'previous_action': _history[_historyIndex + 1]['action'],
         },
       );
+      await _loadTextFromDb(); // Reload text from DB after undo
       debugPrint('Undo performed, history index: $_historyIndex');
     } catch (e, stackTrace) {
       _handleError('Failed to undo: $e\n$stackTrace');
@@ -417,6 +432,21 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
     });
   }
 
+  bool _isWithinImageBounds(Offset position, Size textSize) {
+    final RenderBox? renderBox =
+        _imageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+
+    final imageSize = renderBox.size;
+    final halfTextWidth = textSize.width / 2;
+    final halfTextHeight = textSize.height / 2;
+
+    return position.dx >= halfTextWidth &&
+        position.dx <= imageSize.width - halfTextWidth &&
+        position.dy >= halfTextHeight &&
+        position.dy <= imageSize.height - halfTextHeight;
+  }
+
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
@@ -431,33 +461,36 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
                 Expanded(
                   child: _isInitialized && _imageAspectRatio != null
                       ? GestureDetector(
-                    onTap: () => setState(() => _selectedText = null),
-                    child: AspectRatio(
-                      aspectRatio: _imageAspectRatio!,
-                      child: RepaintBoundary(
-                        key: _imageKey,
-                        child: Stack(
-                          children: [
-                            Center(child: Image.memory(widget.image, fit: BoxFit.contain)),
-                            ..._textItems.map(_buildTextWidget),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
+                          onTap: () => setState(() => _selectedText = null),
+                          child: AspectRatio(
+                            aspectRatio: _imageAspectRatio!,
+                            child: RepaintBoundary(
+                              key: _imageKey,
+                              child: Stack(
+                                children: [
+                                  Center(
+                                      child: Image.memory(widget.image,
+                                          fit: BoxFit.contain)),
+                                  ..._textItems.map(_buildTextWidget),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
                       : Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: Colors.white),
-                        const SizedBox(height: 16),
-                        Text(
-                          localizations?.loading ?? 'Loading...',
-                          style: const TextStyle(color: Colors.white),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(
+                                  color: Colors.white),
+                              const SizedBox(height: 16),
+                              Text(
+                                localizations?.loading ?? 'Loading...',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
                 ),
                 _buildBottomPanel(localizations),
               ],
@@ -465,7 +498,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
             if (_isProcessing)
               Container(
                 color: Colors.black.withOpacity(0.5),
-                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+                child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white)),
               ),
           ],
         ),
@@ -482,10 +516,14 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
         onPressed: widget.onCancel,
         tooltip: localizations?.cancel ?? 'Cancel',
       ),
-      title: Text(localizations?.text ?? 'Text', style: const TextStyle(color: Colors.white)),
+      title: Text(localizations?.text ?? 'Text',
+          style: const TextStyle(color: Colors.white)),
       actions: [
         IconButton(
-          icon: Icon(Icons.undo, color: _historyIndex > 0 && _isInitialized ? Colors.white : Colors.grey),
+          icon: Icon(Icons.undo,
+              color: _historyIndex > 0 && _isInitialized
+                  ? Colors.white
+                  : Colors.grey),
           onPressed: _historyIndex > 0 && _isInitialized ? _undo : null,
           tooltip: localizations?.undo ?? 'Undo',
         ),
@@ -505,10 +543,15 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       top: textItem.position.dy,
       child: GestureDetector(
         onPanUpdate: (details) {
-          setState(() {
-            textItem.position += details.delta;
-            debugPrint('Text moved to: ${textItem.position}');
-          });
+          final newPosition = textItem.position + details.delta;
+          final textSize = Size(
+              200 * textItem.scale, textItem.fontSize * 2 * textItem.scale);
+
+          if (_isWithinImageBounds(newPosition, textSize)) {
+            setState(() {
+              textItem.position = newPosition;
+            });
+          }
         },
         onTap: () {
           setState(() {
@@ -539,15 +582,17 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: textItem.backgroundColor,
-                    border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+                    border: isSelected
+                        ? Border.all(color: Colors.blue, width: 2)
+                        : null,
                     boxShadow: textItem.hasShadow
                         ? [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 4,
-                        offset: const Offset(2, 2),
-                      ),
-                    ]
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 4,
+                              offset: const Offset(2, 2),
+                            ),
+                          ]
                         : [],
                   ),
                   child: SizedBox(
@@ -588,7 +633,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
       context: context,
       builder: (context) => AlertDialog(
         title: Text(localizations?.confirmDelete ?? 'Delete Text'),
-        content: Text(localizations?.confirmDeleteMessage ?? 'Are you sure you want to delete this text?'),
+        content: Text(localizations?.confirmDeleteMessage ??
+            'Are you sure you want to delete this text?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -596,7 +642,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(localizations?.delete ?? 'Delete', style: const TextStyle(color: Colors.red)),
+            child: Text(localizations?.delete ?? 'Delete',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -643,11 +690,13 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
             labelColor: Colors.white,
             unselectedLabelColor: Colors.grey,
             indicatorColor: Colors.blue,
-            labelStyle: TextStyle(fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14)),
+            labelStyle: TextStyle(
+                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 14)),
           ),
           Container(
             constraints: BoxConstraints(
-              maxHeight: ResponsiveUtils.getResponsiveHeight(context, ResponsiveUtils.isDesktop(context) ? 0.45 : 0.35),
+              maxHeight: ResponsiveUtils.getResponsiveHeight(
+                  context, ResponsiveUtils.isDesktop(context) ? 0.45 : 0.35),
             ),
             child: TabBarView(
               controller: _tabController,
@@ -778,7 +827,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
                     activeColor: Colors.blue,
                     inactiveColor: Colors.grey[700],
                     label: _currentFontSize.round().toString(),
-                    onChanged: (value) => _updateTextProperties(fontSize: value),
+                    onChanged: (value) =>
+                        _updateTextProperties(fontSize: value),
                   ),
                 ),
               ],
@@ -831,45 +881,62 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
                 IconButton(
                   icon: Icon(
                     Icons.format_bold,
-                    color: _currentFontWeight == FontWeight.bold ? Colors.blue : Colors.white,
+                    color: _currentFontWeight == FontWeight.bold
+                        ? Colors.blue
+                        : Colors.white,
                   ),
                   onPressed: () => _updateTextProperties(
-                    fontWeight: _currentFontWeight == FontWeight.bold ? FontWeight.normal : FontWeight.bold,
+                    fontWeight: _currentFontWeight == FontWeight.bold
+                        ? FontWeight.normal
+                        : FontWeight.bold,
                   ),
                   tooltip: localizations?.bold ?? 'Bold',
                 ),
                 IconButton(
                   icon: Icon(
                     Icons.format_italic,
-                    color: _currentFontStyle == FontStyle.italic ? Colors.blue : Colors.white,
+                    color: _currentFontStyle == FontStyle.italic
+                        ? Colors.blue
+                        : Colors.white,
                   ),
                   onPressed: () => _updateTextProperties(
-                    fontStyle: _currentFontStyle == FontStyle.italic ? FontStyle.normal : FontStyle.italic,
+                    fontStyle: _currentFontStyle == FontStyle.italic
+                        ? FontStyle.normal
+                        : FontStyle.italic,
                   ),
                   tooltip: localizations?.italic ?? 'Italic',
                 ),
                 IconButton(
                   icon: Icon(
                     Icons.format_align_left,
-                    color: _currentAlignment == TextAlign.left ? Colors.blue : Colors.white,
+                    color: _currentAlignment == TextAlign.left
+                        ? Colors.blue
+                        : Colors.white,
                   ),
-                  onPressed: () => _updateTextProperties(alignment: TextAlign.left),
+                  onPressed: () =>
+                      _updateTextProperties(alignment: TextAlign.left),
                   tooltip: localizations?.alignLeft ?? 'Align Left',
                 ),
                 IconButton(
                   icon: Icon(
                     Icons.format_align_center,
-                    color: _currentAlignment == TextAlign.center ? Colors.blue : Colors.white,
+                    color: _currentAlignment == TextAlign.center
+                        ? Colors.blue
+                        : Colors.white,
                   ),
-                  onPressed: () => _updateTextProperties(alignment: TextAlign.center),
+                  onPressed: () =>
+                      _updateTextProperties(alignment: TextAlign.center),
                   tooltip: localizations?.alignCenter ?? 'Align Center',
                 ),
                 IconButton(
                   icon: Icon(
                     Icons.format_align_right,
-                    color: _currentAlignment == TextAlign.right ? Colors.blue : Colors.white,
+                    color: _currentAlignment == TextAlign.right
+                        ? Colors.blue
+                        : Colors.white,
                   ),
-                  onPressed: () => _updateTextProperties(alignment: TextAlign.right),
+                  onPressed: () =>
+                      _updateTextProperties(alignment: TextAlign.right),
                   tooltip: localizations?.alignRight ?? 'Align Right',
                 ),
               ],
@@ -906,7 +973,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
                       ),
                     );
                     if (color != null && mounted) {
-                      setState(() => _updateTextProperties(backgroundColor: color));
+                      setState(
+                          () => _updateTextProperties(backgroundColor: color));
                       debugPrint('Background color changed to: $color');
                     }
                   },
@@ -924,7 +992,8 @@ class _TextEditorPanelState extends State<TextEditorPanel> with SingleTickerProv
                 Checkbox(
                   value: _hasShadow,
                   activeColor: Colors.blue,
-                  onChanged: (value) => _updateTextProperties(hasShadow: value ?? false),
+                  onChanged: (value) =>
+                      _updateTextProperties(hasShadow: value ?? false),
                 ),
                 Text(
                   localizations?.shadow ?? 'Shadow',

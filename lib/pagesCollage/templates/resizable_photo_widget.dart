@@ -63,7 +63,7 @@ class _ResizablePhotoWidgetState extends State<ResizablePhotoWidget> {
         _startFocalPoint = details.focalPoint;
       },
       onScaleUpdate: (details) {
-        if (widget.bounds.width < 1.0 || widget.bounds.height < 1.0) return; // Skip if bounds are invalid
+        if (widget.bounds.width < 1.0 || widget.bounds.height < 1.0) return; // Пропустить, если границы недействительны
         setState(() {
           _scale = (_previousScale * details.scale).clamp(0.5, 2.0);
           widget.onScaleChanged(_scale);

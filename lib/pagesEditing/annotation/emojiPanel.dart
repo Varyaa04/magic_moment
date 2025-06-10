@@ -12,7 +12,8 @@ import 'package:MagicMoment/database/objectsModels.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import '../../database/editHistory.dart';
 import 'ResponsiveUtils.dart';
-import 'package:universal_html/html.dart' as html if (dart.library.io) 'dart:io';
+import 'package:universal_html/html.dart' as html
+    if (dart.library.io) 'dart:io';
 
 class EmojiPanel extends StatefulWidget {
   final Uint8List image;
@@ -144,6 +145,8 @@ class _EmojiPanelState extends State<EmojiPanel> {
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+    canvas.drawColor(Colors.transparent, BlendMode.clear);
+    canvas.drawColor(Colors.transparent, BlendMode.clear);
     canvas.drawImageRect(
       image,
       Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
@@ -176,37 +179,12 @@ class _EmojiPanelState extends State<EmojiPanel> {
         isAsset: sticker.isAsset,
       );
 
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'stickers',
-        operationParameters: {
-          'sticker_path': newSticker.path,
-          'category': _selectedCategory,
-        },
-        operationDate: DateTime.now(),
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-
-      final objectDao = dao.ObjectDao();
-      final stickerId = await objectDao.insertSticker(Sticker(
-        imageId: widget.imageId,
-        path: newSticker.path,
-        positionX: newSticker.position.dx,
-        positionY: newSticker.position.dy,
-        scale: newSticker.size,
-        rotation: 0.0,
-        historyId: historyId,
-        isAsset: newSticker.isAsset,
-      ));
-
       if (!mounted) return;
 
       setState(() {
-        newSticker.id = stickerId;
         _addedStickers.add(newSticker);
         _selectedSticker = newSticker;
-        debugPrint('Sticker added: ${newSticker.path}, ID: $stickerId');
+        debugPrint('Sticker added to memory: ${newSticker.path}');
       });
     } catch (e, stackTrace) {
       _handleError('Failed to add sticker: $e\n$stackTrace');
@@ -239,44 +217,14 @@ class _EmojiPanelState extends State<EmojiPanel> {
         isAsset: false,
       );
 
-      final history = EditHistory(
-        historyId: null,
-        imageId: widget.imageId,
-        operationType: 'stickers',
-        operationParameters: {
-          'sticker_path': sticker.path,
-          'category': 'Custom',
-        },
-        operationDate: DateTime.now(),
-        snapshotPath: kIsWeb
-            ? null
-            : '${Directory.systemTemp.path}/sticker_${DateTime.now().millisecondsSinceEpoch}.png',
-        snapshotBytes: kIsWeb ? bytes : null,
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-
-      final objectDao = dao.ObjectDao();
-      final stickerId = await objectDao.insertSticker(Sticker(
-        imageId: widget.imageId,
-        path: sticker.path,
-        positionX: sticker.position.dx,
-        positionY: sticker.position.dy,
-        scale: sticker.size,
-        rotation: 0.0,
-        historyId: historyId,
-        isAsset: sticker.isAsset,
-      ));
-
       if (!mounted) return;
 
       setState(() {
-        sticker.id = stickerId;
         _stickerCategories['Custom']!.add(sticker);
         _addedStickers.add(sticker);
         _selectedSticker = sticker;
         _selectedCategory = 'Custom';
-        debugPrint('Custom sticker added: ${sticker.path}, ID: $stickerId');
+        debugPrint('Custom sticker added to memory: ${sticker.path}');
       });
     } catch (e, stackTrace) {
       debugPrint('Error picking image: $e\n$stackTrace');
@@ -292,37 +240,46 @@ class _EmojiPanelState extends State<EmojiPanel> {
     }
   }
 
-Future<void> _applyChanges() async {
-if (_isProcessing || !_isInitialized) return;
-setState(() {
-_isProcessing = true;
-_selectedSticker = null;
-});
+  Future<void> _applyChanges() async {
+    if (_isProcessing || !_isInitialized || !mounted) return;
+    setState(() {
+      _isProcessing = true;
+      _selectedSticker = null;
+    });
 
-try {
-await Future.delayed(const Duration(milliseconds: 16));
-final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-if (boundary == null) {
-throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
-}
-final image = await boundary.toImage(pixelRatio: 3.0);
-final recorder = ui.PictureRecorder();
-final canvas = Canvas(recorder);
-canvas.drawColor(Colors.transparent, BlendMode.clear); // Очистка с прозрачным фоном
-canvas.drawImage(image, Offset.zero, Paint());
-final finalImage = await recorder.endRecording().toImage(image.width, image.height);
-final byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
-image.dispose();
-finalImage.dispose();
-if (byteData == null) {
-throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
-}
-final pngBytes = byteData.buffer.asUint8List();
-if (pngBytes.isEmpty) {
-throw Exception('Empty image bytes after cropping');
-}
+    try {
+      await Future.delayed(const Duration(milliseconds: 16));
+      final boundary = _imageKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) {
+        throw Exception(
+            AppLocalizations.of(context)?.error ?? 'Rendering error');
+      }
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawColor(Colors.transparent, BlendMode.clear);
+      canvas.drawColor(
+          Colors.transparent, BlendMode.clear); // Ensure transparency
+      canvas.drawImage(image, Offset.zero, Paint());
+      final finalImage =
+          await recorder.endRecording().toImage(image.width, image.height);
+      final byteData =
+          await finalImage.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      finalImage.dispose();
+      if (byteData == null) {
+        throw Exception(
+            AppLocalizations.of(context)?.error ?? 'Image conversion error');
+      }
+      final pngBytes = byteData.buffer.asUint8List();
+      if (pngBytes.isEmpty) {
+        throw Exception('Empty image bytes after rendering');
+      }
 
+      final db = MagicMomentDatabase.instance;
       final history = EditHistory(
+        historyId: null,
         imageId: widget.imageId,
         operationType: 'stickers',
         operationParameters: {
@@ -332,8 +289,21 @@ throw Exception('Empty image bytes after cropping');
         operationDate: DateTime.now(),
         snapshotBytes: kIsWeb ? pngBytes : null,
       );
-      final db = MagicMomentDatabase.instance;
       final historyId = await db.insertHistory(history);
+
+      final objectDao = dao.ObjectDao();
+      for (final sticker in _addedStickers) {
+        sticker.id = await objectDao.insertSticker(Sticker(
+          imageId: widget.imageId,
+          path: sticker.path,
+          positionX: sticker.position.dx,
+          positionY: sticker.position.dy,
+          scale: sticker.size,
+          rotation: 0.0,
+          historyId: historyId,
+          isAsset: sticker.isAsset,
+        ));
+      }
 
       if (!mounted) return;
 
@@ -351,7 +321,6 @@ throw Exception('Empty image bytes after cropping');
           },
         });
         _historyIndex++;
-        _selectedSticker = null; // Deselect sticker but keep panel open
       });
 
       await _updateImage(
@@ -365,11 +334,17 @@ throw Exception('Empty image bytes after cropping');
       );
 
       widget.onApply(pngBytes);
+
+      if (mounted) {
+        debugPrint('Navigating back from EmojiPanel after applying stickers');
+        widget.onCancel();
+      }
     } catch (e, stackTrace) {
       _handleError('Error applying stickers: $e\n$stackTrace');
     } finally {
-      setState(() => _isProcessing = false);
-      // Remove widget.onCancel() to allow re-editing
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -444,6 +419,7 @@ throw Exception('Empty image bytes after cropping');
           'previous_action': _history[_historyIndex + 1]['action'],
         },
       );
+      await _loadStickersFromDb(); // Reload stickers from DB after undo
       debugPrint('Undo performed, history index: $_historyIndex');
     } catch (e, stackTrace) {
       _handleError('Failed to undo: $e\n$stackTrace');
@@ -557,10 +533,14 @@ throw Exception('Empty image bytes after cropping');
       top: sticker.position.dy,
       child: GestureDetector(
         onPanUpdate: (details) {
-          setState(() {
-            sticker.position += details.delta;
-            debugPrint('Sticker moved to: ${sticker.position}');
-          });
+          final newPosition = sticker.position + details.delta;
+          final stickerSize = Size(sticker.size, sticker.size);
+
+          if (_isWithinImageBounds(newPosition, stickerSize)) {
+            setState(() {
+              sticker.position = newPosition;
+            });
+          }
         },
         onTap: () {
           setState(() {
@@ -744,7 +724,8 @@ throw Exception('Empty image bytes after cropping');
     final stickers = _stickerCategories[_selectedCategory]!;
     return Container(
       height: ResponsiveUtils.getResponsiveHeight(context, 0.18),
-      constraints: BoxConstraints(maxHeight: ResponsiveUtils.isDesktop(context) ? 180 : 150),
+      constraints: BoxConstraints(
+          maxHeight: ResponsiveUtils.isDesktop(context) ? 180 : 150),
       color: Colors.black.withOpacity(0.5),
       padding: ResponsiveUtils.getResponsivePadding(context),
       child: GridView.builder(
@@ -775,7 +756,8 @@ throw Exception('Empty image bytes after cropping');
               ),
             );
           }
-          final adjustedIndex = _selectedCategory == 'Custom' ? index - 1 : index;
+          final adjustedIndex =
+              _selectedCategory == 'Custom' ? index - 1 : index;
           final sticker = stickers[adjustedIndex];
           return GestureDetector(
             onTap: () => _addSticker(sticker),
@@ -786,26 +768,45 @@ throw Exception('Empty image bytes after cropping');
               ),
               child: sticker.isAsset
                   ? Image.asset(
-                sticker.path,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  debugPrint('Error loading asset sticker in grid: ${sticker.path}, $error');
-                  return const Icon(Icons.error, color: Colors.red, size: 30);
-                },
-              )
+                      sticker.path,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint(
+                            'Error loading asset sticker in grid: ${sticker.path}, $error');
+                        return const Icon(Icons.error,
+                            color: Colors.red, size: 30);
+                      },
+                    )
                   : Image.memory(
-                sticker.bytes!,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  debugPrint('Error loading gallery sticker in grid: ${sticker.path}, $error');
-                  return const Icon(Icons.error, color: Colors.red, size: 30);
-                },
-              ),
+                      sticker.bytes!,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint(
+                            'Error loading gallery sticker in grid: ${sticker.path}, $error');
+                        return const Icon(Icons.error,
+                            color: Colors.red, size: 30);
+                      },
+                    ),
             ),
           );
         },
       ),
     );
+  }
+
+  bool _isWithinImageBounds(Offset position, Size stickerSize) {
+    final RenderBox? renderBox =
+        _imageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+
+    final imageSize = renderBox.size;
+    final halfStickerWidth = stickerSize.width / 2;
+    final halfStickerHeight = stickerSize.height / 2;
+
+    return position.dx >= halfStickerWidth &&
+        position.dx <= imageSize.width - halfStickerWidth &&
+        position.dy >= halfStickerHeight &&
+        position.dy <= imageSize.height - halfStickerHeight;
   }
 }
 

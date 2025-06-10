@@ -216,10 +216,8 @@ class _RotatePanelState extends State<RotatePanel> {
     final flipVertical = params['flipVertical'] as bool;
 
     try {
-      // Decode image using the image package
       final image = img.decodeImage(imageBytes)!;
 
-      // Apply transformations
       img.Image transformed = image;
 
       if (flipHorizontal) {
@@ -230,14 +228,14 @@ class _RotatePanelState extends State<RotatePanel> {
         transformed = img.flipVertical(transformed);
       }
 
-      // Apply rotation (convert to radians)
+      // Применить вращение (преобразовать в радианы)
       transformed = img.copyRotate(
         transformed,
         angle: rotation,
       );
 
-      // Encode back to PNG
-      return img.encodePng(transformed);
+// Кодируем обратно в PNG
+    return img.encodePng(transformed);
     } catch (e) {
       debugPrint('Error in _rotateImageIsolate: $e');
       return Uint8List(0);

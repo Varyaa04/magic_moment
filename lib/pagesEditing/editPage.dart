@@ -158,7 +158,7 @@ class _EditPageState extends State<EditPage> {
         imageId: widget.imageId,
       );
 
-      await Future.wait([_initializeImage()]);
+      await Future.wait([_initializeImage(), _loadHistory()]);
     } catch (e, stackTrace) {
       debugPrint('Ошибка инициализации: $e\nСтек: $stackTrace');
       if (mounted) {
@@ -169,6 +169,29 @@ class _EditPageState extends State<EditPage> {
           ),
         );
         Navigator.of(context).pop();
+      }
+    }
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      debugPrint('Loading history in EditPage for imageId: ${widget.imageId}');
+      await _historyManager.loadHistory();
+      _cachedHistory =
+          await _historyManager.db.getAllHistoryForImage(widget.imageId);
+      _currentHistoryIndex = _historyManager.currentIndex;
+      _updateUndoRedoState();
+      setState(() {});
+      debugPrint('EditPage: Loaded ${_cachedHistory.length} history entries');
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка загрузки истории: $e\nСтек: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка загрузки истории: $e'),
+            backgroundColor: Colors.red[700],
+          ),
+        );
       }
     }
   }
@@ -282,7 +305,16 @@ class _EditPageState extends State<EditPage> {
       final bool preserveTransparency = operationType == 'Eraser' ||
           operationType == 'object_removal' ||
           operationType == 'collage' ||
-          operationType == 'remove_bg';
+          operationType == 'remove_bg' ||
+          operationType == 'Text' ||
+          operationType == 'Emoji' ||
+          operationType == 'Crop' ||
+          operationType == 'Effects' ||
+          operationType == 'Draw' ||
+          operationType == 'Filter' ||
+          operationType == 'Rotate' ||
+          operationType == 'Adjustments' ;
+
       final bytes = await _compressImage(newImage,
           quality: 70,
           maxWidth: 800,
@@ -300,15 +332,18 @@ class _EditPageState extends State<EditPage> {
 
       _imageSize.value = await _decodeImageSize(bytes);
 
-      await _addHistoryState(action ?? 'Обновление');
       if (parameters != null && operationType != null) {
         final serializableParameters = _sanitizeParameters(parameters);
-        await _historyManager.addOperation(
+        final historyEntry = await _historyManager.addOperation(
           context: context,
           operationType: operationType,
           parameters: serializableParameters,
           snapshotBytes: bytes,
         );
+        _cachedHistory.add(historyEntry);
+        if (_cachedHistory.length > _maxHistorySteps) {
+          _cachedHistory.removeAt(0);
+        }
       }
       debugPrint(
           'Изображение обновлено: $operationType, размер: ${bytes.length} байт');
@@ -366,7 +401,7 @@ class _EditPageState extends State<EditPage> {
       final resized =
           img.copyResize(decoded, width: maxWidth, maintainAspect: true);
       final compressed = preserveTransparency
-          ? img.encodePng(resized, level: 6) // Всегда PNG для прозрачности
+          ? img.encodePng(resized, level: 6)
           : img.encodeJpg(resized, quality: quality);
       debugPrint(
           'Сжатое изображение: оригинал=${imageBytes.length}, сжатое=${compressed.length}');
@@ -436,6 +471,8 @@ class _EditPageState extends State<EditPage> {
       _imageLoaded = true;
       _imageSize.value = await _decodeImageSize(bytes);
       _currentHistoryIndex = _historyManager.currentIndex;
+      _cachedHistory =
+          await _historyManager.db.getAllHistoryForImage(widget.imageId);
       _updateUndoRedoState();
     } catch (e, stackTrace) {
       debugPrint('Ошибка отмены: $e\nСтек: $stackTrace');
@@ -448,7 +485,9 @@ class _EditPageState extends State<EditPage> {
         );
       }
     } finally {
-      setState(() => _isProcessing.value = false);
+      if (mounted) {
+        setState(() => _isProcessing.value = false);
+      }
     }
   }
 
@@ -475,6 +514,8 @@ class _EditPageState extends State<EditPage> {
       _imageLoaded = true;
       _imageSize.value = await _decodeImageSize(bytes);
       _currentHistoryIndex = _historyManager.currentIndex;
+      _cachedHistory =
+          await _historyManager.db.getAllHistoryForImage(widget.imageId);
       _updateUndoRedoState();
     } catch (e, stackTrace) {
       debugPrint('Ошибка повтора: $e\nСтек: $stackTrace');
@@ -487,16 +528,17 @@ class _EditPageState extends State<EditPage> {
         );
       }
     } finally {
-      setState(() => _isProcessing.value = false);
+      if (mounted) {
+        setState(() => _isProcessing.value = false);
+      }
     }
   }
 
   Future<void> _addHistoryState(String description) async {
-    if (!_isHistoryEnabled ||
-        _currentImage.value == null ||
-        _currentImage.value!.isEmpty) {
-      debugPrint(
-          'Ошибка: Невозможно сохранить историю — нет данных изображения');
+    if (!_isHistoryEnabled || _currentImage.value == null) return;
+
+    if (_history.isNotEmpty &&
+        listEquals(_history.last.image, _currentImage.value)) {
       return;
     }
 
@@ -509,16 +551,23 @@ class _EditPageState extends State<EditPage> {
       parameters: {},
       snapshotBytes: snapshotBytes,
     );
+
     _cachedHistory.add(historyEntry);
     _imageCache.put(historyEntry.historyId!, snapshotBytes);
-
     _history.add(EditState(snapshotBytes, description));
+
     if (_history.length > _maxHistorySteps) {
       _history.removeAt(0);
       _cachedHistory.removeAt(0);
     }
+
     _currentHistoryIndex = _historyManager.currentIndex;
     _updateUndoRedoState();
+  }
+
+  bool _isSameAsLast(Uint8List newImage) {
+    if (_history.isEmpty) return false;
+    return listEquals(_history.last.image, newImage);
   }
 
   Uint8List validateImageBytes(Uint8List? bytes, String context) {
@@ -832,6 +881,9 @@ class _EditPageState extends State<EditPage> {
   void _showEditHistory() async {
     final localizations = AppLocalizations.of(context);
 
+// Ensure history is loaded
+    await _loadHistory();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
@@ -840,64 +892,147 @@ class _EditPageState extends State<EditPage> {
       ),
       builder: (context) {
         return SizedBox(
-          height: MediaQuery.of(context).size.height * 0.3,
+          height: MediaQuery.of(context).size.height * 0.4,
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(8.0),
+                padding: const EdgeInsets.all(16.0),
                 child: Text(
                   localizations?.history ?? 'История редактирования',
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               Expanded(
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _cachedHistory.length,
-                  itemBuilder: (context, index) {
-                    final item = _cachedHistory[index];
-                    return GestureDetector(
-                      onTap: () async {
-                        Navigator.pop(context);
-                        final imageBytes = item.snapshotBytes != null
-                            ? Uint8List.fromList(item.snapshotBytes!)
-                            : throw Exception(
-                                'Нет данных снимка для historyId: ${item.historyId}');
-                        debugPrint(
-                            'История: Загрузка снимка для индекса $index, длина байт: ${imageBytes.length}');
-                        await _updateImage(
-                          imageBytes,
-                          action: 'Восстановление из истории',
-                          operationType: 'restore',
-                          parameters: {'historyId': item.historyId},
-                        );
-                        _currentHistoryIndex = index;
-                        _historyManager.setCurrentIndex(index);
-                        _updateUndoRedoState();
-                      },
-                      child: item.snapshotBytes != null
-                          ? Image.memory(
-                              Uint8List.fromList(item.snapshotBytes!),
-                              fit: BoxFit.cover,
-                              width: 80,
-                              height: 80,
-                              errorBuilder: (context, error, stackTrace) {
-                                debugPrint(
-                                    'Ошибка отображения снимка для historyId: ${item.historyId}');
-                                return const Text(
-                                  'Ошибка изображения',
-                                  style: TextStyle(color: Colors.white),
-                                );
+                child: _cachedHistory.isEmpty
+                    ? Center(
+                        child: Text(
+                          localizations?.noHistory ?? 'История пуста',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: ResponsiveUtils.getResponsiveFontSize(
+                                context, 16),
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        itemCount: _cachedHistory.length,
+                        itemBuilder: (context, index) {
+                          final item = _cachedHistory[index];
+                          return Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: GestureDetector(
+                              onTap: () async {
+                                Navigator.pop(context);
+                                try {
+                                  final imageBytes = item.snapshotBytes != null
+                                      ? Uint8List.fromList(item.snapshotBytes!)
+                                      : throw Exception(
+                                          'Нет данных снимка для historyId: ${item.historyId}');
+                                  debugPrint(
+                                      'История: Загрузка снимка для индекса $index, длина байт: ${imageBytes.length}');
+                                  await _updateImage(
+                                    imageBytes,
+                                    action: 'Восстановление из истории',
+                                    operationType: 'restore',
+                                    parameters: {'historyId': item.historyId},
+                                  );
+                                  _currentHistoryIndex = index;
+                                  _historyManager.setCurrentIndex(index);
+                                  _updateUndoRedoState();
+                                } catch (e, stackTrace) {
+                                  debugPrint(
+                                      'Ошибка восстановления из истории: $e\nСтек: $stackTrace');
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '${localizations?.error ?? 'Ошибка'}: $e',
+                                          style: const TextStyle(
+                                              color: Colors.white),
+                                        ),
+                                        backgroundColor: Colors.red[700],
+                                      ),
+                                    );
+                                  }
+                                }
                               },
-                            )
-                          : const Text(
-                              'Нет изображения',
-                              style: TextStyle(color: Colors.white),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: 100,
+                                    height: 100,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: _currentHistoryIndex == index
+                                            ? Colors.blueAccent
+                                            : Colors.grey,
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: item.snapshotBytes != null &&
+                                              item.snapshotBytes!.isNotEmpty
+                                          ? Image.memory(
+                                              Uint8List.fromList(
+                                                  item.snapshotBytes!),
+                                              fit: BoxFit.cover,
+                                              width: 100,
+                                              height: 100,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                debugPrint(
+                                                    'Ошибка отображения снимка для historyId: ${item.historyId}, ошибка: $error');
+                                                return Container(
+                                                  color: Colors.grey[800],
+                                                  child: const Center(
+                                                    child: Icon(
+                                                      Icons.broken_image,
+                                                      color: Colors.white70,
+                                                      size: 40,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            )
+                                          : Container(
+                                              color: Colors.grey[800],
+                                              child: const Center(
+                                                child: Icon(
+                                                  Icons.broken_image,
+                                                  color: Colors.white70,
+                                                  size: 40,
+                                                ),
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    item.operationType ?? 'Изменение $index',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize:
+                                          ResponsiveUtils.getResponsiveFontSize(
+                                              context, 12),
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
                             ),
-                    );
-                  },
-                ),
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -936,6 +1071,32 @@ class _EditPageState extends State<EditPage> {
                           ),
                           Row(
                             children: [
+                              ValueListenableBuilder(
+                                valueListenable: _isUndoAvailable,
+                                builder: (context, isUndoAvailable, _) {
+                                  return IconButton(
+                                    icon: Icon(Icons.undo, size: iconSize),
+                                    color: isUndoAvailable
+                                        ? Colors.white
+                                        : Colors.grey,
+                                    onPressed: isUndoAvailable ? _undo : null,
+                                    tooltip: localizations?.undo ?? 'Отменить',
+                                  );
+                                },
+                              ),
+                              ValueListenableBuilder(
+                                valueListenable: _isRedoAvailable,
+                                builder: (context, isRedoAvailable, _) {
+                                  return IconButton(
+                                    icon: Icon(Icons.redo, size: iconSize),
+                                    color: isRedoAvailable
+                                        ? Colors.white
+                                        : Colors.grey,
+                                    onPressed: isRedoAvailable ? _redo : null,
+                                    tooltip: localizations?.redo ?? 'Повторить',
+                                  );
+                                },
+                              ),
                               IconButton(
                                 icon: Icon(Icons.history, size: iconSize),
                                 color: Colors.white,
@@ -1268,4 +1429,3 @@ class _EditPageState extends State<EditPage> {
     }
   }
 }
-

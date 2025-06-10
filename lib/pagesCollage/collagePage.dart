@@ -27,7 +27,7 @@ class _CollageEditorPageState extends State<CollageEditorPage>
   final ValueNotifier<double> _borderRadius = ValueNotifier(16.0);
   final ValueNotifier<double> _borderWidth = ValueNotifier(2.0);
   final ValueNotifier<bool> _showBorder =
-      ValueNotifier(true); // Added border toggle
+      ValueNotifier(true);
   final ValueNotifier<Color> _borderColor = ValueNotifier(Colors.white);
   final GlobalKey _collageKey = GlobalKey();
   final ValueNotifier<int> _selectedTemplateIndex = ValueNotifier(0);
@@ -44,8 +44,8 @@ class _CollageEditorPageState extends State<CollageEditorPage>
   void initState() {
     super.initState();
     _mutableImages = List.from(widget.images);
-// Check if more than 6 images are provided and show warning
-    if (_mutableImages.length > 6) {
+// Проверяем, предоставлено ли более 6 изображений, и показываем предупреждение
+if (_mutableImages.length > 6) {
       _mutableImages = _mutableImages.take(6).toList();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showImageLimitWarning();
@@ -111,7 +111,7 @@ class _CollageEditorPageState extends State<CollageEditorPage>
     _backgroundImage.dispose();
     _borderRadius.dispose();
     _borderWidth.dispose();
-    _showBorder.dispose(); // Dispose new notifier
+    _showBorder.dispose();
     _borderColor.dispose();
     _selectedTemplateIndex.dispose();
     _currentTabIndex.dispose();
@@ -992,7 +992,7 @@ class _CollageEditorPageState extends State<CollageEditorPage>
                             return Slider(
                               min: 0.0,
                               max: 8.0,
-                              divisions: 80, // Finer granularity
+                              divisions: 80,
                               value: width,
                               activeColor: Colors.blueAccent,
                               inactiveColor: Colors.grey[600],

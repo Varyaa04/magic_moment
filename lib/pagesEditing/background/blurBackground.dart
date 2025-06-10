@@ -139,7 +139,6 @@ class _BlurBackgroundState extends BaseBackgroundEditorState<BlurBackgroundPage>
         if (responseBody.bodyBytes.isEmpty) {
           throw Exception('Empty mask response from ClipDrop API');
         }
-        // Debug: Save mask to file for inspection
         if (!kIsWeb) {
           final tempDir = await Directory.systemTemp.createTemp();
           final maskPath = '${tempDir.path}/mask_${DateTime.now().millisecondsSinceEpoch}.png';
@@ -175,47 +174,24 @@ class _BlurBackgroundState extends BaseBackgroundEditorState<BlurBackgroundPage>
       throw Exception('Failed to decode images in isolate');
     }
 
-    // Ensure mask matches original image dimensions
+    // Убедится, что маска соответствует размерам исходного изображения
     img.Image resizedMask = mask;
     if (original.width != mask.width || original.height != mask.height) {
       debugPrint('Resizing mask to match original dimensions: ${original.width}x${original.height}');
       resizedMask = img.copyResize(mask, width: original.width, height: original.height);
     }
 
-    // Preprocess mask to ensure binary separation (threshold at 128)
-    final thresholdedMask = img.Image.from(resizedMask);
-    int foregroundCount = 0;
-    int backgroundCount = 0;
-    for (int y = 0; y < thresholdedMask.height; y++) {
-      for (int x = 0; x < thresholdedMask.width; x++) {
-        final pixel = thresholdedMask.getPixelSafe(x, y);
-        final alpha = pixel.a;
-        // Assume ClipDrop mask has foreground as white (high alpha) and background as black (low alpha)
-        // Threshold to create a binary mask
-        if (alpha >= 128) {
-          thresholdedMask.setPixel(x, y, img.ColorRgb8(255, 255, 255));
-          foregroundCount++;
-        } else {
-          thresholdedMask.setPixel(x, y, img.ColorRgb8(0, 0, 0));
-          backgroundCount++;
-        }
-      }
-    }
-    debugPrint('Mask analysis: foreground pixels=$foregroundCount, background pixels=$backgroundCount');
+    // Создать размытый фон
+    final blurredBackground = img.gaussianBlur(original, radius: blurValue.round());
 
-    // Create blurred image
-    final blurredImage = img.gaussianBlur(original, radius: blurValue.round());
-    final resultImage = img.Image(width: original.width, height: original.height);
+    final resultImage = img.Image.from(blurredBackground);
 
-    // Apply blur only to background (alpha == 0 in thresholded mask)
     for (int y = 0; y < original.height; y++) {
       for (int x = 0; x < original.width; x++) {
-        final maskPixel = thresholdedMask.getPixelSafe(x, y);
+        final maskPixel = resizedMask.getPixelSafe(x, y);
         final alpha = maskPixel.a;
-        if (alpha >= 128) { // Foreground (white in mask)
+        if (alpha > 128) {
           resultImage.setPixel(x, y, original.getPixel(x, y));
-        } else { // Background (black in mask)
-          resultImage.setPixel(x, y, blurredImage.getPixel(x, y));
         }
       }
     }
@@ -226,13 +202,9 @@ class _BlurBackgroundState extends BaseBackgroundEditorState<BlurBackgroundPage>
   Widget _buildBottomPanel(ThemeData theme, AppLocalizations? localizations) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
     return Container(
-      constraints: BoxConstraints(
-        minHeight: isDesktop ? 100 : 80,
-        maxHeight: isDesktop ? 100 : 80,
-      ),
       padding: EdgeInsets.symmetric(
         vertical: isDesktop ? 8 : 4,
-        horizontal: isDesktop ? 20 : 12,
+        horizontal: isDesktop ? 16 : 10,
       ),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
@@ -326,7 +298,7 @@ class _BlurBackgroundState extends BaseBackgroundEditorState<BlurBackgroundPage>
         throw Exception('Failed to decode mask image');
       }
 
-      // Ensure mask matches original image dimensions
+      // Убедится, что маска соответствует размерам исходного изображения.
       img.Image resizedMask = maskImage;
       if (originalImage.width != maskImage.width || originalImage.height != maskImage.height) {
         debugPrint('Mask dimensions (${maskImage.width}x${maskImage.height}) do not match original (${originalImage.width}x${originalImage.height}), resizing mask...');
@@ -651,7 +623,7 @@ class SliderRow extends StatelessWidget {
           title,
           style: TextStyle(
             color: Colors.white,
-            fontSize: isDesktop ? 14 : 12, // Reduced font size
+            fontSize: isDesktop ? 14 : 12,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -674,7 +646,7 @@ class SliderRow extends StatelessWidget {
             value.round().toString(),
             style: TextStyle(
               color: Colors.white,
-              fontSize: isDesktop ? 14 : 12, // Reduced font size
+              fontSize: isDesktop ? 14 : 12,
             ),
           ),
         ),

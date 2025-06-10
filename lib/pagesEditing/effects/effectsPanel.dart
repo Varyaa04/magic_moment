@@ -137,7 +137,7 @@ class _EffectsPanelState extends State<EffectsPanel> {
   }
 
   Future<Uint8List> _generateEffectPreview(Effect effect) async {
-    await _initCompleter.future; // Wait for initialization
+    await _initCompleter.future;
     if (!_isInitialized || _decodedImage == null) {
       debugPrint('Cannot generate preview for ${effect.name}: image not decoded or not initialized');
       return Uint8List(0);

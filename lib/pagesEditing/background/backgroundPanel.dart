@@ -147,7 +147,6 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
-              // Удаляем вызовы onUpdateImage и onApply, так как они уже выполнены в RemoveBackgroundPage
               debugPrint('Returning to EditPage with result');
             },
           ),
@@ -186,7 +185,6 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
-              // Удаляем вызовы onUpdateImage и onApply
               debugPrint('Returning to EditPage with result');
             },
           ),
@@ -225,7 +223,6 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
-              // Удаляем вызовы onUpdateImage и onApply
               debugPrint('Returning to EditPage with result');
             },
           ),

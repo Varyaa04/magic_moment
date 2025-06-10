@@ -42,21 +42,21 @@ class ThreePhotosCollage extends BaseCollage {
 
     List<Rect> getBounds(int layoutIndex) {
       switch (layoutIndex) {
-        case 0: // Vertical split
+        case 0: // Вертикальное разделение
           return [
             Rect.fromLTWH(0, 0, thirdWidth, height),
             Rect.fromLTWH(thirdWidth + borderWidth, 0, thirdWidth, height),
             Rect.fromLTWH(
                 2 * thirdWidth + 2 * borderWidth, 0, thirdWidth, height),
           ];
-        case 1: // Horizontal split
+        case 1: // Горизонтальное разделение
           return [
             Rect.fromLTWH(0, 0, width, thirdHeight),
             Rect.fromLTWH(0, thirdHeight + borderWidth, width, thirdHeight),
             Rect.fromLTWH(
                 0, 2 * thirdHeight + 2 * borderWidth, width, thirdHeight),
           ];
-        case 2: // 2:1 vertical
+        case 2: // 2:1 по вертикали
           return [
             Rect.fromLTWH(0, 0, 2 * thirdWidth + borderWidth, height),
             Rect.fromLTWH(
@@ -64,7 +64,7 @@ class ThreePhotosCollage extends BaseCollage {
             Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth,
                 halfHeight + borderWidth, thirdWidth, halfHeight),
           ];
-        case 3: // 2:1 horizontal
+        case 3: // 1:1 по горизонтали
           return [
             Rect.fromLTWH(0, 0, width, 2 * thirdHeight + borderWidth),
             Rect.fromLTWH(
@@ -72,13 +72,13 @@ class ThreePhotosCollage extends BaseCollage {
             Rect.fromLTWH(halfWidth + borderWidth,
                 2 * thirdHeight + 2 * borderWidth, halfWidth, thirdHeight),
           ];
-        case 4: // Grid
+        case 4: // Сетка
           return [
             Rect.fromLTWH(0, 0, halfWidth, halfHeight),
             Rect.fromLTWH(halfWidth + borderWidth, 0, halfWidth, halfHeight),
             Rect.fromLTWH(0, halfHeight + borderWidth, width, halfHeight),
           ];
-        case 5: // Large top, two small bottom
+        case 5: // Большой верхний, два маленьких нижних
           return [
             Rect.fromLTWH(0, 0, width, 2 * thirdHeight + borderWidth),
             Rect.fromLTWH(
@@ -86,7 +86,7 @@ class ThreePhotosCollage extends BaseCollage {
             Rect.fromLTWH(halfWidth + borderWidth,
                 2 * thirdHeight + 2 * borderWidth, halfWidth, thirdHeight),
           ];
-        case 6: // Large left, two small right
+        case 6: // Большой слева, два маленьких справа
           return [
             Rect.fromLTWH(0, 0, 2 * thirdWidth + borderWidth, height),
             Rect.fromLTWH(
@@ -94,21 +94,21 @@ class ThreePhotosCollage extends BaseCollage {
             Rect.fromLTWH(2 * thirdWidth + 2 * borderWidth,
                 halfHeight + borderWidth, thirdWidth, halfHeight),
           ];
-        case 7: // Small overlay
+        case 7: // Маленькое наложение
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(width / 4, height / 4, width / 2, halfHeight),
             Rect.fromLTWH(width / 4, height / 4 + halfHeight + borderWidth,
                 width / 2, halfHeight / 2),
           ];
-        case 8: // Corner overlay
+        case 8: // Угловое наложение
           return [
             Rect.fromLTWH(0, 0, width, height),
             Rect.fromLTWH(borderWidth, borderWidth, thirdWidth, thirdHeight),
             Rect.fromLTWH(width - thirdWidth - borderWidth,
                 height - thirdHeight - borderWidth, thirdWidth, thirdHeight),
           ];
-        case 9: // Diagonal split
+        case 9: // Диагональное разделение
           return [
             Rect.fromLTWH(0, 0, halfWidth, halfHeight),
             Rect.fromLTWH(halfWidth + borderWidth, halfHeight + borderWidth,

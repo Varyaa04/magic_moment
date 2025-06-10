@@ -351,9 +351,7 @@ class _CropPanelState extends State<CropPanel> {
       'quality': 0.5, // Низкое качество для предпросмотра
     });
 
-// Показать предпросмотр
 
-// Затем полная обработка в фоне
     final fullResult = await compute(_cropImageIsolate, {
       'imageBytes': widget.image,
       'cropRect': {

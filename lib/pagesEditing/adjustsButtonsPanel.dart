@@ -292,15 +292,15 @@ class _AdjustPanelState extends State<AdjustPanel> {
       _exposure = 0.0;
       _noise = 0.0;
       _smooth = 0.0;
-      _currentImage = _originalImage.clone(); // Ensure a fresh copy
-      _previewImageBytes = widget.image; // Revert to original image bytes
-      _adjustmentCache.clear(); // Clear cache to avoid stale images
+      _currentImage = _originalImage.clone(); // Обеспечить свежую копию
+      _previewImageBytes = widget.image; // Вернуться к исходным байтам изображения
+      _adjustmentCache.clear(); // Очистить кэш, чтобы избежать устаревших изображений
     });
 
     debugPrint('Reset adjustments: brightness=$_brightness, contrast=$_contrast, '
         'saturation=$_saturation, exposure=$_exposure, noise=$_noise, smooth=$_smooth');
 
-    _applyAdjustments(); // Trigger image update to reflect reset
+    _applyAdjustments(); // Запустить обновление изображения для отражения сброса
     widget.onImageChanged(widget.image, _getParameters());
   }
 
@@ -584,7 +584,7 @@ class _AdjustPanelState extends State<AdjustPanel> {
               fontSize: fontSize,
               onChanged: (v) {
                 setState(() {
-                  _saturation = 1.0 + (v / 50); // Fixed: Correctly update _saturation
+                  _saturation = 1.0 + (v / 50);
                   _applyAdjustments();
                 });
               },

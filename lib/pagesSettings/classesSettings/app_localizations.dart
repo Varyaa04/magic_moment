@@ -250,6 +250,7 @@ class AppLocalizations {
       'galleryPermissionMessage': 'To select photos for editing or creating collages, we need access to your gallery. This lets you choose existing photos from your device.',
       'continueText': 'Continue',
       'permissionPermanentlyDenied': 'The permission was permanently denied. Please enable it in the app settings.',
+      'noHistory': 'History is empty',
 
     },
     'ru': {
@@ -489,7 +490,7 @@ class AppLocalizations {
       'galleryPermissionMessage': 'Для выбора фотографий для редактирования или создания коллажей нам нужен доступ к вашей галерее. Это позволит вам выбирать существующие фотографии с вашего устройства.',
       'continueText': 'Продолжить',
       'permissionPermanentlyDenied': 'Доступ был окончательно запрещен. Пожалуйста, включите его в настройках приложения.',
-
+      'noHistory': 'История пуста',
 
     },
   };
@@ -738,6 +739,8 @@ class AppLocalizations {
   String get galleryPermissionMessage => _localizedValues[locale.languageCode]!['galleryPermissionMessage']!;
   String get continueText => _localizedValues[locale.languageCode]!['continueText']!;
   String get permissionPermanentlyDenied => _localizedValues[locale.languageCode]!['permissionPermanentlyDenied']!;
+  String get noHistory => _localizedValues[locale.languageCode]!['noHistory']!;
+
 }
 
 class _AppLocalizationsDelegate
