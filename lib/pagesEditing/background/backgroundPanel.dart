@@ -147,15 +147,8 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
-              debugPrint('Calling onUpdateImage and onApply for EditPage');
-              await widget.onUpdateImage(
-                result,
-                action: localizations?.removeBackground ?? 'Remove Background',
-                operationType: 'remove_bg',
-                parameters: {},
-              );
-              widget.onApply(result);
-              debugPrint('Returning to EditPage');
+              // Удаляем вызовы onUpdateImage и onApply, так как они уже выполнены в RemoveBackgroundPage
+              debugPrint('Returning to EditPage with result');
             },
           ),
           _buildOptionButton(
@@ -193,15 +186,8 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
-              debugPrint('Calling onUpdateImage and onApply for EditPage');
-              await widget.onUpdateImage(
-                result,
-                action: localizations?.changeBackground ?? 'Change Background',
-                operationType: 'change_bg',
-                parameters: {},
-              );
-              widget.onApply(result);
-              debugPrint('Returning to EditPage');
+              // Удаляем вызовы onUpdateImage и onApply
+              debugPrint('Returning to EditPage with result');
             },
           ),
           _buildOptionButton(
@@ -239,15 +225,8 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
-              debugPrint('Calling onUpdateImage and onApply for EditPage');
-              await widget.onUpdateImage(
-                result,
-                action: localizations?.blurBackground ?? 'Blur Background',
-                operationType: 'blur_bg',
-                parameters: {},
-              );
-              widget.onApply(result);
-              debugPrint('Returning to EditPage');
+              // Удаляем вызовы onUpdateImage и onApply
+              debugPrint('Returning to EditPage with result');
             },
           ),
         ],

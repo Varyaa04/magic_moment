@@ -254,9 +254,7 @@ class _RemoveBackgroundPageState
           debugPrint(
               'Navigating back to BackgroundPanel with result: ${processedBytes.length} bytes');
           _isActive = false;
-          Navigator.pop(
-              EditPage(imageBytes: processedBytes, imageId: widget.imageId)
-                  as BuildContext);
+          Navigator.pop(context, processedBytes);
         }
       }
     } catch (e, stackTrace) {
