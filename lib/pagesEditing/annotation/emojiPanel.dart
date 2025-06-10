@@ -292,29 +292,35 @@ class _EmojiPanelState extends State<EmojiPanel> {
     }
   }
 
-  Future<void> _applyChanges() async {
-    if (_isProcessing || !_isInitialized) return;
-    setState(() {
-      _isProcessing = true;
-      _selectedSticker = null;},);
+Future<void> _applyChanges() async {
+if (_isProcessing || !_isInitialized) return;
+setState(() {
+_isProcessing = true;
+_selectedSticker = null;
+});
 
-    try {
-
-      await Future.delayed(const Duration(milliseconds: 16));
-      final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
-      }
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
-      if (byteData == null) {
-        throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
-      }
-      final pngBytes = byteData.buffer.asUint8List();
-      if (pngBytes.isEmpty) {
-        throw Exception('Empty image bytes after cropping');
-      }
+try {
+await Future.delayed(const Duration(milliseconds: 16));
+final boundary = _imageKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+if (boundary == null) {
+throw Exception(AppLocalizations.of(context)?.error ?? 'Rendering error');
+}
+final image = await boundary.toImage(pixelRatio: 3.0);
+final recorder = ui.PictureRecorder();
+final canvas = Canvas(recorder);
+canvas.drawColor(Colors.transparent, BlendMode.clear); // Очистка с прозрачным фоном
+canvas.drawImage(image, Offset.zero, Paint());
+final finalImage = await recorder.endRecording().toImage(image.width, image.height);
+final byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+image.dispose();
+finalImage.dispose();
+if (byteData == null) {
+throw Exception(AppLocalizations.of(context)?.error ?? 'Image conversion error');
+}
+final pngBytes = byteData.buffer.asUint8List();
+if (pngBytes.isEmpty) {
+throw Exception('Empty image bytes after cropping');
+}
 
       final history = EditHistory(
         imageId: widget.imageId,

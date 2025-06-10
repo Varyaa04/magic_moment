@@ -1,6 +1,6 @@
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 
 abstract class BaseBackgroundEditor extends StatefulWidget {
@@ -8,7 +8,7 @@ abstract class BaseBackgroundEditor extends StatefulWidget {
   final int imageId;
   final VoidCallback onCancel;
   final Function(Uint8List) onApply;
-  final Function(Uint8List, {String? action, String? operationType, Map<String, dynamic>? parameters}) onUpdateImage;
+  final Function(Uint8List, {String action, String operationType, Map<String, dynamic> parameters}) onUpdateImage;
   final String apiEndpoint;
   final String operationName;
   final String defaultTitle;
@@ -30,48 +30,32 @@ abstract class BaseBackgroundEditorState<T extends BaseBackgroundEditor> extends
   List<Map<String, dynamic>> historyStack = [];
   int historyIndex = -1;
 
+  String _getActionName(AppLocalizations? localizations);
+  String _getLoadingText(AppLocalizations? localizations);
+  String _getActionTooltip(AppLocalizations? localizations);
+
   void undo() {
-    if (historyIndex > 0 && mounted) {
+    if (historyIndex > 0) {
       setState(() {
         historyIndex--;
-        final previousState = historyStack[historyIndex];
-        if (previousState['image'] != null) {
-          widget.onApply(previousState['image'] as Uint8List);
-        }
       });
     }
   }
 
-  void _showError(BuildContext context, String message) {
-    final localizations = AppLocalizations.of(context);
-    if (mounted) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: Colors.grey[900],
-          title: Text(
-            localizations?.error ?? 'Error',
-            style: const TextStyle(color: Colors.white),
-          ),
-          content: Text(
-            message,
-            style: const TextStyle(color: Colors.white),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                localizations?.ok ?? 'OK',
-                style: const TextStyle(color: Colors.blue),
-              ),
-            ),
-          ],
-        ),
-      );
+  Future<Uint8List> _resizeImage(Uint8List imageBytes, {int maxWidth = 1024}) async {
+    final image = img.decodeImage(imageBytes);
+    if (image == null) {
+      throw Exception('Failed to decode image for resizing');
     }
+    if (image.width <= maxWidth) return imageBytes;
+    final resized = img.copyResize(
+      image,
+      width: maxWidth,
+      maintainAspect: true,
+      interpolation: img.Interpolation.cubic,
+    );
+    final resizedBytes = img.encodePng(resized, level: 1);
+    return Uint8List.fromList(resizedBytes);
   }
 
-  String _getActionName(AppLocalizations? localizations);
-  String _getLoadingText(AppLocalizations? localizations);
-  String _getActionTooltip(AppLocalizations? localizations);
 }

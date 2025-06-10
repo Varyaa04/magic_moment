@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:MagicMoment/pagesEditing/editPage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -9,7 +10,6 @@ import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'package:image/image.dart' as img;
 import 'base_background_editor.dart';
-
 
 class RemoveBackgroundPage extends BaseBackgroundEditor {
   const RemoveBackgroundPage({
@@ -35,7 +35,7 @@ class _RemoveBackgroundPageState
   Uint8List? _processedImage;
   String? _errorMessage;
   bool _isInitialized = false;
-  bool _isActive = true; // New flag to track page activity
+  bool _isActive = true;
 
   @override
   void initState() {
@@ -48,7 +48,30 @@ class _RemoveBackgroundPageState
   @override
   void dispose() {
     _isActive = false;
+    debugPrint('Disposing RemoveBackgroundPage');
     super.dispose();
+  }
+
+  Future<Uint8List?> _resizeImage(Uint8List imageData,
+      {int maxWidth = 1080, bool preserveTransparency = false}) async {
+    try {
+      final decoded = img.decodeImage(imageData);
+      if (decoded == null) {
+        debugPrint('Не удалось декодировать изображение в _resizeImage');
+        return null;
+      }
+      final resized =
+          img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+      final compressed = preserveTransparency
+          ? img.encodePng(resized, level: 6)
+          : img.encodeJpg(resized, quality: 80);
+      debugPrint(
+          'Измененный размер изображения: размер=${compressed.length} байт');
+      return Uint8List.fromList(compressed);
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка изменения размера изображения: $e\nСтек: $stackTrace');
+      return null;
+    }
   }
 
   Future<void> _initialize() async {
@@ -59,14 +82,13 @@ class _RemoveBackgroundPageState
         throw Exception(
             AppLocalizations.of(context)?.noImages ?? 'No image provided');
       }
-
-      historyIndex = 0;
       historyStack.add({
         'image': widget.image,
         'action': _getActionName(AppLocalizations.of(context)),
         'operationType': 'init',
         'parameters': {},
       });
+      historyIndex = 0;
       if (mounted) {
         setState(() {
           _isInitialized = true;
@@ -74,7 +96,9 @@ class _RemoveBackgroundPageState
       }
     } catch (e, stackTrace) {
       debugPrint('Initialization error: $e\n$stackTrace');
-      _handleError(e.toString());
+      if (mounted) {
+        _handleError(e.toString());
+      }
     }
   }
 
@@ -93,39 +117,20 @@ class _RemoveBackgroundPageState
     return localizations?.removeBackgroundTitle ?? 'Remove background';
   }
 
-  Future<Uint8List> _resizeImage(Uint8List imageBytes,
-      {int maxWidth = 1024}) async {
-    final image = img.decodeImage(imageBytes);
-    if (image == null) {
-      throw Exception('Failed to decode image for resizing');
-    }
-    if (image.width <= maxWidth) return imageBytes;
-    final resized = img.copyResize(
-      image,
-      width: maxWidth,
-      maintainAspect: true,
-      interpolation: img.Interpolation.cubic,
-    );
-    final resizedBytes = img.encodePng(resized, level: 1);
-    return Uint8List.fromList(resizedBytes);
-  }
-
-  Future<Uint8List?> _callApi(Uint8List imageBytes,
-      {int attempt = 1, int maxAttempts = 3}) async {
+  Future<Uint8List?> _callApi(Uint8List imageBytes, {int attempt = 1, int maxAttempts = 3}) async {
     try {
       final apiKey = dotenv.env['CLIPDROP_API_KEY'];
       if (apiKey == null || apiKey.isEmpty) {
-        debugPrint('API key is missing or empty');
         throw Exception('ClipDrop API key is not configured in .env file');
       }
 
-// Optimize image size
-      final resizedImage = await _resizeImage(imageBytes, maxWidth: 1024);
+      final resizedImage = await _resizeImage(imageBytes, maxWidth: 1024, preserveTransparency: true);
+      if (resizedImage == null) {
+        throw Exception('Failed to resize image for API call');
+      }
 
-      debugPrint(
-          'Sending request (attempt $attempt) to ${widget.apiEndpoint} with image size: ${resizedImage.length} bytes');
-      final request =
-          http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
+      debugPrint('Sending request (attempt $attempt) to ${widget.apiEndpoint} with image size: ${resizedImage.length} bytes');
+      final request = http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
       request.headers['x-api-key'] = apiKey;
       request.files.add(http.MultipartFile.fromBytes(
         'image_file',
@@ -133,48 +138,50 @@ class _RemoveBackgroundPageState
         filename: 'image.png',
       ));
 
-      final response =
-          await request.send().timeout(const Duration(seconds: 30));
-      debugPrint(
-          'API response status: ${response.statusCode}, content length: ${response.contentLength}');
+      final response = await request.send().timeout(const Duration(seconds: 30));
+      debugPrint('API response status: ${response.statusCode}, content length: ${response.contentLength}');
       final responseBody = await http.Response.fromStream(response);
 
       if (response.statusCode == 200) {
         if (responseBody.bodyBytes.isEmpty) {
-          debugPrint('Empty response from ClipDrop API');
           throw Exception('Empty response from ClipDrop API');
         }
         final decodedImage = img.decodeImage(responseBody.bodyBytes);
         if (decodedImage == null) {
-          debugPrint('Invalid image data from ClipDrop API');
           throw Exception('Invalid image data returned from ClipDrop API');
+        }
+        // Проверяем наличие альфа-канала
+        if (!decodedImage.hasAlpha) {
+          debugPrint('Warning: Returned image does not have an alpha channel');
         }
         return responseBody.bodyBytes;
       } else if (response.statusCode == 429 && attempt < maxAttempts) {
         debugPrint('Rate limit hit, retrying after ${attempt * 2} seconds...');
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _callApi(imageBytes,
-            attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _callApi(imageBytes, attempt: attempt + 1, maxAttempts: maxAttempts);
       } else {
-        debugPrint('API error: ${response.statusCode} - ${responseBody.body}');
-        throw Exception(
-            'ClipDrop API error ${response.statusCode}: ${responseBody.body}');
+        throw Exception('ClipDrop API error ${response.statusCode}: ${responseBody.body}');
       }
     } catch (e, stackTrace) {
-      debugPrint('API error: $e\nStack trace: $stackTrace');
+      debugPrint('API error (attempt $attempt): $e\n$stackTrace');
       if (attempt < maxAttempts) {
-        debugPrint('Retrying after ${attempt * 2} seconds...');
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _callApi(imageBytes,
-            attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _callApi(imageBytes, attempt: attempt + 1, maxAttempts: maxAttempts);
       }
       rethrow;
     }
   }
 
-  @override
   Future<void> _processImage() async {
-    if (_isLoading || !_isInitialized || !_isActive) return;
+    if (_isLoading || !_isInitialized || !_isActive) {
+      debugPrint('Cannot process image: already processing or not initialized');
+      return;
+    }
+    if (!mounted) {
+      debugPrint('RemoveBackgroundPage not mounted, aborting _processImage');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -191,7 +198,7 @@ class _RemoveBackgroundPageState
       if (!kIsWeb) {
         final tempDir = await Directory.systemTemp.createTemp();
         snapshotPath =
-        '${tempDir.path}/remove_bg_${DateTime.now().millisecondsSinceEpoch}.png';
+            '${tempDir.path}/remove_bg_${DateTime.now().millisecondsSinceEpoch}.png';
         final file = File(snapshotPath);
         await file.writeAsBytes(processedBytes);
         if (!await file.exists()) {
@@ -216,7 +223,11 @@ class _RemoveBackgroundPageState
         throw Exception('Failed to save edit history to database');
       }
 
-      if (!mounted || !_isActive) return;
+      if (!mounted || !_isActive) {
+        debugPrint(
+            'RemoveBackgroundPage not mounted or inactive after processing');
+        return;
+      }
 
       setState(() {
         _processedImage = processedBytes;
@@ -227,9 +238,11 @@ class _RemoveBackgroundPageState
           'parameters': {'historyId': historyId},
         });
         historyIndex++;
+        debugPrint('Processed image has alpha: ${img.decodeImage(processedBytes)?.hasAlpha}');
       });
 
       if (mounted && _isActive) {
+        debugPrint('Calling onApply and onUpdateImage');
         widget.onApply(processedBytes);
         await widget.onUpdateImage(
           processedBytes,
@@ -238,8 +251,12 @@ class _RemoveBackgroundPageState
           parameters: {'historyId': historyId},
         );
         if (mounted && _isActive) {
-          debugPrint('Navigating back from RemoveBackgroundPage after apply');
-          widget.onCancel();
+          debugPrint(
+              'Navigating back to BackgroundPanel with result: ${processedBytes.length} bytes');
+          _isActive = false;
+          Navigator.pop(
+              EditPage(imageBytes: processedBytes, imageId: widget.imageId)
+                  as BuildContext);
         }
       }
     } catch (e, stackTrace) {
@@ -255,6 +272,7 @@ class _RemoveBackgroundPageState
   }
 
   void _handleError(String message) {
+    debugPrint('Handling error: $message');
     if (mounted) {
       setState(() {
         _errorMessage = message;
@@ -305,8 +323,10 @@ class _RemoveBackgroundPageState
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () {
-                    _isActive = false;
-                    widget.onCancel();
+                    if (mounted && _isActive) {
+                      debugPrint('Navigating back to BackgroundPanel on error');
+                      Navigator.pop(context);
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red[700],
@@ -334,37 +354,40 @@ class _RemoveBackgroundPageState
               children: [
                 _buildAppBar(theme, localizations),
                 Expanded(
-                  child: _processedImage != null
-                      ? Image.memory(
-                          _processedImage!,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            debugPrint(
-                                'Error displaying processed image: $error');
-                            return Center(
-                              child: Text(
-                                localizations?.invalidImage ??
-                                    'Failed to load image',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            );
-                          },
-                        )
-                      : Image.memory(
-                          widget.image,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            debugPrint(
-                                'Error displaying original image: $error');
-                            return Center(
-                              child: Text(
-                                localizations?.invalidImage ??
-                                    'Failed to load image',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            );
-                          },
-                        ),
+                  child: Container(
+                    color: Colors.transparent, // Явно прозрачный контейнер
+                    child: _processedImage != null
+                        ? Image.memory(
+                      _processedImage!,
+                      fit: BoxFit.contain,
+                      color: Colors.transparent,
+                      colorBlendMode: BlendMode.dst,
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint('Error displaying processed image: $error');
+                        return Center(
+                          child: Text(
+                            localizations?.invalidImage ?? 'Failed to load image',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        );
+                      },
+                    )
+                        : Image.memory(
+                      widget.image,
+                      fit: BoxFit.contain,
+                      color: Colors.transparent,
+                      colorBlendMode: BlendMode.dst,
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint('Error displaying original image: $error');
+                        return Center(
+                          child: Text(
+                            localizations?.invalidImage ?? 'Failed to load image',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
                 _buildBottomPanel(theme, localizations),
               ],
@@ -404,9 +427,11 @@ class _RemoveBackgroundPageState
           size: isDesktop ? 28 : 24,
         ),
         onPressed: () {
-          _isActive = false;
-          debugPrint('Navigating back from RemoveBackgroundPage via cancel');
-          widget.onCancel();
+          if (mounted && _isActive) {
+            debugPrint('Navigating back to BackgroundPanel via cancel');
+            _isActive = false;
+            Navigator.pop(context);
+          }
         },
         tooltip: localizations?.cancel ?? 'Cancel',
       ),
@@ -426,7 +451,7 @@ class _RemoveBackgroundPageState
                 : Colors.grey[700],
             size: isDesktop ? 28 : 24,
           ),
-          onPressed: historyIndex > 0 && !_isLoading ? undo : null,
+          onPressed: historyIndex > 0 && !_isLoading && _isActive ? undo : null,
           tooltip: localizations?.undo ?? 'Undo',
         ),
         IconButton(
@@ -437,18 +462,17 @@ class _RemoveBackgroundPageState
                 : Colors.grey[700],
             size: isDesktop ? 28 : 24,
           ),
-          onPressed: _processedImage != null && !_isLoading && _isActive
-              ? () {
-                  widget.onApply(_processedImage!);
-                  debugPrint(
-                      'Navigating back from RemoveBackgroundPage via apply');
-                  _isActive = false;
-                  if (mounted) {
-                    _isActive = false;
-                    debugPrint('Navigating back from RemoveBackgroundPage after object removal');
-                    widget.onCancel();
-                  }                }
-              : null,
+          onPressed:
+              _processedImage != null && !_isLoading && mounted && _isActive
+                  ? () {
+                      if (mounted) {
+                        debugPrint('Applying processed image');
+                        widget.onApply(_processedImage!);
+                        _isActive = false;
+                        Navigator.pop(context, _processedImage!);
+                      }
+                    }
+                  : null,
           tooltip: localizations?.apply ?? 'Apply',
         ),
       ],
@@ -458,7 +482,7 @@ class _RemoveBackgroundPageState
   Widget _buildBottomPanel(ThemeData theme, AppLocalizations? localizations) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
     return Container(
-      height: isDesktop ? 100 : 80,
+      height: isDesktop ? 120 : 100,
       padding: EdgeInsets.symmetric(
         vertical: isDesktop ? 12 : 6,
         horizontal: isDesktop ? 24 : 16,
@@ -469,7 +493,7 @@ class _RemoveBackgroundPageState
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.4),
-            blurRadius: 12,
+            blurRadius: 10,
             offset: const Offset(0, -4),
           ),
         ],
@@ -490,7 +514,7 @@ class _RemoveBackgroundPageState
             ),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.withOpacity(0.7),
+            backgroundColor: Colors.red.withOpacity(0.7),
             padding: EdgeInsets.symmetric(
               horizontal: isDesktop ? 16 : 12,
               vertical: isDesktop ? 12 : 8,

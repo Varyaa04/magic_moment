@@ -1,17 +1,17 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
-import 'package:MagicMoment/themeWidjets/colorPicker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:image/image.dart' as img;
 import 'package:MagicMoment/database/editHistory.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import 'package:MagicMoment/themeWidjets/image_picker_helper.dart';
+import 'package:image_picker/image_picker.dart';
+import '../editPage.dart';
 import 'base_background_editor.dart';
-import 'package:image/image.dart' as img;
 
 class ChangeBackgroundPage extends BaseBackgroundEditor {
   const ChangeBackgroundPage({
@@ -22,7 +22,7 @@ class ChangeBackgroundPage extends BaseBackgroundEditor {
     required super.onUpdateImage,
     super.key,
   }) : super(
-    apiEndpoint: 'https://clipdrop-api.co/replace-background/v1',
+    apiEndpoint: 'https://clipdrop-api.co/remove-background/v1',
     operationName: 'change_bg',
     defaultTitle: 'Change Background',
   );
@@ -31,14 +31,10 @@ class ChangeBackgroundPage extends BaseBackgroundEditor {
   State<ChangeBackgroundPage> createState() => _ChangeBackgroundPageState();
 }
 
-class _ChangeBackgroundPageState
-    extends BaseBackgroundEditorState<ChangeBackgroundPage> {
-  final ImagePicker _picker = ImagePicker();
-  bool _isProcessing = false;
-  Uint8List? _currentImage;
-  Uint8List? _selectedBackground;
-  Color? _selectedColor;
-  String? _backgroundSource;
+class _ChangeBackgroundPageState extends BaseBackgroundEditorState<ChangeBackgroundPage> {
+  Uint8List? _backgroundImage;
+  bool _isLoading = false;
+  Uint8List? _processedImage;
   String? _errorMessage;
   bool _isInitialized = false;
   bool _isActive = true;
@@ -58,13 +54,28 @@ class _ChangeBackgroundPageState
     super.dispose();
   }
 
+  Future<Uint8List?> _resizeImage(Uint8List imageData, {int maxWidth = 1080, bool preserveTransparency = false}) async {
+    try {
+      final decoded = img.decodeImage(imageData);
+      if (decoded == null) {
+        debugPrint('Failed to decode image in _resizeImage');
+        return null;
+      }
+      final resized = img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+      final compressed = preserveTransparency ? img.encodePng(resized, level: 6) : img.encodeJpg(resized, quality: 80);
+      debugPrint('Resized image: size=${compressed.length} bytes');
+      return Uint8List.fromList(compressed);
+    } catch (e, stackTrace) {
+      debugPrint('Error resizing image: $e\nStack: $stackTrace');
+      return null;
+    }
+  }
+
   Future<void> _initialize() async {
-    debugPrint(
-        'Initializing ChangeBackgroundPage with image size: ${widget.image.length} bytes');
+    debugPrint('Initializing ChangeBackgroundPage with image size: ${widget.image.length} bytes');
     try {
       if (widget.image.isEmpty) {
-        throw Exception(
-            AppLocalizations.of(context)?.noImages ?? 'No image provided');
+        throw Exception(AppLocalizations.of(context)?.noImages ?? 'No image provided');
       }
       historyStack.add({
         'image': widget.image,
@@ -75,7 +86,6 @@ class _ChangeBackgroundPageState
       historyIndex = 0;
       if (mounted) {
         setState(() {
-          _currentImage = widget.image;
           _isInitialized = true;
         });
       }
@@ -102,395 +112,258 @@ class _ChangeBackgroundPageState
     return localizations?.changeBackgroundTitle ?? 'Change background';
   }
 
-  Future<void> _showSourceSelectionDialog() async {
-    final localizations = AppLocalizations.of(context);
-
-    if (!mounted || !_isActive) {
-      debugPrint('ChangeBackgroundPage not mounted or inactive, aborting dialog');
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Text(
-            localizations?.selectBackgroundSource ?? 'Select Background Source',
-            style: const TextStyle(color: Colors.white),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.photo_library, color: Colors.blue),
-                  title: Text(
-                    localizations?.deviceGallery ?? 'Device Gallery',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    if (mounted && _isActive) {
-                      Navigator.pop(context);
-                      _getImageFromGallery();
-                    }
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.color_lens, color: Colors.blue),
-                  title: Text(
-                    localizations?.solidColor ?? 'Solid Color',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    if (mounted && _isActive) {
-                      Navigator.pop(context);
-                      _showColorPicker();
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (mounted && _isActive) {
-                  debugPrint('Canceling source selection dialog');
-                  Navigator.pop(context);
-                }
-              },
-              child: Text(
-                localizations?.cancel ?? 'Cancel',
-                style: const TextStyle(color: Colors.redAccent),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _showColorPicker() async {
-    final localizations = AppLocalizations.of(context);
-    Color selectedColor = Colors.white;
-
-    if (!mounted || !_isActive) {
-      debugPrint('ChangeBackgroundPage not mounted or inactive, aborting color picker');
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Text(
-            localizations?.selectColor ?? 'Select Color',
-            style: const TextStyle(color: Colors.white),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ColorPicker(
-                  pickerColor: selectedColor,
-                  onColorChanged: (color) => selectedColor = color,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (mounted && _isActive) {
-                  debugPrint('Canceling color picker dialog');
-                  Navigator.pop(context);
-                }
-              },
-              child: Text(
-                localizations?.cancel ?? 'Cancel',
-                style: const TextStyle(color: Colors.redAccent),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                if (mounted && _isActive) {
-                  Navigator.pop(context);
-                  _applySolidColor(selectedColor);
-                }
-              },
-              child: Text(
-                localizations?.apply ?? 'Apply',
-                style: const TextStyle(color: Colors.blue),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<Uint8List> _createSolidColorImage(Color color) async {
-    final originalImage = img.decodeImage(widget.image);
-    if (originalImage == null) {
-      throw Exception('Failed to decode original image');
-    }
-
-    final recorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(recorder);
-    final paint = ui.Paint()..color = color;
-
-    final width = originalImage.width.toDouble();
-    final height = originalImage.height.toDouble();
-
-    canvas.drawRect(ui.Rect.fromLTWH(0, 0, width, height), paint);
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(width.toInt(), height.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-
-    image.dispose();
-    picture.dispose();
-
-    if (byteData == null || byteData.lengthInBytes == 0) {
-      throw Exception('Failed to generate solid color image');
-    }
-
-    return byteData.buffer.asUint8List();
-  }
-
-  Future<void> _applySolidColor(Color color) async {
-    if (_isProcessing || !_isInitialized || !_isActive || !mounted) {
-      debugPrint('ChangeBackgroundPage not ready for _applySolidColor');
-      return;
-    }
-
-    try {
-      final solidColorImage = await _createSolidColorImage(color);
-
-      // Validate the generated image
-      final codec = await ui.instantiateImageCodec(solidColorImage);
-      final frame = await codec.getNextFrame();
-      codec.dispose();
-      if (frame.image.width == 0 || frame.image.height == 0) {
-        throw Exception('Generated solid color image is invalid');
-      }
-      frame.image.dispose();
-
-      setState(() {
-        _selectedBackground = solidColorImage;
-        _backgroundSource = 'color';
-        _selectedColor = color;
-        _errorMessage = null;
-      });
-      await _applyBackground();
-    } catch (e, stackTrace) {
-      debugPrint('Error creating solid color image: $e\n$stackTrace');
-      _handleError('Failed to create solid color background: $e');
-    }
-  }
-
-  Future<void> _getImageFromGallery() async {
-    if (!mounted || !_isActive) {
-      debugPrint('ChangeBackgroundPage not mounted or inactive, aborting gallery pick');
-      return;
-    }
-
-    try {
-      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null && mounted && _isActive) {
-        final bytes = await pickedFile.readAsBytes();
-        if (bytes.isNotEmpty) {
-          // Validate gallery image
-          final codec = await ui.instantiateImageCodec(bytes);
-          final frame = await codec.getNextFrame();
-          codec.dispose();
-          if (frame.image.width == 0 || frame.image.height == 0) {
-            throw Exception('Selected gallery image is invalid');
-          }
-          frame.image.dispose();
-
-          setState(() {
-            _selectedBackground = bytes;
-            _backgroundSource = 'gallery';
-            _selectedColor = null;
-            _errorMessage = null;
-          });
-          await _applyBackground();
-        } else {
-          throw Exception('Empty image data from gallery');
-        }
-      }
-    } catch (e, stackTrace) {
-      debugPrint('Error picking gallery image: $e\n$stackTrace');
-      if (mounted) {
-        _handleError(e.toString());
-      }
-    }
-  }
-
-  Future<void> _applyBackground() async {
-    if (_isProcessing || _selectedBackground == null || !_isInitialized || !_isActive || !mounted) {
-      debugPrint('ChangeBackgroundPage not ready for _applyBackground');
-      return;
-    }
-
-    setState(() {
-      _isProcessing = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final resultBytes = await _processImage();
-      debugPrint('Processed image size: ${resultBytes.length} bytes');
-
-      String? snapshotPath;
-      List<int>? snapshotBytes;
-      if (!kIsWeb) {
-        final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath =
-        '${tempDir.path}/change_bg_${DateTime.now().millisecondsSinceEpoch}.png';
-        final file = File(snapshotPath);
-        await file.writeAsBytes(resultBytes);
-        if (!await file.exists()) {
-          throw Exception('Failed to save snapshot to file: $snapshotPath');
-        }
-      } else {
-        snapshotBytes = resultBytes;
-      }
-
-      final history = EditHistory(
-        imageId: widget.imageId,
-        operationType: 'change_bg',
-        operationParameters: {
-          'background_source': _backgroundSource ?? 'unknown',
-          if (_backgroundSource == 'color' && _selectedColor != null)
-            'color': _selectedColor!.value.toRadixString(16),
-        },
-        operationDate: DateTime.now(),
-        snapshotPath: snapshotPath,
-        snapshotBytes: snapshotBytes,
-      );
-      final db = MagicMomentDatabase.instance;
-      final historyId = await db.insertHistory(history);
-      if (historyId == null || historyId <= 0) {
-        throw Exception('Failed to save edit history to database');
-      }
-
-      if (!mounted || !_isActive) {
-        debugPrint('ChangeBackgroundPage not mounted or inactive before callbacks');
-        return;
-      }
-
-      setState(() {
-        _currentImage = resultBytes;
-        historyStack.add({
-          'image': resultBytes,
-          'action': _getActionName(AppLocalizations.of(context)),
-          'operationType': 'change_bg',
-          'parameters': {
-            'background_source': _backgroundSource ?? 'unknown',
-            if (_backgroundSource == 'color' && _selectedColor != null)
-              'color': _selectedColor!.value.toRadixString(16),
-            'historyId': historyId,
-          },
-        });
-        historyIndex++;
-      });
-
-      if (mounted && _isActive) {
-        widget.onApply(resultBytes);
-        await widget.onUpdateImage(
-          resultBytes,
-          action: _getActionName(AppLocalizations.of(context)),
-          operationType: 'change_bg',
-          parameters: {
-            'background_source': _backgroundSource ?? 'unknown',
-            if (_backgroundSource == 'color' && _selectedColor != null)
-              'color': _selectedColor!.value.toRadixString(16),
-            'historyId': historyId,
-          },
-        );
-        if (mounted && _isActive) {
-          debugPrint('Navigating back from ChangeBackgroundPage after apply');
-          widget.onCancel();
-        }
-      }
-    } catch (e, stackTrace) {
-      debugPrint('Error applying background: $e\n$stackTrace');
-      if (mounted) {
-        _handleError(e.toString());
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
-    }
-  }
-
-  Future<Uint8List> _processImage(
-      {int attempt = 1, int maxAttempts = 3}) async {
-    if (_selectedBackground == null) {
-      throw Exception('No background selected');
-    }
-
+  Future<Uint8List?> _getBackgroundMask(Uint8List imageBytes, {int attempt = 1, int maxAttempts = 5}) async {
     try {
       final apiKey = dotenv.env['CLIPDROP_API_KEY'];
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('ClipDrop API key is not configured in .env file');
       }
 
-      debugPrint(
-          'Sending request (attempt $attempt) to ${widget.apiEndpoint} with foreground size: ${widget.image.length} bytes, background size: ${_selectedBackground!.length} bytes');
-      final request =
-      http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
+      final resizedImage = await _resizeImage(imageBytes, maxWidth: 1024, preserveTransparency: true);
+      if (resizedImage == null) {
+        throw Exception('Failed to resize image for API call');
+      }
+
+      debugPrint('Sending mask request (attempt $attempt) to ${widget.apiEndpoint} with image size: ${resizedImage.length} bytes');
+      final request = http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
       request.headers['x-api-key'] = apiKey;
       request.files.add(http.MultipartFile.fromBytes(
         'image_file',
-        widget.image,
+        resizedImage,
         filename: 'image.png',
       ));
-      request.files.add(http.MultipartFile.fromBytes(
-        'background_file',
-        _selectedBackground!,
-        filename: 'background.png',
-      ));
 
-      final response =
-      await request.send().timeout(const Duration(seconds: 30));
-      debugPrint(
-          'API response status: ${response.statusCode}, content length: ${response.contentLength}');
+      final response = await request.send().timeout(const Duration(seconds: 30));
+      debugPrint('Mask API response status: ${response.statusCode}, content length: ${response.contentLength}');
       final responseBody = await http.Response.fromStream(response);
 
       if (response.statusCode == 200) {
         if (responseBody.bodyBytes.isEmpty) {
-          throw Exception('Empty response from ClipDrop API');
-        }
-        final decodedImage = img.decodeImage(responseBody.bodyBytes);
-        if (decodedImage == null) {
-          throw Exception('Invalid image data returned from ClipDrop API');
+          throw Exception('Empty mask response from ClipDrop API');
         }
         return responseBody.bodyBytes;
       } else if (response.statusCode == 429 && attempt < maxAttempts) {
+        debugPrint('Rate limit hit, retrying after ${attempt * 2} seconds...');
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _processImage(attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _getBackgroundMask(imageBytes, attempt: attempt + 1, maxAttempts: maxAttempts);
       } else {
-        throw Exception(
-            'ClipDrop API error ${response.statusCode}: ${responseBody.body}');
+        throw Exception('ClipDrop API error: ${response.statusCode}: ${responseBody.body}');
       }
     } catch (e, stackTrace) {
-      debugPrint(
-          'Error processing background change (attempt $attempt): $e\n$stackTrace');
+      debugPrint('Error getting background mask (attempt $attempt): $e\n$stackTrace');
       if (attempt < maxAttempts) {
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _processImage(attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _getBackgroundMask(imageBytes, attempt: attempt + 1, maxAttempts: maxAttempts);
       }
       rethrow;
+    }
+  }
+
+  Future<void> _pickBackgroundImage() async {
+    if (_isLoading || !_isActive) return;
+    try {
+      final bytes = await ImagePickerHelper.pickImage(source: ImageSource.gallery);
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)?.noImages ?? 'No image selected'),
+            ),
+          );
+        }
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          _backgroundImage = bytes;
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error picking background image: $e\n$stackTrace');
+      if (mounted) {
+        _handleError(e.toString());
+      }
+    }
+  }
+
+  static Future<Uint8List> _applyBackgroundIsolate(Map<String, dynamic> params) async {
+    // Decode input data
+    final originalBytes = params['original'] as Uint8List;
+    final maskBytes = params['mask'] as Uint8List;
+    final backgroundBytes = params['background'] as Uint8List?;
+
+    final original = img.decodeImage(originalBytes);
+    final mask = img.decodeImage(maskBytes);
+
+    if (original == null || mask == null) {
+      throw Exception('Failed to decode original or mask image');
+    }
+
+    // Ensure mask matches original image dimensions
+    img.Image resizedMask = mask;
+    if (original.width != mask.width || original.height != mask.height) {
+      debugPrint('Resizing mask to match original dimensions: ${original.width}x${original.height}');
+      resizedMask = img.copyResize(mask, width: original.width, height: original.height);
+    }
+
+    // Create background image
+    img.Image background;
+    if (backgroundBytes != null) {
+      final decodedBackground = img.decodeImage(backgroundBytes);
+      if (decodedBackground == null) {
+        throw Exception('Failed to decode background image');
+      }
+      background = img.copyResize(decodedBackground, width: original.width, height: original.height);
+    } else {
+      throw Exception('No background image provided');
+    }
+
+    // Create result image
+    final resultImage = img.Image(width: original.width, height: original.height);
+
+    // Apply mask
+    for (int y = 0; y < original.height; y++) {
+      for (int x = 0; x < original.width; x++) {
+        final maskPixel = resizedMask.getPixelSafe(x, y);
+        final alpha = maskPixel.a; // Use raw alpha value (0-255)
+        if (alpha > 0) {
+          // Foreground: keep original pixel
+          resultImage.setPixel(x, y, original.getPixel(x, y));
+        } else {
+          // Background: use background pixel
+          resultImage.setPixel(x, y, background.getPixel(x, y));
+        }
+      }
+    }
+    return img.encodePng(resultImage);
+  }
+
+  Future<void> _processImage() async {
+    if (_isLoading || !_isInitialized || !_isActive || _backgroundImage == null) {
+      debugPrint('Cannot process image: missing background or not initialized');
+      return;
+    }
+    if (!mounted) {
+      debugPrint('ChangeBackgroundPage not mounted, aborting _processImage');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final originalImage = img.decodeImage(widget.image);
+      if (originalImage == null) {
+        throw Exception('Failed to decode original image');
+      }
+
+      final maskBytes = await _getBackgroundMask(widget.image);
+      if (maskBytes == null || maskBytes.isEmpty) {
+        throw Exception('Failed to generate background mask');
+      }
+      final maskImage = img.decodeImage(maskBytes);
+      if (maskImage == null) {
+        throw Exception('Failed to decode mask image');
+      }
+
+      img.Image resizedMask = maskImage;
+      if (originalImage.width != maskImage.width || originalImage.height != maskImage.height) {
+        debugPrint('Mask dimensions (${maskImage.width}x${maskImage.height}) do not match original (${originalImage.width}x${originalImage.height}), resizing mask...');
+        resizedMask = img.copyResize(maskImage, width: originalImage.width, height: originalImage.height);
+      }
+
+      final isolateParams = {
+        'original': widget.image,
+        'mask': Uint8List.fromList(img.encodePng(resizedMask)),
+        'background': _backgroundImage,
+      };
+
+      final resultBytes = await compute(_applyBackgroundIsolate, isolateParams);
+
+      final resultImageDecoded = img.decodeImage(resultBytes);
+      if (resultImageDecoded == null) {
+        throw Exception('Failed to decode result image');
+      }
+
+      final processedBytes = Uint8List.fromList(img.encodePng(resultImageDecoded));
+      if (processedBytes.isEmpty) {
+        throw Exception('Failed to encode processed image');
+      }
+
+      debugPrint('Processed image size: ${processedBytes.length} bytes');
+
+      String? snapshotPath;
+      List<int>? snapshotBytes;
+      if (!kIsWeb) {
+        final tempDir = await Directory.systemTemp.createTemp();
+        snapshotPath = '${tempDir.path}/change_bg_${DateTime.now().millisecondsSinceEpoch}.png';
+        final file = File(snapshotPath);
+        await file.writeAsBytes(processedBytes);
+        if (!await file.exists()) {
+          throw Exception('Failed to save snapshot to file: $snapshotPath');
+        }
+      } else {
+        snapshotBytes = processedBytes;
+      }
+
+      final historyEntry = EditHistory(
+        imageId: widget.imageId,
+        operationType: 'change_bg',
+        operationParameters: {
+          'backgroundType': 'image',
+        },
+        operationDate: DateTime.now(),
+        snapshotPath: snapshotPath,
+        snapshotBytes: snapshotBytes,
+      );
+      final db = MagicMomentDatabase.instance;
+      final historyId = await db.insertHistory(historyEntry);
+      if (historyId == null || historyId <= 0) {
+        throw Exception('Failed to save edit history to database');
+      }
+
+      if (!mounted || !_isActive) {
+        debugPrint('ChangeBackgroundPage not mounted or inactive after processing');
+        return;
+      }
+
+      setState(() {
+        _processedImage = processedBytes;
+        historyStack.add({
+          'image': processedBytes,
+          'action': _getActionName(AppLocalizations.of(context)),
+          'operationType': 'change_bg',
+          'parameters': {'historyId': historyId},
+        });
+        historyIndex++;
+      });
+
+      if (mounted && _isActive) {
+        debugPrint('Calling onApply and onUpdateImage');
+        widget.onApply(processedBytes);
+        await widget.onUpdateImage(
+          processedBytes,
+          action: _getActionName(AppLocalizations.of(context)),
+          operationType: 'change_bg',
+          parameters: {'historyId': historyId},
+        );
+        if (mounted && _isActive) {
+          debugPrint('Navigating back with result: ${processedBytes.length} bytes');
+          _isActive = false;
+          Navigator.pop(context, processedBytes);
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error processing background change: $e\n$stackTrace');
+      if (mounted) {
+        _handleError(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -498,7 +371,7 @@ class _ChangeBackgroundPageState
     if (mounted) {
       setState(() {
         _errorMessage = message;
-        _isProcessing = false;
+        _isLoading = false;
       });
     }
   }
@@ -546,14 +419,13 @@ class _ChangeBackgroundPageState
                 ElevatedButton(
                   onPressed: () {
                     if (mounted && _isActive) {
-                      debugPrint('Navigating back from ChangeBackgroundPage on error');
-                      widget.onCancel();
+                      debugPrint('Navigating back to BackgroundPanel on error');
+                      Navigator.pop(context);
                     }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red[700],
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   child: Text(
                     localizations?.close ?? 'Close',
@@ -576,50 +448,28 @@ class _ChangeBackgroundPageState
               children: [
                 _buildAppBar(theme, localizations),
                 Expanded(
-                  child: _currentImage != null
-                      ? Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.memory(
-                        _currentImage!,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          debugPrint(
-                              'Error displaying processed image: $error');
-                          return Center(
-                            child: Text(
-                              localizations?.invalidImage ??
-                                  'Failed to load image',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          );
-                        },
-                      ),
-                      if (_selectedBackground != null)
-                        Opacity(
-                          opacity: 0.5,
-                          child: Image.memory(
-                            _selectedBackground!,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              debugPrint(
-                                  'Error displaying background image: $error');
-                              return const SizedBox.shrink();
-                            },
-                          ),
+                  child: _processedImage != null
+                      ? Image.memory(
+                    _processedImage!,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      debugPrint('Error displaying processed image: $error');
+                      return Center(
+                        child: Text(
+                          localizations?.invalidImage ?? 'Failed to load image',
+                          style: const TextStyle(color: Colors.white),
                         ),
-                    ],
+                      );
+                    },
                   )
                       : Image.memory(
                     widget.image,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      debugPrint(
-                          'Error displaying original image: $error');
+                      debugPrint('Error displaying original image: $error');
                       return Center(
                         child: Text(
-                          localizations?.invalidImage ??
-                              'Failed to load image',
+                          localizations?.invalidImage ?? 'Failed to load image',
                           style: const TextStyle(color: Colors.white),
                         ),
                       );
@@ -629,7 +479,7 @@ class _ChangeBackgroundPageState
                 _buildBottomPanel(theme, localizations),
               ],
             ),
-            if (_isProcessing)
+            if (_isLoading)
               Container(
                 color: Colors.black.withOpacity(0.5),
                 child: Center(
@@ -664,71 +514,63 @@ class _ChangeBackgroundPageState
           size: isDesktop ? 28 : 24,
         ),
         onPressed: () {
-          if (mounted && _isActive) {
-            debugPrint('Navigating back from ChangeBackgroundPage via cancel');
+          if (mounted && _isActive)  {
+            debugPrint('Navigating back to BackgroundPanel via cancel');
             _isActive = false;
-            widget.onCancel();
+            Navigator.pop(context);
           }
         },
         tooltip: localizations?.cancel ?? 'Cancel',
       ),
       title: Text(
         _getActionName(localizations),
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: isDesktop ? 20 : 16,
-        ),
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: isDesktop ? 20 : 16,
       ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            Icons.undo,
-            color: historyIndex > 0 && !_isProcessing
-                ? Colors.white
-                : Colors.grey[700],
-            size: isDesktop ? 28 : 24,
-          ),
-          onPressed: historyIndex > 0 && !_isProcessing && _isActive ? undo : null,
-          tooltip: localizations?.undo ?? 'Undo',
-        ),
-        IconButton(
-          icon: Icon(
-            Icons.check,
-            color: _currentImage != null &&
-                _currentImage != widget.image &&
-                !_isProcessing
-                ? Colors.green
-                : Colors.grey[700],
-            size: isDesktop ? 28 : 24,
-          ),
-          onPressed: _currentImage != null &&
-              _currentImage != widget.image &&
-              !_isProcessing &&
-              mounted &&
-              _isActive
-              ? () {
-            if (mounted && _isActive) {
-              widget.onApply(_currentImage!);
-              debugPrint(
-                  'Navigating back from ChangeBackgroundPage via apply');
-              _isActive = false;
-              widget.onCancel();
-            }
-          }
-              : null,
-          tooltip: localizations?.apply ?? 'Apply',
-        ),
-      ],
+    ),
+    actions: [
+    IconButton(
+    icon: Icon(
+    Icons.undo,
+    color: historyIndex > 0 && !_isLoading ? Colors.white : Colors.grey[700],
+    size: isDesktop ? 28 : 24,
+    ),
+    onPressed: historyIndex > 0 && !_isLoading && _isActive ? undo : null,
+    tooltip: localizations?.undo ?? 'Undo',
+    ),
+    IconButton(
+    icon: Icon(
+    Icons.check,
+    color: _processedImage != null && !_isLoading ? Colors.green : Colors.grey[700],
+    size: isDesktop ? 28 : 24,
+    ),
+    onPressed: _processedImage != null && !_isLoading && mounted && _isActive
+    ? () {
+    if (mounted && _isActive) {
+    debugPrint('Applying processed image');
+    widget.onApply(_processedImage!);
+    _isActive = false;
+    Navigator.pop(context, _processedImage!);
+    }
+    }
+        : null,
+    tooltip: localizations?.apply ?? 'Apply',
+    ),
+    ],
     );
-  }
+    }
 
   Widget _buildBottomPanel(ThemeData theme, AppLocalizations? localizations) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
     return Container(
-      height: isDesktop ? 100 : 80,
+      constraints: BoxConstraints(
+        minHeight: isDesktop ? 100 : 80,
+        maxHeight: isDesktop ? 100 : 80,
+      ),
       padding: EdgeInsets.symmetric(
-        vertical: isDesktop ? 12 : 6,
-        horizontal: isDesktop ? 24 : 16,
+        vertical: isDesktop ? 8 : 4,
+        horizontal: isDesktop ? 20 : 12,
       ),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
@@ -741,30 +583,67 @@ class _ChangeBackgroundPageState
           ),
         ],
       ),
-      child: Center(
-        child: ElevatedButton.icon(
-          onPressed: _isProcessing || !_isActive ? null : _showSourceSelectionDialog,
-          icon: Icon(
-            Icons.image,
-            color: Colors.white,
-            size: isDesktop ? 24 : 20,
-          ),
-          label: Text(
-            localizations?.selectBackground ?? 'Select Background',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: isDesktop ? 14 : 12,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _isLoading || !_isActive ? null : _pickBackgroundImage,
+                  icon: Icon(
+                    Icons.image,
+                    color: Colors.white,
+                    size: isDesktop ? 20 : 16,
+                  ),
+                  label: Text(
+                    localizations?.selectBackground ?? 'Select Image',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: isDesktop ? 12 : 10,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.withOpacity(0.7),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? 12 : 8,
+                      vertical: isDesktop ? 8 : 6,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.withOpacity(0.7),
-            padding: EdgeInsets.symmetric(
-              horizontal: isDesktop ? 16 : 12,
-              vertical: isDesktop ? 12 : 8,
+            const SizedBox(height: 6),
+            ElevatedButton.icon(
+              onPressed: _isLoading || !_isActive || _backgroundImage == null ? null : _processImage,
+              icon: Icon(
+                Icons.check,
+                color: Colors.white,
+                size: isDesktop ? 20 : 16,
+              ),
+              label: Text(
+                _getActionName(localizations),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isDesktop ? 12 : 10,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.withOpacity(0.7),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop ? 12 : 8,
+                  vertical: isDesktop ? 8 : 6,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
             ),
-            shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
+          ],
         ),
       ),
     );

@@ -32,23 +32,19 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 // Утилиты для адаптивного дизайна
 class ResponsiveUtils {
-// Получение адаптивной ширины
   static double getResponsiveWidth(BuildContext context, double percentage) {
     return MediaQuery.of(context).size.width * percentage;
   }
 
-// Получение адаптивной высоты
   static double getResponsiveHeight(BuildContext context, double percentage) {
     return MediaQuery.of(context).size.height * percentage;
   }
 
-// Получение адаптивного размера шрифта
   static double getResponsiveFontSize(BuildContext context, double baseSize) {
     final width = MediaQuery.of(context).size.width;
     return baseSize * (width / 600).clamp(0.8, 1.5);
   }
 
-// Проверка, является ли устройство десктопным
   static bool isDesktop(BuildContext context) {
     if (kIsWeb) {
       return MediaQuery.of(context).size.width > 800;
@@ -56,7 +52,6 @@ class ResponsiveUtils {
     return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
   }
 
-// Получение адаптивных отступов
   static EdgeInsets getResponsivePadding(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     return EdgeInsets.symmetric(
@@ -74,7 +69,6 @@ class LRUCache<K, V> {
 
   LRUCache(this.capacity);
 
-// Получение значения из кэша
   V? get(K key) {
     if (_cache.containsKey(key)) {
       _keys.remove(key);
@@ -84,7 +78,6 @@ class LRUCache<K, V> {
     return null;
   }
 
-// Добавление значения в кэш
   void put(K key, V value) {
     if (_cache.containsKey(key)) {
       _keys.remove(key);
@@ -96,7 +89,6 @@ class LRUCache<K, V> {
     _keys.add(key);
   }
 
-// Очистка кэша
   void clear() {
     _cache.clear();
     _keys.clear();
@@ -106,13 +98,13 @@ class LRUCache<K, V> {
 class EditPage extends StatefulWidget {
   final Uint8List imageBytes;
   final int imageId;
-  final bool isFromCollage; // Параметр для проверки происхождения изображения
+  final bool isFromCollage;
 
   const EditPage({
     super.key,
     required this.imageBytes,
     required this.imageId,
-    this.isFromCollage = false, // По умолчанию false
+    this.isFromCollage = false,
   });
 
   @override
@@ -146,7 +138,7 @@ class _EditPageState extends State<EditPage> {
   final int _maxHistorySteps = 20;
   bool _isHistoryEnabled = true;
   final LRUCache<int, Uint8List> _imageCache = LRUCache(10);
-  Timer? _debounceTimer;
+  bool _imageLoaded = false;
 
   @override
   void initState() {
@@ -154,7 +146,6 @@ class _EditPageState extends State<EditPage> {
     _initializeApp();
   }
 
-// Инициализация приложения
   Future<void> _initializeApp() async {
     try {
       if (widget.imageBytes.isEmpty) {
@@ -184,7 +175,6 @@ class _EditPageState extends State<EditPage> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
     _currentImage.dispose();
     _imageSize.dispose();
     _isInitialized.dispose();
@@ -196,10 +186,10 @@ class _EditPageState extends State<EditPage> {
     _isProcessing.dispose();
     _loadingProgress.dispose();
     _imageCache.clear();
+    debugPrint('Disposing EditPage');
     super.dispose();
   }
 
-// Инициализация изображения
   Future<void> _initializeImage() async {
     if (!mounted) return;
 
@@ -215,10 +205,12 @@ class _EditPageState extends State<EditPage> {
 
       _loadingProgress.value = 0.3;
 
+      await precacheImage(MemoryImage(bytes), context);
       _currentImage.value = bytes;
       _originalImage = Uint8List.fromList(bytes);
       _imageSize.value = await _decodeImageSize(bytes);
       _isInitialized.value = true;
+      _imageLoaded = true;
 
       _resetHistory();
 
@@ -242,7 +234,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Декодирование размера изображения
   Future<Size> _decodeImageSize(Uint8List bytes) async {
     final completer = Completer<ui.Image>();
     ui.decodeImageFromList(bytes, (ui.Image img) {
@@ -257,7 +248,6 @@ class _EditPageState extends State<EditPage> {
     return size;
   }
 
-// Очистка параметров для сериализации
   Map<String, dynamic> _sanitizeParameters(Map<String, dynamic> parameters) {
     final sanitized = <String, dynamic>{};
     for (var entry in parameters.entries) {
@@ -276,13 +266,10 @@ class _EditPageState extends State<EditPage> {
     return sanitized;
   }
 
-// Обновление изображения
-  Future<void> _updateImage(
-    Uint8List newImage, {
-    String? action,
-    String? operationType,
-    Map<String, dynamic>? parameters,
-  }) async {
+  Future<void> _updateImage(Uint8List newImage,
+      {String? action,
+      String? operationType,
+      Map<String, dynamic>? parameters}) async {
     if (newImage.isEmpty) {
       debugPrint(
           'Ошибка: newImage пустое в _updateImage, действие: $action, тип операции: $operationType');
@@ -290,75 +277,74 @@ class _EditPageState extends State<EditPage> {
     }
     if (!mounted || listEquals(_currentImage.value, newImage)) return;
 
-// Отменяем предыдущий таймер дебансинга, если он существует
-    _debounceTimer?.cancel();
-
-// Запускаем обновление с небольшой задержкой для дебансинга
-    _debounceTimer = Timer(const Duration(milliseconds: 100), () async {
-      if (!mounted) return; // Exit if widget is disposed
-      setState(() => _isProcessing.value = true);
-      try {
-        final bool preserveTransparency = operationType == 'Eraser' ||
-            operationType == 'object_removal' ||
-            operationType == 'collage';
-        final bytes = await _compressImage(newImage,
-            quality: 70,
-            maxWidth: 800,
-            preserveTransparency: preserveTransparency);
-        if (bytes.isEmpty) {
-          throw Exception('Не удалось изменить размер изображения');
-        }
-        if (!mounted) return; // Check again before updating ValueNotifier
-        _currentImage.value = bytes;
-        _imageCache.put(_currentHistoryIndex + 1, bytes);
-
-        _imageSize.value = await _decodeImageSize(bytes);
-
-        await _addHistoryState(action ?? 'Обновление');
-        if (parameters != null && operationType != null) {
-          final serializableParameters = _sanitizeParameters(parameters);
-          await _historyManager.addOperation(
-            context: context,
-            operationType: operationType,
-            parameters: serializableParameters,
-            snapshotBytes: bytes,
-          );
-        }
-        debugPrint(
-            'Изображение обновлено: $operationType, размер: ${bytes.length} байт');
-        _updateUndoRedoState();
-      } catch (e, stackTrace) {
-        debugPrint('Ошибка обновления изображения: $e\nСтек: $stackTrace');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка обновления изображения: $e'),
-              backgroundColor: Colors.red[700],
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() => _isProcessing.value = false);
-        }
+    setState(() => _isProcessing.value = true);
+    try {
+      final bool preserveTransparency = operationType == 'Eraser' ||
+          operationType == 'object_removal' ||
+          operationType == 'collage' ||
+          operationType == 'remove_bg';
+      final bytes = await _compressImage(newImage,
+          quality: 70,
+          maxWidth: 800,
+          preserveTransparency: preserveTransparency);
+      if (bytes.isEmpty) {
+        throw Exception('Не удалось изменить размер изображения');
       }
-    });
+      if (!mounted) return;
+
+      debugPrint('Preloading new image, size: ${bytes.length} bytes');
+      await precacheImage(MemoryImage(bytes), context);
+      _currentImage.value = bytes;
+      _imageLoaded = true;
+      _imageCache.put(_currentHistoryIndex + 1, bytes);
+
+      _imageSize.value = await _decodeImageSize(bytes);
+
+      await _addHistoryState(action ?? 'Обновление');
+      if (parameters != null && operationType != null) {
+        final serializableParameters = _sanitizeParameters(parameters);
+        await _historyManager.addOperation(
+          context: context,
+          operationType: operationType,
+          parameters: serializableParameters,
+          snapshotBytes: bytes,
+        );
+      }
+      debugPrint(
+          'Изображение обновлено: $operationType, размер: ${bytes.length} байт');
+      _updateUndoRedoState();
+    } catch (e, stackTrace) {
+      debugPrint('Ошибка обновления изображения: $e\nСтек: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка обновления изображения: $e'),
+            backgroundColor: Colors.red[700],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing.value = false);
+      }
+    }
   }
 
-// Сжатие изображения
   Future<Uint8List> _compressImage(Uint8List imageBytes,
       {int quality = 80,
       int maxWidth = 1080,
       bool preserveTransparency = false}) async {
-    return await compute(_compressImageIsolate, {
+    final result = await compute(_compressImageIsolate, {
       'imageBytes': imageBytes,
       'quality': quality,
       'maxWidth': maxWidth,
       'preserveTransparency': preserveTransparency,
     });
+    debugPrint(
+        'Формат сжатого изображения: ${preserveTransparency ? 'PNG' : 'JPEG'}');
+    return result;
   }
 
-// Сжатие изображения в изоляте
   static Uint8List _compressImageIsolate(Map<String, dynamic> params) {
     final imageBytes = params['imageBytes'] as Uint8List;
     final quality = params['quality'] as int;
@@ -372,45 +358,30 @@ class _EditPageState extends State<EditPage> {
         throw Exception(
             'Пустой массив байтов изображения в _compressImageIsolate');
       }
-      if (preserveTransparency) {
-        final decoded = img.decodeImage(imageBytes);
-        if (decoded == null) {
-          debugPrint('Не удалось декодировать изображение в _compressImage');
-          return imageBytes;
-        }
-        final resized =
-            img.copyResize(decoded, width: maxWidth, maintainAspect: true);
-        final compressed = img.encodePng(resized, level: 6);
-        debugPrint(
-            'Сжатое изображение (PNG): оригинал=${imageBytes.length}, сжатое=${compressed.length}');
-        return Uint8List.fromList(compressed);
-      } else {
-// Используем img.encodeJpg вместо FlutterImageCompress для упрощения
-        final decoded = img.decodeImage(imageBytes);
-        if (decoded == null) {
-          debugPrint('Не удалось декодировать изображение в _compressImage');
-          return imageBytes;
-        }
-        final resized =
-            img.copyResize(decoded, width: maxWidth, maintainAspect: true);
-        final compressed = img.encodeJpg(resized, quality: quality);
-        debugPrint(
-            'Сжатое изображение (JPEG): оригинал=${imageBytes.length}, сжатое=${compressed.length}');
-        return Uint8List.fromList(compressed);
+      final decoded = img.decodeImage(imageBytes);
+      if (decoded == null) {
+        debugPrint('Не удалось декодировать изображение в _compressImage');
+        return imageBytes;
       }
+      final resized =
+          img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+      final compressed = preserveTransparency
+          ? img.encodePng(resized, level: 6) // Всегда PNG для прозрачности
+          : img.encodeJpg(resized, quality: quality);
+      debugPrint(
+          'Сжатое изображение: оригинал=${imageBytes.length}, сжатое=${compressed.length}');
+      return Uint8List.fromList(compressed);
     } catch (e, stackTrace) {
       debugPrint('Ошибка сжатия изображения: $e\nСтек: $stackTrace');
       return imageBytes;
     }
   }
 
-// Обновление состояния отмены/повтора
   void _updateUndoRedoState() {
     _isUndoAvailable.value = _historyManager.canUndo;
     _isRedoAvailable.value = _historyManager.canRedo;
   }
 
-// Изменение размера изображения
   Future<Uint8List?> _resizeImage(Uint8List imageData,
       {int maxWidth = 1080, bool preserveTransparency = false}) async {
     try {
@@ -433,7 +404,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Сброс истории
   void _resetHistory() {
     final localizations = AppLocalizations.of(context);
     _history.clear();
@@ -443,7 +413,6 @@ class _EditPageState extends State<EditPage> {
     _currentHistoryIndex = 0;
   }
 
-// Отмена действия
   void _undo() async {
     if (!_isUndoAvailable.value) return;
 
@@ -462,7 +431,9 @@ class _EditPageState extends State<EditPage> {
         throw Exception('Пустые данные снимка для отмены');
       }
 
+      await precacheImage(MemoryImage(bytes), context);
       _currentImage.value = bytes;
+      _imageLoaded = true;
       _imageSize.value = await _decodeImageSize(bytes);
       _currentHistoryIndex = _historyManager.currentIndex;
       _updateUndoRedoState();
@@ -481,7 +452,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Повтор действия
   void _redo() async {
     if (!_isRedoAvailable.value) return;
 
@@ -500,9 +470,11 @@ class _EditPageState extends State<EditPage> {
         throw Exception('Пустые данные снимка для повтора');
       }
 
+      await precacheImage(MemoryImage(bytes), context);
       _currentImage.value = bytes;
+      _imageLoaded = true;
       _imageSize.value = await _decodeImageSize(bytes);
-      _currentHistoryIndex = _historyManager.currentIndex; // Обновляем индекс
+      _currentHistoryIndex = _historyManager.currentIndex;
       _updateUndoRedoState();
     } catch (e, stackTrace) {
       debugPrint('Ошибка повтора: $e\nСтек: $stackTrace');
@@ -519,7 +491,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Добавление состояния в историю
   Future<void> _addHistoryState(String description) async {
     if (!_isHistoryEnabled ||
         _currentImage.value == null ||
@@ -550,7 +521,6 @@ class _EditPageState extends State<EditPage> {
     _updateUndoRedoState();
   }
 
-// Валидация байтов изображения
   Uint8List validateImageBytes(Uint8List? bytes, String context) {
     if (bytes == null) {
       debugPrint('Ошибка: $context: Байты изображения null');
@@ -563,7 +533,6 @@ class _EditPageState extends State<EditPage> {
     return bytes;
   }
 
-// Сохранение изображения в высоком качестве
   Future<void> _saveImage() async {
     final localizations = AppLocalizations.of(context);
     if (!_isInitialized.value || !mounted || _currentImage.value == null) {
@@ -621,8 +590,7 @@ class _EditPageState extends State<EditPage> {
         if (decoded == null) {
           throw Exception('Не удалось декодировать изображение для сохранения');
         }
-        bytes =
-            Uint8List.fromList(img.encodePng(decoded, level: 0)); // Без сжатия
+        bytes = Uint8List.fromList(img.encodePng(decoded, level: 0));
       } else {
         final decoded = img.decodeImage(_currentImage.value!);
         if (decoded == null) {
@@ -672,7 +640,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Запрос разрешений
   Future<bool> _requestPermissions() async {
     if (Platform.isAndroid) {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
@@ -698,7 +665,6 @@ class _EditPageState extends State<EditPage> {
     return true;
   }
 
-// Сохранение изображения в галерею
   Future<void> _saveImageToGallery(Uint8List bytes,
       {required String format}) async {
     final localizations = AppLocalizations.of(context);
@@ -727,7 +693,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Поделиться изображением
   Future<void> _shareImage() async {
     final localizations = AppLocalizations.of(context);
     if (!_isInitialized.value || !mounted || _currentImage.value == null) {
@@ -767,7 +732,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Скачивание изображения на веб-платформе
   Future<void> _downloadImageWeb(Uint8List bytes,
       {required String format}) async {
     final localizations = AppLocalizations.of(context);
@@ -776,10 +740,10 @@ class _EditPageState extends State<EditPage> {
       String mimeType;
 
       if (format == 'JPEG') {
-        formattedBytes = bytes; // Уже в высоком качестве
+        formattedBytes = bytes;
         mimeType = 'image/jpeg';
       } else {
-        formattedBytes = bytes; // Уже в высоком качестве
+        formattedBytes = bytes;
         mimeType = 'image/png';
       }
 
@@ -797,7 +761,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Обработка выбора инструмента
   void _handleToolSelected(String tool) {
     final localizations = AppLocalizations.of(context);
     if (_currentImage.value == null || _currentImage.value!.isEmpty) {
@@ -817,12 +780,10 @@ class _EditPageState extends State<EditPage> {
     _showToolsPanel.value = false;
   }
 
-// Закрытие панели инструментов
   void _closeToolPanel() {
     _activeTool.value = null;
   }
 
-// Подтверждение навигации назад
   Future<void> _confirmBackNavigation() async {
     final localizations = AppLocalizations.of(context);
 
@@ -868,7 +829,6 @@ class _EditPageState extends State<EditPage> {
     }
   }
 
-// Показ истории редактирования
   void _showEditHistory() async {
     final localizations = AppLocalizations.of(context);
 
@@ -1063,21 +1023,29 @@ class _EditPageState extends State<EditPage> {
                                   child: SizedBox(
                                     width: size.width,
                                     height: size.height,
-                                    child: Image.memory(
-                                      image,
-                                      gaplessPlayback: true,
-                                      fit: BoxFit.contain,
-                                      errorBuilder:
-                                          (context, error, stackTrace) => Text(
-                                        '${localizations?.error ?? 'Ошибка загрузки изображения'}: $error',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: ResponsiveUtils
-                                              .getResponsiveFontSize(
-                                                  context, 16),
-                                        ),
-                                      ),
-                                    ),
+                                    child: _imageLoaded
+                                        ? Image.memory(
+                                            image,
+                                            key: ValueKey(image.hashCode),
+                                            gaplessPlayback: true,
+                                            fit: BoxFit.contain,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                              debugPrint(
+                                                  'Error displaying image: $error');
+                                              return Text(
+                                                '${localizations?.error ?? 'Ошибка загрузки изображения'}: $error',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: ResponsiveUtils
+                                                      .getResponsiveFontSize(
+                                                          context, 16),
+                                                ),
+                                              );
+                                            },
+                                          )
+                                        : const CircularProgressIndicator(
+                                            color: Colors.white),
                                   ),
                                 ),
                               ),
@@ -1287,7 +1255,6 @@ class _EditPageState extends State<EditPage> {
     );
   }
 
-// Захват изображения
   Future<Uint8List> captureImage() async {
     try {
       if (_currentImage.value == null || _currentImage.value!.isEmpty) {
@@ -1301,3 +1268,4 @@ class _EditPageState extends State<EditPage> {
     }
   }
 }
+

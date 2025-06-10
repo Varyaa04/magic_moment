@@ -124,7 +124,6 @@ class _CropPanelState extends State<CropPanel> {
     }
   }
 
-// В классе _CropPanelState
 
   void _updateCropRect(Offset delta, DragHandle handle) {
     if (!mounted) return;
@@ -486,10 +485,8 @@ class _CropPanelState extends State<CropPanel> {
     final cropRect = params['cropRect'] as Map<String, dynamic>;
 
     try {
-// Decode image using the image package
       final image = img.decodeImage(imageBytes)!;
 
-// Crop the image
       final cropped = img.copyCrop(
         image,
         x: cropRect['left'].toInt(),
@@ -498,7 +495,6 @@ class _CropPanelState extends State<CropPanel> {
         height: cropRect['height'].toInt(),
       );
 
-// Encode back to PNG
       final result = img.encodePng(cropped);
       return {'bytes': result};
     } catch (e) {

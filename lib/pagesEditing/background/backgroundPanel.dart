@@ -73,7 +73,10 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
           color: Colors.redAccent,
           size: isDesktop ? 28 : 24,
         ),
-        onPressed: widget.onCancel,
+        onPressed: () {
+          debugPrint('Canceling BackgroundPanel');
+          widget.onCancel();
+        },
         tooltip: localizations?.cancel ?? 'Cancel',
       ),
       title: Text(
@@ -114,6 +117,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
             label: localizations?.removeBackground ?? 'Remove',
             onTap: () async {
               if (!mounted) return;
+              debugPrint('Navigating to RemoveBackgroundPage');
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -122,14 +126,17 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                     imageId: widget.imageId,
                     onCancel: () => Navigator.pop(context),
                     onApply: (image) {
+                      debugPrint('onApply called with image size: ${image.length} bytes');
                       Navigator.pop(context, image);
                     },
                     onUpdateImage: widget.onUpdateImage,
                   ),
                 ),
               );
+              debugPrint('Received result from RemoveBackgroundPage: ${result?.length ?? 'null'} bytes');
               if (!mounted || result == null || (result as Uint8List).isEmpty) {
                 if (mounted) {
+                  debugPrint('Error: Result is null or empty');
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -140,6 +147,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
+              debugPrint('Calling onUpdateImage and onApply for EditPage');
               await widget.onUpdateImage(
                 result,
                 action: localizations?.removeBackground ?? 'Remove Background',
@@ -147,6 +155,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 parameters: {},
               );
               widget.onApply(result);
+              debugPrint('Returning to EditPage');
             },
           ),
           _buildOptionButton(
@@ -154,6 +163,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
             label: localizations?.changeBackground ?? 'Change',
             onTap: () async {
               if (!mounted) return;
+              debugPrint('Navigating to ChangeBackgroundPage');
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -162,14 +172,17 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                     imageId: widget.imageId,
                     onCancel: () => Navigator.pop(context),
                     onApply: (image) {
+                      debugPrint('onApply called with image size: ${image.length} bytes');
                       Navigator.pop(context, image);
                     },
                     onUpdateImage: widget.onUpdateImage,
                   ),
                 ),
               );
+              debugPrint('Received result from ChangeBackgroundPage: ${result?.length ?? 'null'} bytes');
               if (!mounted || result == null || (result as Uint8List).isEmpty) {
                 if (mounted) {
+                  debugPrint('Error: Result is null or empty');
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -180,6 +193,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
+              debugPrint('Calling onUpdateImage and onApply for EditPage');
               await widget.onUpdateImage(
                 result,
                 action: localizations?.changeBackground ?? 'Change Background',
@@ -187,6 +201,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 parameters: {},
               );
               widget.onApply(result);
+              debugPrint('Returning to EditPage');
             },
           ),
           _buildOptionButton(
@@ -194,6 +209,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
             label: localizations?.blurBackground ?? 'Blur',
             onTap: () async {
               if (!mounted) return;
+              debugPrint('Navigating to BlurBackgroundPage');
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -202,14 +218,17 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                     imageId: widget.imageId,
                     onCancel: () => Navigator.pop(context),
                     onApply: (image) {
+                      debugPrint('onApply called with image size: ${image.length} bytes');
                       Navigator.pop(context, image);
                     },
                     onUpdateImage: widget.onUpdateImage,
                   ),
                 ),
               );
+              debugPrint('Received result from BlurBackgroundPage: ${result?.length ?? 'null'} bytes');
               if (!mounted || result == null || (result as Uint8List).isEmpty) {
                 if (mounted) {
+                  debugPrint('Error: Result is null or empty');
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -220,6 +239,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 }
                 return;
               }
+              debugPrint('Calling onUpdateImage and onApply for EditPage');
               await widget.onUpdateImage(
                 result,
                 action: localizations?.blurBackground ?? 'Blur Background',
@@ -227,6 +247,7 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
                 parameters: {},
               );
               widget.onApply(result);
+              debugPrint('Returning to EditPage');
             },
           ),
         ],

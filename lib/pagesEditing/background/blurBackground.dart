@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:MagicMoment/database/editHistory.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import '../editPage.dart';
 import 'base_background_editor.dart';
 
 class BlurBackgroundPage extends BaseBackgroundEditor {
@@ -28,14 +29,13 @@ class BlurBackgroundPage extends BaseBackgroundEditor {
   State<BlurBackgroundPage> createState() => _BlurBackgroundState();
 }
 
-class _BlurBackgroundState
-    extends BaseBackgroundEditorState<BlurBackgroundPage> {
+class _BlurBackgroundState extends BaseBackgroundEditorState<BlurBackgroundPage> {
   double _blurValue = 10.0;
   bool _isProcessing = false;
   Uint8List? _processedImage;
   String? _errorMessage;
   bool _isInitialized = false;
-  bool _isActive = true; // Track page activity
+  bool _isActive = true;
 
   @override
   void initState() {
@@ -53,12 +53,10 @@ class _BlurBackgroundState
   }
 
   Future<void> _initialize() async {
-    debugPrint(
-        'Initializing BlurBackgroundPage with image size: ${widget.image.length} bytes');
+    debugPrint('Initializing BlurBackgroundPage with image size: ${widget.image.length} bytes');
     try {
       if (widget.image.isEmpty) {
-        throw Exception(
-            AppLocalizations.of(context)?.noImages ?? 'No image provided');
+        throw Exception(AppLocalizations.of(context)?.noImages ?? 'No image provided');
       }
       historyStack.add({
         'image': widget.image,
@@ -95,58 +93,77 @@ class _BlurBackgroundState
     return localizations?.blurBackgroundTitle ?? 'Blur background';
   }
 
-  Future<Uint8List?> _getBackgroundMask(
-      {int attempt = 1, int maxAttempts = 3}) async {
+  Future<Uint8List?> _resizeImage(Uint8List imageData, {int maxWidth = 1080, bool preserveTransparency = false}) async {
+    try {
+      final decoded = img.decodeImage(imageData);
+      if (decoded == null) {
+        debugPrint('Failed to decode image in _resizeImage');
+        return null;
+      }
+      final resized = img.copyResize(decoded, width: maxWidth, maintainAspect: true);
+      final compressed = preserveTransparency ? img.encodePng(resized, level: 6) : img.encodeJpg(resized, quality: 80);
+      debugPrint('Resized image: size=${compressed.length} bytes');
+      return Uint8List.fromList(compressed);
+    } catch (e, stackTrace) {
+      debugPrint('Error resizing image: $e\nStack: $stackTrace');
+      return null;
+    }
+  }
+
+  Future<Uint8List?> _getBackgroundMask({int attempt = 1, int maxAttempts = 5}) async {
     try {
       final apiKey = dotenv.env['CLIPDROP_API_KEY'];
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('ClipDrop API key is not configured in .env file');
       }
 
-      debugPrint(
-          'Sending mask request (attempt $attempt) to ${widget.apiEndpoint}');
-      final request =
-      http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
+      final resizedImage = await _resizeImage(widget.image, maxWidth: 1024, preserveTransparency: true);
+      if (resizedImage == null) {
+        throw Exception('Failed to resize image for API call');
+      }
+
+      debugPrint('Sending mask request (attempt $attempt) to ${widget.apiEndpoint} with image size: ${resizedImage.length} bytes');
+      final request = http.MultipartRequest('POST', Uri.parse(widget.apiEndpoint));
       request.headers['x-api-key'] = apiKey;
       request.files.add(http.MultipartFile.fromBytes(
         'image_file',
-        widget.image,
+        resizedImage,
         filename: 'image.png',
       ));
 
-      final response =
-      await request.send().timeout(const Duration(seconds: 30));
-      debugPrint(
-          'Mask API response status: ${response.statusCode}, content length: ${response.contentLength}');
+      final response = await request.send().timeout(const Duration(seconds: 30));
+      debugPrint('Mask API response status: ${response.statusCode}, content length: ${response.contentLength}');
       final responseBody = await http.Response.fromStream(response);
 
       if (response.statusCode == 200) {
         if (responseBody.bodyBytes.isEmpty) {
           throw Exception('Empty mask response from ClipDrop API');
         }
+        // Debug: Save mask to file for inspection
+        if (!kIsWeb) {
+          final tempDir = await Directory.systemTemp.createTemp();
+          final maskPath = '${tempDir.path}/mask_${DateTime.now().millisecondsSinceEpoch}.png';
+          await File(maskPath).writeAsBytes(responseBody.bodyBytes);
+          debugPrint('Saved mask to $maskPath for inspection');
+        }
         return responseBody.bodyBytes;
       } else if (response.statusCode == 429 && attempt < maxAttempts) {
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _getBackgroundMask(
-            attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _getBackgroundMask(attempt: attempt + 1, maxAttempts: maxAttempts);
       } else {
-        throw Exception(
-            'ClipDrop API error ${response.statusCode}: ${responseBody.body}');
+        throw Exception('ClipDrop API error ${response.statusCode}: ${responseBody.body}');
       }
     } catch (e, stackTrace) {
-      debugPrint(
-          'Error getting background mask (attempt $attempt): $e\n$stackTrace');
+      debugPrint('Error getting background mask (attempt $attempt): $e\n$stackTrace');
       if (attempt < maxAttempts) {
         await Future.delayed(Duration(seconds: attempt * 2));
-        return _getBackgroundMask(
-            attempt: attempt + 1, maxAttempts: maxAttempts);
+        return _getBackgroundMask(attempt: attempt + 1, maxAttempts: maxAttempts);
       }
       rethrow;
     }
   }
 
-  static Future<Uint8List> _applyBlurIsolate(
-      Map<String, dynamic> params) async {
+  static Future<Uint8List> _applyBlurIsolate(Map<String, dynamic> params) async {
     final originalBytes = params['original'] as Uint8List;
     final maskBytes = params['mask'] as Uint8List;
     final blurValue = params['blurValue'] as double;
@@ -158,24 +175,132 @@ class _BlurBackgroundState
       throw Exception('Failed to decode images in isolate');
     }
 
+    // Ensure mask matches original image dimensions
+    img.Image resizedMask = mask;
+    if (original.width != mask.width || original.height != mask.height) {
+      debugPrint('Resizing mask to match original dimensions: ${original.width}x${original.height}');
+      resizedMask = img.copyResize(mask, width: original.width, height: original.height);
+    }
+
+    // Preprocess mask to ensure binary separation (threshold at 128)
+    final thresholdedMask = img.Image.from(resizedMask);
+    int foregroundCount = 0;
+    int backgroundCount = 0;
+    for (int y = 0; y < thresholdedMask.height; y++) {
+      for (int x = 0; x < thresholdedMask.width; x++) {
+        final pixel = thresholdedMask.getPixelSafe(x, y);
+        final alpha = pixel.a;
+        // Assume ClipDrop mask has foreground as white (high alpha) and background as black (low alpha)
+        // Threshold to create a binary mask
+        if (alpha >= 128) {
+          thresholdedMask.setPixel(x, y, img.ColorRgb8(255, 255, 255));
+          foregroundCount++;
+        } else {
+          thresholdedMask.setPixel(x, y, img.ColorRgb8(0, 0, 0));
+          backgroundCount++;
+        }
+      }
+    }
+    debugPrint('Mask analysis: foreground pixels=$foregroundCount, background pixels=$backgroundCount');
+
+    // Create blurred image
     final blurredImage = img.gaussianBlur(original, radius: blurValue.round());
-    final resultImage =
-    img.Image(width: original.width, height: original.height);
+    final resultImage = img.Image(width: original.width, height: original.height);
+
+    // Apply blur only to background (alpha == 0 in thresholded mask)
     for (int y = 0; y < original.height; y++) {
       for (int x = 0; x < original.width; x++) {
-        final maskPixel = mask.getPixelSafe(x, y);
-        if (maskPixel.a > 128) {
+        final maskPixel = thresholdedMask.getPixelSafe(x, y);
+        final alpha = maskPixel.a;
+        if (alpha >= 128) { // Foreground (white in mask)
           resultImage.setPixel(x, y, original.getPixel(x, y));
-        } else {
+        } else { // Background (black in mask)
           resultImage.setPixel(x, y, blurredImage.getPixel(x, y));
         }
       }
     }
+
     return img.encodePng(resultImage);
   }
 
+  Widget _buildBottomPanel(ThemeData theme, AppLocalizations? localizations) {
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+    return Container(
+      constraints: BoxConstraints(
+        minHeight: isDesktop ? 100 : 80,
+        maxHeight: isDesktop ? 100 : 80,
+      ),
+      padding: EdgeInsets.symmetric(
+        vertical: isDesktop ? 8 : 4,
+        horizontal: isDesktop ? 20 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SliderRow(
+            title: localizations?.blurIntensity ?? 'Blur Intensity',
+            value: _blurValue,
+            min: 5,
+            max: 30,
+            divisions: 25,
+            onChanged: _isProcessing || !_isActive ? null : (value) {
+              if (mounted) {
+                setState(() {
+                  _blurValue = value;
+                });
+              }
+            },
+            isDesktop: isDesktop,
+          ),
+          const SizedBox(height: 6),
+          Center(
+            child: ElevatedButton.icon(
+              onPressed: _isProcessing || !_isActive ? null : _processImage,
+              icon: Icon(
+                Icons.blur_on,
+                color: Colors.white,
+                size: isDesktop ? 20 : 16,
+              ),
+              label: Text(
+                _getActionName(localizations),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isDesktop ? 12 : 10,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.withOpacity(0.7),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop ? 12 : 8,
+                  vertical: isDesktop ? 8 : 6,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _processImage() async {
-    if (_isProcessing || !_isInitialized || !_isActive) return;
+    if (_isProcessing || !_isInitialized || !_isActive) {
+      debugPrint('Cannot process image: already processing or not initialized');
+      return;
+    }
     if (!mounted) {
       debugPrint('BlurBackgroundPage not mounted, aborting _processImage');
       return;
@@ -201,14 +326,16 @@ class _BlurBackgroundState
         throw Exception('Failed to decode mask image');
       }
 
-      if (originalImage.width != maskImage.width ||
-          originalImage.height != maskImage.height) {
-        throw Exception('Original image and mask dimensions do not match');
+      // Ensure mask matches original image dimensions
+      img.Image resizedMask = maskImage;
+      if (originalImage.width != maskImage.width || originalImage.height != maskImage.height) {
+        debugPrint('Mask dimensions (${maskImage.width}x${maskImage.height}) do not match original (${originalImage.width}x${originalImage.height}), resizing mask...');
+        resizedMask = img.copyResize(maskImage, width: originalImage.width, height: originalImage.height);
       }
 
       final isolateParams = {
         'original': Uint8List.fromList(img.encodePng(originalImage)),
-        'mask': Uint8List.fromList(img.encodePng(maskImage)),
+        'mask': Uint8List.fromList(img.encodePng(resizedMask)),
         'blurValue': _blurValue,
       };
 
@@ -219,8 +346,7 @@ class _BlurBackgroundState
         throw Exception('Failed to decode result image');
       }
 
-      final processedBytes =
-      Uint8List.fromList(img.encodePng(resultImageDecoded));
+      final processedBytes = Uint8List.fromList(img.encodePng(resultImageDecoded));
       if (processedBytes.isEmpty) {
         throw Exception('Failed to encode blurred image');
       }
@@ -235,8 +361,7 @@ class _BlurBackgroundState
       List<int>? snapshotBytes;
       if (!kIsWeb) {
         final tempDir = await Directory.systemTemp.createTemp();
-        snapshotPath =
-        '${tempDir.path}/blur_bg_${DateTime.now().millisecondsSinceEpoch}.png';
+        snapshotPath = '${tempDir.path}/blur_bg_${DateTime.now().millisecondsSinceEpoch}.png';
         final file = File(snapshotPath);
         await file.writeAsBytes(processedBytes);
         if (!await file.exists()) {
@@ -277,6 +402,7 @@ class _BlurBackgroundState
       });
 
       if (mounted && _isActive) {
+        debugPrint('Calling onApply and onUpdateImage');
         widget.onApply(processedBytes);
         await widget.onUpdateImage(
           processedBytes,
@@ -285,8 +411,9 @@ class _BlurBackgroundState
           parameters: {'blur_value': _blurValue, 'historyId': historyId},
         );
         if (mounted && _isActive) {
-          debugPrint('Navigating back from BlurBackgroundPage after apply');
-          widget.onCancel();
+          debugPrint('Navigating back to BackgroundPanel with result');
+          _isActive = false;
+          Navigator.pop(context, processedBytes);
         }
       }
     } catch (e, stackTrace) {
@@ -353,14 +480,13 @@ class _BlurBackgroundState
                 ElevatedButton(
                   onPressed: () {
                     if (mounted && _isActive) {
-                      debugPrint('Navigating back from BlurBackgroundPage on error');
-                      widget.onCancel();
+                      debugPrint('Navigating back to BackgroundPanel on error');
+                      Navigator.pop(context);
                     }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red[700],
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   child: Text(
                     localizations?.close ?? 'Close',
@@ -388,12 +514,10 @@ class _BlurBackgroundState
                     _processedImage!,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      debugPrint(
-                          'Error displaying processed image: $error');
+                      debugPrint('Error displaying processed image: $error');
                       return Center(
                         child: Text(
-                          localizations?.invalidImage ??
-                              'Failed to load image',
+                          localizations?.invalidImage ?? 'Failed to load image',
                           style: const TextStyle(color: Colors.white),
                         ),
                       );
@@ -403,12 +527,10 @@ class _BlurBackgroundState
                     widget.image,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      debugPrint(
-                          'Error displaying original image: $error');
+                      debugPrint('Error displaying original image: $error');
                       return Center(
                         child: Text(
-                          localizations?.invalidImage ??
-                              'Failed to load image',
+                          localizations?.invalidImage ?? 'Failed to load image',
                           style: const TextStyle(color: Colors.white),
                         ),
                       );
@@ -454,9 +576,9 @@ class _BlurBackgroundState
         ),
         onPressed: () {
           if (mounted && _isActive) {
-            debugPrint('Navigating back from BlurBackgroundPage via cancel');
+            debugPrint('Navigating back to BackgroundPanel via cancel');
             _isActive = false;
-            widget.onCancel();
+            Navigator.pop(context);
           }
         },
         tooltip: localizations?.cancel ?? 'Cancel',
@@ -472,9 +594,7 @@ class _BlurBackgroundState
         IconButton(
           icon: Icon(
             Icons.undo,
-            color: historyIndex > 0 && !_isProcessing
-                ? Colors.white
-                : Colors.grey[700],
+            color: historyIndex > 0 && !_isProcessing ? Colors.white : Colors.grey[700],
             size: isDesktop ? 28 : 24,
           ),
           onPressed: historyIndex > 0 && !_isProcessing && _isActive ? undo : null,
@@ -483,99 +603,22 @@ class _BlurBackgroundState
         IconButton(
           icon: Icon(
             Icons.check,
-            color: _processedImage != null && !_isProcessing
-                ? Colors.green
-                : Colors.grey[700],
+            color: _processedImage != null && !_isProcessing ? Colors.green : Colors.grey[700],
             size: isDesktop ? 28 : 24,
           ),
-          onPressed: _processedImage != null &&
-              !_isProcessing &&
-              mounted &&
-              _isActive
+          onPressed: _processedImage != null && !_isProcessing && mounted && _isActive
               ? () {
             if (mounted && _isActive) {
+              debugPrint('Applying processed image');
               widget.onApply(_processedImage!);
-              debugPrint(
-                  'Navigating back from BlurBackgroundPage via apply');
               _isActive = false;
-              widget.onCancel();
+              Navigator.pop(context, _processedImage!);
             }
           }
               : null,
           tooltip: localizations?.apply ?? 'Apply',
         ),
       ],
-    );
-  }
-
-  Widget _buildBottomPanel(ThemeData theme, AppLocalizations? localizations) {
-    final isDesktop = MediaQuery.of(context).size.width > 600;
-    return Container(
-      height: isDesktop ? 120 : 100,
-      padding: EdgeInsets.symmetric(
-        vertical: isDesktop ? 12 : 6,
-        horizontal: isDesktop ? 24 : 16,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          SliderRow(
-            title: localizations?.blurIntensity ?? 'Blur Intensity',
-            value: _blurValue,
-            min: 5,
-            max: 50,
-            divisions: 45,
-            onChanged: _isProcessing || !_isActive
-                ? null
-                : (value) {
-              if (mounted) {
-                setState(() {
-                  _blurValue = value;
-                });
-              }
-            },
-            isDesktop: isDesktop,
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: _isProcessing || !_isActive ? null : _processImage,
-              icon: Icon(
-                Icons.blur_on,
-                color: Colors.white,
-                size: isDesktop ? 24 : 20,
-              ),
-              label: Text(
-                _getActionName(localizations),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isDesktop ? 14 : 12,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.withOpacity(0.7),
-                padding: EdgeInsets.symmetric(
-                  horizontal: isDesktop ? 16 : 12,
-                  vertical: isDesktop ? 12 : 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -608,7 +651,7 @@ class SliderRow extends StatelessWidget {
           title,
           style: TextStyle(
             color: Colors.white,
-            fontSize: isDesktop ? 16 : 14,
+            fontSize: isDesktop ? 14 : 12, // Reduced font size
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -631,7 +674,7 @@ class SliderRow extends StatelessWidget {
             value.round().toString(),
             style: TextStyle(
               color: Colors.white,
-              fontSize: isDesktop ? 16 : 14,
+              fontSize: isDesktop ? 14 : 12, // Reduced font size
             ),
           ),
         ),
