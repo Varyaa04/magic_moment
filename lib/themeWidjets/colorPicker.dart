@@ -114,7 +114,7 @@ class _ColorPickerState extends State<ColorPicker> {
         // Ползунок оттенка
         Container(
           height: sliderHeight,
-          constraints: const BoxConstraints(maxWidth: 300),
+          constraints: const BoxConstraints(maxWidth: 200),
           margin: EdgeInsets.symmetric(horizontal: padding),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
@@ -164,9 +164,9 @@ class _ColorPickerState extends State<ColorPicker> {
                 ),
                 Container(
                   height: sliderHeight,
-                  constraints: const BoxConstraints(maxWidth: 300),
+                  constraints: const BoxConstraints(maxWidth: 250),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(4),
                     gradient: LinearGradient(
                       colors: [
                         Colors.transparent,

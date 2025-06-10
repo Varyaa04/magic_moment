@@ -137,6 +137,7 @@ class _EditPageState extends State<EditPage> {
   int _currentHistoryIndex = -1;
   final int _maxHistorySteps = 20;
   bool _isHistoryEnabled = true;
+  bool _isAddingToHistory = false; // Новый флаг для предотвращения дублирования
   final LRUCache<int, Uint8List> _imageCache = LRUCache(10);
   bool _imageLoaded = false;
 
@@ -300,7 +301,28 @@ class _EditPageState extends State<EditPage> {
     }
     if (!mounted || listEquals(_currentImage.value, newImage)) return;
 
-    setState(() => _isProcessing.value = true);
+// Проверка на дублирование с последней записью
+    if (_cachedHistory.isNotEmpty &&
+        _cachedHistory.last.snapshotBytes != null &&
+        listEquals(
+            Uint8List.fromList(_cachedHistory.last.snapshotBytes!), newImage)) {
+      debugPrint(
+          'Пропуск дублирующего изображения для операции: $operationType');
+      return;
+    }
+
+// Проверка, не добавляется ли уже запись в историю
+    if (_isAddingToHistory) {
+      debugPrint(
+          'Операция добавления в историю уже выполняется, пропуск: $operationType');
+      return;
+    }
+
+    setState(() {
+      _isProcessing.value = true;
+      _isAddingToHistory = true;
+    });
+
     try {
       final bool preserveTransparency = operationType == 'Eraser' ||
           operationType == 'object_removal' ||
@@ -313,7 +335,7 @@ class _EditPageState extends State<EditPage> {
           operationType == 'Draw' ||
           operationType == 'Filter' ||
           operationType == 'Rotate' ||
-          operationType == 'Adjustments' ;
+          operationType == 'Adjustments';
 
       final bytes = await _compressImage(newImage,
           quality: 70,
@@ -360,7 +382,10 @@ class _EditPageState extends State<EditPage> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isProcessing.value = false);
+        setState(() {
+          _isProcessing.value = false;
+          _isAddingToHistory = false;
+        });
       }
     }
   }

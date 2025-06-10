@@ -838,8 +838,8 @@ class _ColorPickerDialogState extends State<ColorPickerDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 250,
-              height: 250,
+              width: 330,
+              height: 330,
               margin: const EdgeInsets.only(bottom: 16),
               child: ColorPicker(
                 pickerColor: _selectedColor,
