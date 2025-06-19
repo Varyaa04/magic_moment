@@ -86,6 +86,7 @@ class _FiltersPanelState extends State<FiltersPanel> {
       'Sepia': sepium,
       'Contrast': contrast,
       'Vintage': vintage,
+      'Monochrome Elegance': monochromeElegance,
     },
     'Color': {
       'Purple': purple,
@@ -94,6 +95,8 @@ class _FiltersPanelState extends State<FiltersPanel> {
       'Cool Blue': coolBlue,
       'Warm Sunset': warmSunset,
       'Fresh Mint': freshMint,
+      'Playful Colors': playfulColors,
+      'Vibrant Mood': vibrantMood,
     },
     'Mood': {
       'Old Times': oldTimes,
@@ -102,6 +105,9 @@ class _FiltersPanelState extends State<FiltersPanel> {
       'Ice': ice,
       'Sadness': sadness,
       'Bright Day': brightDay,
+      'Quiet Night': quietNight,
+      'Summer Freshness': summerFreshness,
+      'Vibrant Life': vibrantLife,
     },
     'Artistic': {
       'Retro': retro,
@@ -110,6 +116,8 @@ class _FiltersPanelState extends State<FiltersPanel> {
       'Heatwave': heatwave,
       'Graphite': graphite,
       'Anxiety': anxiety,
+      'Artistic Blend': artisticBlend,
+      'Retro Look': retroLook,
     },
     'Special': {
       'Milk': milk,
@@ -118,7 +126,46 @@ class _FiltersPanelState extends State<FiltersPanel> {
       'Mushroom': mushroom,
       'Cold Light': coldLight,
       'Serenity': serenity,
-    }
+      'Ethereal Glow': etherealGlow,
+      'Soft Glow': softGlow,
+    },
+    'Cinematic': {
+      'Golden Hour': goldenHour,
+      'Film Noir': filmNoir,
+      'Blockbuster': blockbuster,
+      'Teal & Orange': tealOrange,
+      'Epic Drama': epicDrama,
+      'Vintage Film': vintageFilm,
+    },
+    'Pastel': {
+      'Cotton Candy': cottonCandy,
+      'Lavender Dream': lavenderDream,
+      'Peach Blush': peachBlush,
+      'Mint Glow': mintGlow,
+      'Soft Coral': softCoral,
+      'Serene Pastels': serenePastels,
+    },
+    'Urban': {
+      'City Vibes': cityVibes,
+      'Neon Nights': neonNights,
+      'Concrete Jungle': concreteJungle,
+      'Urban Glow': urbanGlow,
+      'Street Haze': streetHaze,
+    },
+    'Surreal': {
+      'Dreamscape': dreamscape,
+      'Neon Dream': neonDream,
+      'Cosmic Vibes': cosmicVibes,
+      'Surreal Pop': surrealPop,
+      'Mystic Haze': mysticHaze,
+    },
+    'Nature': {
+      'Forest Glow': forestGlow,
+      'Ocean Breeze': oceanBreeze,
+      'Autumn Crisp': autumnCrisp,
+      'Meadow Light': meadowLight,
+      'Desert Heat': desertHeat,
+    },
   };
 
   @override
