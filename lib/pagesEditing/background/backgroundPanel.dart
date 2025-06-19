@@ -137,13 +137,6 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
               if (!mounted || result == null || (result as Uint8List).isEmpty) {
                 if (mounted) {
                   debugPrint('Error: Result is null or empty');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                          localizations?.error ?? 'Error processing image'),
-                      backgroundColor: Colors.red[700],
-                    ),
-                  );
                 }
                 return;
               }
@@ -175,13 +168,6 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
               if (!mounted || result == null || (result as Uint8List).isEmpty) {
                 if (mounted) {
                   debugPrint('Error: Result is null or empty');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                          localizations?.error ?? 'Error processing image'),
-                      backgroundColor: Colors.red[700],
-                    ),
-                  );
                 }
                 return;
               }
@@ -213,13 +199,6 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
               if (!mounted || result == null || (result as Uint8List).isEmpty) {
                 if (mounted) {
                   debugPrint('Error: Result is null or empty');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                          localizations?.error ?? 'Error processing image'),
-                      backgroundColor: Colors.red[700],
-                    ),
-                  );
                 }
                 return;
               }
