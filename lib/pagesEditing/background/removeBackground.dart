@@ -9,6 +9,7 @@ import 'package:MagicMoment/database/editHistory.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'package:image/image.dart' as img;
+import '../../themeWidjets/helpTooltip.dart';
 import 'base_background_editor.dart';
 
 class RemoveBackgroundPage extends BaseBackgroundEditor {
@@ -441,6 +442,13 @@ class _RemoveBackgroundPageState
         ),
       ),
       actions: [
+        HelpTooltip(
+          message: localizations?.removeBackgroundHelp ??
+              'This tool will automatically remove the background from your image.\n'
+                  'Press the Remove button to process the image.\n'
+                  'The result will be an image with transparent background.',
+          iconSize: isDesktop ? 28 : 24,
+        ),
         IconButton(
           icon: Icon(
             Icons.undo,

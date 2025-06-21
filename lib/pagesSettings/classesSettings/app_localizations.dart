@@ -251,7 +251,47 @@ class AppLocalizations {
       'continueText': 'Continue',
       'permissionPermanentlyDenied': 'The permission was permanently denied. Please enable it in the app settings.',
       'noHistory': 'History is empty',
-
+      'cancelTooltip': 'Cancel and return',
+      'applyTooltip': 'Apply changes',
+      'undoTooltip': 'Undo last action',
+      'closeTooltip': 'Close the editor',
+      'showTooltips': 'Show tooltips',
+      'hideTooltips': 'Hide tooltips',
+      'blurIntensityTooltip': 'Adjust the intensity of the background blur',
+      'removeBackgroundTooltip': 'Remove the background',
+      'changeBackgroundTooltip': 'Change the background',
+      'blurBackgroundTooltip': 'Blur the background',
+      'sizeTooltip': 'Adjust the brush size',
+      'eraserTooltip': 'Manually erase parts of the image',
+      'removeObjectTooltip': 'Remove selected objects automatically',
+      'selectBackgroundTooltip': 'Choose a new background image',
+      'temperature': 'Temperature',
+      'tint': 'Shade',
+      'shadows': 'Shadows',
+      'highlights': 'Highlights',
+      'sharpen': 'Sharpness',
+      'vignette': 'Vignetting',
+      'help': 'Help',
+      'backgroundHelp': 'Use this panel to modify the background:\n'
+          '- Remove: completely removes the background\n'
+          '- Change: replace background with another image\n'
+          '- Blur: applies blur effect to the background',
+      'blurBackgroundHelp': 'Adjust the blur intensity using the slider.\n'
+          'Higher values create stronger blur effect.\n'
+          'Press Apply when you\'re satisfied with the result.',
+      'changeBackgroundHelp': '1. Select an image from your gallery to use as new background\n'
+          '2. Press the Apply button to confirm changes\n'
+          'You can undo the last action if needed',
+      'removeBackgroundHelp': 'This tool will automatically remove the background from your image.\n'
+          'Press the Remove button to process the image.\n'
+          'The result will be an image with transparent background.',
+      'eraserHelp': 'Two modes available:\n'
+          '1. Eraser - removes parts of the image\n'
+          '2. Object Removal - AI-powered object removal\n\n'
+          'Adjust brush size with the slider.\n'
+          'Press Apply when finished.',
+      'basic' : 'Basic',
+      'threshold' : 'Threshold',
     },
     'ru': {
       'app_title': 'Язык приложения',
@@ -491,7 +531,47 @@ class AppLocalizations {
       'continueText': 'Продолжить',
       'permissionPermanentlyDenied': 'Доступ был окончательно запрещен. Пожалуйста, включите его в настройках приложения.',
       'noHistory': 'История пуста',
-
+      'cancelTooltip': 'Отменить и вернуться',
+      'applyTooltip': 'Применить изменения',
+      'undoTooltip': 'Отменить последнее действие',
+      'closeTooltip': 'Закрыть редактор',
+      'showTooltips': 'Показать подсказки',
+      'hideTooltips': 'Скрыть подсказки',
+      'blurIntensityTooltip': 'Настроить интенсивность размытия фона',
+      'removeBackgroundTooltip': 'Удалить фон',
+      'changeBackgroundTooltip': 'Изменить фон',
+      'blurBackgroundTooltip': 'Размыть фон',
+      'sizeTooltip': 'Настроить размер кисти',
+      'eraserTooltip': 'Ручное удаление частей изображения',
+      'removeObjectTooltip': 'Автоматическое удаление выбранных объектов',
+      'selectBackgroundTooltip': 'Выбрать новое изображение для фона',
+      'temperature': 'Температура',
+      'tint': 'Оттенок',
+      'shadows': 'Тени',
+      'highlights': 'Блики',
+      'sharpen': 'Резкость',
+      'vignette': 'Виньетирование',
+      'help': 'Подсказки',
+      'backgroundHelp': 'Используйте эту панель для изменения фона:\n'
+          '- Удалить: полностью убирает фон\n'
+          '- Заменить: меняет фон на другое изображение\n'
+          '- Размыть: применяет эффект размытия к фону',
+      'blurBackgroundHelp': 'Регулируйте интенсивность размытия с помощью ползунка.\n'
+          'Большие значения создают более сильный эффект размытия.\n'
+          'Нажмите "Применить", когда результат вас устроит.',
+      'changeBackgroundHelp': '1. Выберите изображение из галереи в качестве нового фона\n'
+          '2. Нажмите кнопку "Применить" для подтверждения изменений\n'
+          'Вы можете отменить последнее действие при необходимости',
+      'removeBackgroundHelp': 'Этот инструмент автоматически удалит фон с вашего изображения.\n'
+          'Нажмите кнопку "Удалить" для обработки изображения.\n'
+          'Результатом будет изображение с прозрачным фоном.',
+      'eraserHelp': 'Доступно два режима:\n'
+          '1. Ластик - удаляет части изображения\n'
+          '2. Удаление объектов - автоматическое удаление объектов\n\n'
+          'Регулируйте размер кисти с помощью ползунка.\n'
+          'Нажмите "Применить" по завершении.',
+      'basic' : 'Основные',
+      'threshold' : 'Порог',
     },
   };
 
@@ -740,7 +820,34 @@ class AppLocalizations {
   String get continueText => _localizedValues[locale.languageCode]!['continueText']!;
   String get permissionPermanentlyDenied => _localizedValues[locale.languageCode]!['permissionPermanentlyDenied']!;
   String get noHistory => _localizedValues[locale.languageCode]!['noHistory']!;
-
+  String get cancelTooltip => _localizedValues[locale.languageCode]!['cancelTooltip']!;
+  String get applyTooltip => _localizedValues[locale.languageCode]!['applyTooltip']!;
+  String get undoTooltip => _localizedValues[locale.languageCode]!['undoTooltip']!;
+  String get closeTooltip => _localizedValues[locale.languageCode]!['closeTooltip']!;
+  String get showTooltips => _localizedValues[locale.languageCode]!['showTooltips']!;
+  String get hideTooltips => _localizedValues[locale.languageCode]!['hideTooltips']!;
+  String get blurIntensityTooltip => _localizedValues[locale.languageCode]!['blurIntensityTooltip']!;
+  String get removeBackgroundTooltip => _localizedValues[locale.languageCode]!['removeBackgroundTooltip']!;
+  String get changeBackgroundTooltip => _localizedValues[locale.languageCode]!['changeBackgroundTooltip']!;
+  String get blurBackgroundTooltip => _localizedValues[locale.languageCode]!['blurBackgroundTooltip']!;
+  String get sizeTooltip => _localizedValues[locale.languageCode]!['sizeTooltip']!;
+  String get eraserTooltip => _localizedValues[locale.languageCode]!['eraserTooltip']!;
+  String get removeObjectTooltip => _localizedValues[locale.languageCode]!['removeObjectTooltip']!;
+  String get selectBackgroundTooltip => _localizedValues[locale.languageCode]!['selectBackgroundTooltip']!;
+  String get temperature => _localizedValues[locale.languageCode]!['temperature']!;
+  String get tint => _localizedValues[locale.languageCode]!['tint']!;
+  String get shadows => _localizedValues[locale.languageCode]!['shadows']!;
+  String get highlights => _localizedValues[locale.languageCode]!['highlights']!;
+  String get sharpen => _localizedValues[locale.languageCode]!['sharpen']!;
+  String get vignette => _localizedValues[locale.languageCode]!['vignette']!;
+  String get help => _localizedValues[locale.languageCode]!['help']!;
+  String get backgroundHelp => _localizedValues[locale.languageCode]!['backgroundHelp']!;
+  String get blurBackgroundHelp => _localizedValues[locale.languageCode]!['blurBackgroundHelp']!;
+  String get changeBackgroundHelp => _localizedValues[locale.languageCode]!['changeBackgroundHelp']!;
+  String get removeBackgroundHelp => _localizedValues[locale.languageCode]!['removeBackgroundHelp']!;
+  String get eraserHelp => _localizedValues[locale.languageCode]!['eraserHelp']!;
+  String get basic => _localizedValues[locale.languageCode]!['basic']!;
+  String get threshold => _localizedValues[locale.languageCode]!['threshold']!;
 }
 
 class _AppLocalizationsDelegate

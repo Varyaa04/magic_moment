@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:MagicMoment/database/editHistory.dart';
 import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
+import '../../themeWidjets/helpTooltip.dart';
 import '../editPage.dart';
 import 'base_background_editor.dart';
 
@@ -612,6 +613,13 @@ class _BlurBackgroundState
         ),
       ),
       actions: [
+        HelpTooltip(
+          message: localizations?.blurBackgroundHelp ??
+              'Adjust the blur intensity using the slider.\n'
+                  'Higher values create stronger blur effect.\n'
+                  'Press Apply when you\'re satisfied with the result.',
+          iconSize: isDesktop ? 28 : 24,
+        ),
         IconButton(
           icon: Icon(
             Icons.undo,

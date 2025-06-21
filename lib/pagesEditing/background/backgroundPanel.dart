@@ -4,6 +4,7 @@ import 'package:MagicMoment/pagesEditing/background/removeBackground.dart';
 import 'package:MagicMoment/pagesEditing/background/changeBackground.dart';
 import 'package:MagicMoment/pagesEditing/background/blurBackground.dart';
 import '../../pagesSettings/classesSettings/app_localizations.dart';
+import '../../themeWidjets/helpTooltip.dart';
 
 class BackgroundPanel extends StatefulWidget {
   final Uint8List image;
@@ -86,6 +87,16 @@ class _BackgroundPanelState extends State<BackgroundPanel> {
           fontSize: isDesktop ? 20 : 16,
         ),
       ),
+      actions: [
+        HelpTooltip(
+          message: localizations?.backgroundHelp ??
+              'Use this panel to modify the background:\n'
+                  '- Remove: completely removes the background\n'
+                  '- Change: replace background with another image\n'
+                  '- Blur: applies blur effect to the background',
+          iconSize: isDesktop ? 28 : 24,
+        ),
+      ],
     );
   }
 

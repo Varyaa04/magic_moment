@@ -10,6 +10,7 @@ import 'package:MagicMoment/database/magicMomentDatabase.dart';
 import 'package:MagicMoment/pagesSettings/classesSettings/app_localizations.dart';
 import 'package:MagicMoment/themeWidjets/image_picker_helper.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../themeWidjets/helpTooltip.dart';
 import '../editPage.dart';
 import 'base_background_editor.dart';
 
@@ -563,6 +564,13 @@ class _ChangeBackgroundPageState
         ),
       ),
       actions: [
+        HelpTooltip(
+          message: localizations?.changeBackgroundHelp ??
+              '1. Select an image from your gallery to use as new background\n'
+                  '2. Press the Apply button to confirm changes\n'
+                  'You can undo the last action if needed',
+          iconSize: isDesktop ? 28 : 24,
+        ),
         IconButton(
           icon: Icon(
             Icons.undo,

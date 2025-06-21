@@ -11,6 +11,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../database/editHistory.dart';
 import '../../database/magicMomentDatabase.dart';
 import '../../pagesSettings/classesSettings/app_localizations.dart';
+import '../../themeWidjets/helpTooltip.dart';
 
 Future<Uint8List> compressImageIsolate(Map<String, dynamic> params) async {
   final imageBytes = params['bytes'] as Uint8List;
@@ -998,6 +999,15 @@ class _EraserPanelState extends State<EraserPanel> {
         ),
       ),
       actions: [
+        HelpTooltip(
+          message: localizations?.eraserHelp ??
+              'Two modes available:\n'
+                  '1. Eraser - removes parts of the image\n'
+                  '2. Object Removal - AI-powered object removal\n\n'
+                  'Adjust brush size with the slider.\n'
+                  'Press Apply when finished.',
+          iconSize: isDesktop ? 28 : 24,
+        ),
         IconButton(
           icon: Icon(
             Icons.check,
